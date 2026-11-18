@@ -454,6 +454,7 @@ export const ANDROID_REAL_INPUT_ONLY_PATHS = [
   'scripts/real-input/a11y-sweep-device.mjs',
   'scripts/real-input/a11y-sweep.mjs',
   'scripts/real-input/android-calendar.mjs',
+  'scripts/real-input/android-run.mjs',
   'scripts/real-input/android-tree-checks.mjs',
   'scripts/real-input/android-tree.mjs',
   'scripts/real-input/android.mjs',

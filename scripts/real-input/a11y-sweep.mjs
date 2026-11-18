@@ -43,7 +43,15 @@
  *       without booting one.
  */
 
-import { A11Y_CONTROLS, checkControlA11y, staleExemptions } from './a11y.mjs';
+import {
+  A11Y_CONTROLS,
+  checkControlA11y,
+  exemptionsFor,
+  staleExemptions,
+} from './a11y.mjs';
+
+/** The runner flag that reads one case on its own. */
+const A11Y_FLAG = '--a11y';
 
 /** @typedef {import('./a11y.mjs').A11yControl} A11yControl */
 
@@ -63,8 +71,12 @@ const SCROLL_PROBE_PX = 320;
 /**
  * Run the a11y sweep over every control in the table.
  *
- * @param {(id: string, title: string) => import('./support.mjs').CheckLog} begin opens a
- *   log line for one case, in the shape the control checks use
+ * @param {(
+ *   id: string,
+ *   title: string,
+ *   options: {rerun: string[]}
+ * ) => import('./support.mjs').CheckLog} begin opens a log line for one case, in the
+ *   shape the control checks use; `rerun` is the runner arguments that read it again
  * @param {object} navigation what the pass needs from the device, declared rather than
  *   imported so it can be driven by a fake
  * @param {(
@@ -78,10 +90,8 @@ const SCROLL_PROBE_PX = 320;
  * @param {() => import('./uiautomator.mjs').UiautomatorNode[]} navigation.dump
  * @param {(pixels: number) => Promise<void>} navigation.scrollPage
  * @param {() => Promise<void>} navigation.scrollToTop
- * @param {ReadonlyArray<A11yControl>} [controls] the cases to run. Production leaves this
- *   out and runs the whole table — that is the point of the sweep — and a unit test of one
- *   case's scroll behaviour passes a one-entry array rather than the sweep growing a
- *   filter flag nobody would use in production.
+ * @param {ReadonlyArray<A11yControl>} [controls] the cases to run: the whole table unless
+ *   the run named cases with `--a11y`
  * @returns {Promise<{covered: string[], matched: string[], stale: string[]}>} what the
  *   run saw, for {@link staleExemptions}, plus the stale rows it found and reported
  */
@@ -96,7 +106,9 @@ export async function runA11ySweep(
   const matched = [];
   let screen = null;
   for (const control of controls) {
-    const log = begin(`a11y:${control.id}`, `${control.component} a11y`);
+    const log = begin(`a11y:${control.id}`, `${control.component} a11y`, {
+      rerun: [A11Y_FLAG, control.id],
+    });
     if (screen !== control.screen) {
       await navigation.goToScreen(control.screen, log);
       screen = control.screen;
@@ -134,7 +146,15 @@ export async function runA11ySweep(
   if (stale.length > 0) {
     const log = begin(
       'a11y:debt',
-      'the a11y debt list still describes this code'
+      'the a11y debt list still describes this code',
+      {
+        rerun: covered
+          .filter(
+            (id) =>
+              !matched.includes(id) && exemptionsFor(id, 'android').length > 0
+          )
+          .flatMap((id) => [A11Y_FLAG, id]),
+      }
     );
     for (const line of stale) {
       log.check(line, false);
