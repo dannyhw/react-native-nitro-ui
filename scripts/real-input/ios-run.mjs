@@ -13,6 +13,7 @@
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import {
   A11Y_CONTROLS,
+  a11yCaseControl,
   checkIosControlA11y,
   exemptionsFor,
   parseIosA11yLog,
@@ -50,21 +51,7 @@ export const TAB_TARGETS_ID = 'tab-targets';
  */
 export const A11Y_CASES_ENV = 'TEST_RUNNER_NITRO_UI_A11Y_CASES';
 
-/**
- * Accessibility cases whose id is not the id of the control that reads them. Every other
- * case shares its control's id.
- */
-const CASE_CONTROL = Object.freeze({ 'hosted-progress': 'hosted-mixed' });
-
-/**
- * The control whose `--control` run reads this accessibility case.
- *
- * @param {string} caseId
- * @returns {string}
- */
-export function a11yCaseControl(caseId) {
-  return CASE_CONTROL[caseId] ?? caseId;
-}
+export { a11yCaseControl };
 
 /**
  * @typedef {object} IosRunPlan

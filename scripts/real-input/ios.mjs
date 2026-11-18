@@ -27,13 +27,13 @@
  * started, so this script boots nothing and shuts nothing down.
  */
 
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
 import { artifactsDir, ensureMetro, run, sleep, Suite } from './support.mjs';
-import { parseTestResults, realInputLine } from './ios-log.mjs';
+import { parseTestResults } from './ios-log.mjs';
+import { STALL_LIMIT_MS, runXcodebuild } from './ios-xcodebuild.mjs';
 import { REAL_INPUT_CONTROLS, iosCheckName } from './controls.mjs';
 import {
   A11Y_CASES_ENV,
@@ -64,6 +64,8 @@ const BUNDLE_ID = 'nitroui.example';
 const WORKSPACE = 'NitroUiExample.xcworkspace';
 const SCHEME = 'NitroUiExampleUITests';
 const TEST_CLASS = 'RealInputTests';
+/** The app `xcodebuild` installs and launches to run the UI tests. */
+const RUNNER_BUNDLE_ID = 'nitroui.example.uitests.xctrunner';
 
 /**
  * Guard that the Swift file and the shared table describe one suite, then pick
@@ -158,58 +160,6 @@ async function resolveDevice(env) {
     }
     await sleep(2000);
   }
-}
-
-/**
- * Run xcodebuild, keeping the full log for evidence while printing the lines
- * that say what is happening.
- *
- * The status comes from the process exiting, not from its pipes closing:
- * xcodebuild leaves helpers (`xcresulttool`, the simulator agent) holding the
- * write end of the pipe after it is itself done, so waiting for `close` here
- * would hang a finished run - and a hung CI job is worse than a slow one.
- *
- * @param {ReadonlyArray<string>} args
- * @param {object} options
- * @param {string} options.logFile
- * @param {string} options.what for the error if it fails
- * @param {NodeJS.ProcessEnv} options.env
- * @returns {Promise<number>} the exit status
- */
-function xcodebuild(args, { logFile, what, env }) {
-  console.log(`  ${what} (log: ${logFile})`);
-  const out = fs.createWriteStream(logFile, { flags: 'w' });
-  return new Promise((resolve, reject) => {
-    const child = spawn('xcodebuild', [...args], {
-      cwd: iosDir(),
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let done = false;
-    const show = (chunk) => {
-      if (done) {
-        return;
-      }
-      out.write(chunk);
-      for (const line of String(chunk).split('\n')) {
-        if (
-          /^\s*(Test Case|Test Suite|Testing failed|error:|warning: .*RealInput)|\*\* (TEST|BUILD)/.test(
-            line
-          ) ||
-          realInputLine(line) != null
-        ) {
-          console.log(`    ${line.trim()}`);
-        }
-      }
-    };
-    child.stdout.on('data', show);
-    child.stderr.on('data', show);
-    child.on('error', reject);
-    child.on('exit', (status) => {
-      done = true;
-      out.end(() => resolve(status ?? 1));
-    });
-  });
 }
 
 /**
@@ -359,7 +309,7 @@ async function main() {
       'CODE_SIGNING_ALLOWED=NO',
       ...iosModuleCacheArgs({ derivedData: derived, ccache: ccache.enabled }),
     ];
-    const built = await xcodebuild(
+    const { status: built } = await runXcodebuild(
       [
         'build-for-testing',
         '-workspace',
@@ -378,6 +328,7 @@ async function main() {
         logFile: buildLog,
         what: 'building the app and the UI-test bundle',
         env: buildEnv,
+        cwd: root,
       }
     );
     if (built !== 0) {
@@ -420,7 +371,7 @@ async function main() {
     const selectors = methods.map(
       (method) => `-only-testing:${SCHEME}/${TEST_CLASS}/${method}`
     );
-    status = await xcodebuild(
+    const tested = await runXcodebuild(
       [
         'test-without-building',
         '-workspace',
@@ -447,8 +398,31 @@ async function main() {
         logFile: testLog,
         what: 'running the real-input cases',
         env: { ...buildEnv, [A11Y_CASES_ENV]: plan.a11yCases.join(',') },
+        cwd: root,
+        stall: {
+          limitMs: STALL_LIMIT_MS,
+          onStall: () => {
+            run('xcrun', [
+              'simctl',
+              'terminate',
+              device.udid,
+              RUNNER_BUNDLE_ID,
+            ]);
+          },
+        },
       }
     );
+    status = tested.status;
+    if (tested.stalled) {
+      throw new Error(
+        `no test case started within ${String(STALL_LIMIT_MS / 60_000)} minutes ` +
+          'of xcodebuild starting the tests: the test service of simulator ' +
+          `${device.name} (${device.udid}) is not answering. This run stopped its ` +
+          'xcodebuild and the test runner. Restarting that simulator is the fix ' +
+          `(xcrun simctl shutdown ${device.udid} && xcrun simctl boot ${device.udid}), ` +
+          `then run the gate again. See ${testLog}.`
+      );
+    }
 
     const log = fs.readFileSync(testLog, 'utf8');
     const outcomes = parseTestResults(log);

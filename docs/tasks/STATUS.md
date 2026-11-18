@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-18 Nothing user-visible: `real-input:android -- --a11y <case>` reads one accessibility
+  case and `--rerun-failed` reruns failed ones; `real-input:ios` fails within 5 minutes when no
+  test starts, and names a simulator restart as the fix (X54, #97).
 - 11-18 Nothing user-visible: a lease carries a note that `lease.mjs list` prints, merge
   branches are named `merge/<name>`, pool emulators and adb servers start outside every
   worktree, a reap never acts through a stale pool row, and the watchdog warns when its

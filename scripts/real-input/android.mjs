@@ -13,13 +13,8 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 
-import {
-  artifactsDir,
-  chosenControls,
-  ensureMetro,
-  run,
-  Suite,
-} from './support.mjs';
+import { artifactsDir, ensureMetro, run, Suite } from './support.mjs';
+import { androidRunPlan, androidUsage } from './android-run.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { exampleTabs } from './tab-targets.mjs';
 import { runA11ySweepOnDevice } from './a11y-sweep-device.mjs';
@@ -386,7 +381,14 @@ function stopAgentDeviceDaemon(env, stateDir) {
 }
 
 async function main() {
-  const controls = chosenControls(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(androidUsage());
+    return 0;
+  }
+  // Before anything reads the device: an unknown control or case is refused untouched.
+  const plan = androidRunPlan(argv);
+  const controls = plan.controls;
   const suite = new Suite('android', controls);
   const out = artifactsDir('android');
   const metroPort = Number(process.env.METRO_PORT ?? 8291);
@@ -436,7 +438,7 @@ async function main() {
   for (const control of controls) {
     if (!fileIds.includes(control.id)) suite.markMissing(control.id);
   }
-  if (wanted.length === 0) {
+  if (wanted.length === 0 && !plan.a11yNamed) {
     return suite.finish();
   }
 
@@ -489,35 +491,45 @@ async function main() {
 
   try {
     installAndPoint({ adb: adbRun, apk, metroPort });
-    const { status, report } = runE2E({
-      files: wanted.map((control) => `${control.id}${TEST_SUFFIX}`),
-      env,
-    });
-    const controlsPassed = recordResults(suite, wanted, report);
-    // After the suite and on every run, filtered or not: the pass is one property of
-    // the tree per control, and a run that only checked four controls still reads the
-    // whole table's a11y state. It stops the daemon it needs down by itself.
+    // An empty file list runs every e2e file, so a run that names only a11y cases
+    // skips e2e rather than asking it for nothing.
+    const { status, report } =
+      wanted.length === 0
+        ? { status: 0, report: null }
+        : runE2E({
+            files: wanted.map((control) => `${control.id}${TEST_SUFFIX}`),
+            env,
+          });
+    const controlsPassed =
+      wanted.length === 0 || recordResults(suite, wanted, report);
+    // After the suite, and on every run that does not narrow it with `--a11y`: the pass
+    // is one property of the tree per control, so a run that only checked four controls
+    // still reads the whole table's a11y state. It stops the daemon it needs down itself.
     const sweep = await runA11ySweepOnDevice(
-      (id, title) => suite.beginAuxiliary(id, title),
+      (id, title, options) => suite.beginAuxiliary(id, title, options),
       {
         adbShell,
         tabs,
         appId: BUNDLE_ID,
+        cases: plan.a11yCases,
         stopDaemon: () => stopAgentDeviceDaemon(env, stateDir),
       }
     );
     // The tree checks next, on the same daemon-less device: each is a rule the driver's
     // own node map cannot express, and a dump cannot be asked while it is attached.
-    const tree = await runTreeChecksOnDevice(
-      (id, title) => suite.beginAuxiliary(id, title),
-      {
-        adbShell,
-        tabs,
-        appId: BUNDLE_ID,
-        only: wanted.map((control) => control.id),
-        stopDaemon: () => stopAgentDeviceDaemon(env, stateDir),
-      }
-    );
+    const tree =
+      wanted.length === 0
+        ? { covered: [] }
+        : await runTreeChecksOnDevice(
+            (id, title) => suite.beginAuxiliary(id, title),
+            {
+              adbShell,
+              tabs,
+              appId: BUNDLE_ID,
+              only: wanted.map((control) => control.id),
+              stopDaemon: () => stopAgentDeviceDaemon(env, stateDir),
+            }
+          );
     // Every way this run can fail has to reach the exit code. `--control` narrows
     // which checks exist; it does not narrow what counts as a pass, so a filtered
     // run is judged by the same list as a full one.

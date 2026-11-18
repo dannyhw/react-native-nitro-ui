@@ -344,3 +344,10 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - Two rows holding the same live lease are both marked stale by `list`, each naming the other; reaping is unaffected.
   - The watchdog's suggested `git merge --ff-only` fails when the checkout has commits of its own, and "behind" is as of the last fetch.
   - An adb server started by anything other than the pool still runs in its caller's working directory.
+- Real-input, open after the Android `--a11y` filter and the iOS stall limit:
+  - `--rerun-failed` on a red Android `a11y:debt` spends a device run that cannot go green, since the debt check exists only while it fails; iOS has the same gap.
+  - A rerun of one failed Android control still reads every accessibility case, so it can still meet the hosted DatePicker zero-sized read.
+  - The iOS stall path runs `xcrun simctl terminate` with no timeout, so a wedged simulator service could still hang the stop; the end-of-run cleanup has the same exposure.
+  - No test covers a red Android run with both a failed control and a failed accessibility case.
+  - The Android plan's `full` field is read only by tests.
+  - `check-runner.test.js` "runs no more steps at once than --jobs" failed once at load 77 and passed on rerun.

@@ -823,7 +823,8 @@ two phases on one device session: an e2e suite in `example/e2e/`, one file per c
 with the driver's daemon stopped, because `uiautomator dump` will not answer while it is attached
 — the accessibility sweep and the `adb input` + `uiautomator` checks in
 `scripts/real-input/a11y-sweep-device.mjs` and `scripts/real-input/android-tree-checks.mjs`. Both
-phases decide one exit code and one ledger line, and `--control` narrows both.
+phases decide one exit code and one ledger line. `--control` narrows the e2e suite and the tree
+checks; the sweep reads every case unless `--a11y` names some.
 `example/e2e/README.md` says what each phase asserts.
 
 ```sh
@@ -846,6 +847,19 @@ tab bar only when asked, so proving one control costs that control and a build:
 node scripts/gate.mjs real-input:ios -- --control switch           # the switch and its a11y case
 node scripts/gate.mjs real-input:ios -- --a11y form --tab-targets  # one a11y case and the tab bar
 ```
+
+On Android, `--a11y <case>` reads that accessibility case and runs nothing else; with
+`--control` it also reads the cases of the controls named. The flag repeats on both platforms,
+and the case id is the one the run's log prints after `a11y:`:
+
+```sh
+node scripts/gate.mjs real-input:android -- --a11y hosted-date-picker  # one a11y case
+node scripts/gate.mjs real-input:android -- --control slider           # slider, and the whole sweep
+```
+
+An iOS run whose first test case has not started 5 minutes after `xcodebuild` started the
+tests fails: it stops that `xcodebuild` and the test runner, and says the simulator's test
+service is not answering. Restarting that simulator is the fix.
 
 iOS builds first (`pod install` and the workspace's `NitroUiExampleUITests` scheme), with the
 same ccache environment and module cache as `build-app.mjs`, so neither build recompiles what

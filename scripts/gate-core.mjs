@@ -454,6 +454,7 @@ export const ANDROID_REAL_INPUT_ONLY_PATHS = [
   'scripts/real-input/a11y-sweep-device.mjs',
   'scripts/real-input/a11y-sweep.mjs',
   'scripts/real-input/android-calendar.mjs',
+  'scripts/real-input/android-run.mjs',
   'scripts/real-input/android-tree-checks.mjs',
   'scripts/real-input/android-tree.mjs',
   'scripts/real-input/android.mjs',
@@ -467,6 +468,7 @@ export const ANDROID_REAL_INPUT_ONLY_PATHS = [
 export const IOS_REAL_INPUT_ONLY_PATHS = [
   'scripts/real-input/ios.mjs',
   'scripts/real-input/ios-log.mjs',
+  'scripts/real-input/ios-xcodebuild.mjs',
 ];
 
 /** The device gates that have a digest of their own. */
