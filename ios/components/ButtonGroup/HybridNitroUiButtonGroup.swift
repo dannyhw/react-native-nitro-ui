@@ -548,7 +548,7 @@ private struct AnyLabelStyle: LabelStyle {
 /// Which of iOS's three button-style families a control draws in. iOS has no elevated or outlined
 /// style, so those variants share a family with the nearest one. No hairline stroke is added for
 /// `outlined`: a row of stroked capsules reads as several borders.
-enum ItemStyle {
+enum ItemStyle: Equatable {
   case prominent
   case bordered
   case borderless
@@ -603,11 +603,40 @@ private struct ItemToggleStyle: ToggleStyle {
   let tint: UIColor?
 
   func makeBody(configuration: Configuration) -> some View {
+    let style = ItemStyle(variant: variant).state(configuration.isOn)
     Button(action: { configuration.isOn.toggle() }) {
       configuration.label
     }
-    .modifier(ItemButtonStyle(style: ItemStyle(variant: variant).state(configuration.isOn)))
+    .modifier(ItemButtonStyle(style: style))
     .modifier(OptionalItemTint(color: tint))
+    .modifier(CheckedFootprint(style: style, label: configuration.label))
+  }
+}
+
+/// A `text` toggle is a label while unchecked and a capsule while checked, and the group measures
+/// its size once for a configuration: checking an item repaints it and re-measures nothing, so an
+/// item that grows only when checked is drawn outside the box the row was measured into. An
+/// unchecked `text` toggle keeps the footprint of the same label in `.bordered` - the style it
+/// takes while checked - and draws its own label centred inside it, so a `text` group holding a
+/// toggle is the height of a capsule in every state and one with no toggle keeps the height of a
+/// label. The other families measure the same in both states and need nothing.
+private struct CheckedFootprint: ViewModifier {
+  let style: ItemStyle
+  let label: ToggleStyleConfiguration.Label
+
+  func body(content: Content) -> some View {
+    if style == .borderless {
+      ZStack {
+        Button(action: {}) { label }
+          .buttonStyle(.bordered)
+          .hidden()
+          .allowsHitTesting(false)
+          .accessibilityHidden(true)
+        content
+      }
+    } else {
+      content
+    }
   }
 }
 

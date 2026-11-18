@@ -164,6 +164,12 @@ group is 31 pt, cached after one measurement. `checked`, `disabled` and `tintCol
 not resize; `appearance`, `variant`, `size`, `labelStyle` and the items are the size
 configuration, so adding an item is a new configuration and a tap is not.
 
+An iOS `text` group that holds a toggle is measured at the height of a capsule while every toggle
+in it is still unchecked: `text` draws a label, which is shorter than the capsule a checked toggle
+takes, and checking one is a repaint rather than a new configuration. The unchecked item keeps that
+height and draws its label centred in it, so the checked capsule is inside the box the row was
+measured into. A `text` group with no toggle keeps the height of a label.
+
 ## Overflow
 
 Items that do not fit move into a menu. Which ones is decided by the box: six items that
