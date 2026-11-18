@@ -168,7 +168,9 @@ An iOS `text` group that holds a toggle is measured at the height of a capsule w
 in it is still unchecked: `text` draws a label, which is shorter than the capsule a checked toggle
 takes, and checking one is a repaint rather than a new configuration. The unchecked item keeps that
 height and draws its label centred in it, so the checked capsule is inside the box the row was
-measured into. A `text` group with no toggle keeps the height of a label.
+measured into. Only a toggle reserves the capsule, so the gap beside an unchecked toggle is wider
+than the gap between two action items. A `text` group with no toggle, or whose toggles have all
+moved into the overflow menu, keeps the height of a label.
 
 ## Overflow
 
