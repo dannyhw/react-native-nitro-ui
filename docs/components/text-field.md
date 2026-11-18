@@ -172,11 +172,14 @@ the text after a mid-text insertion: pasting `xyz` at the middle of `ab··cd` u
 limit of 8 gives `ab xy cd`, where cutting the end would give `ab xyz c`
 (`scripts/native-tests/text-limit.test.swift`, and the harness's paste case).
 
-Either way the caret stays where the person was typing: it ends just after the part of
+Either way the caret stays where the person was typing: it is put just after the part of
 the edit that was kept, so a mid-field commit that lost its last characters leaves the
-caret between what it kept and the text after it, and an edit that fitted nowhere is
-put back where it was asked for. An edit at the end of the field leaves the caret at the
-end, where the field's own answer puts it anyway.
+caret between what it kept and the text after it, and an edit that fitted nowhere is put
+back where it was asked for. A composition's commit is finished by UIKit after the cut is
+written, and its own insertion point can land just after the whole insertion rather than
+after the part that was kept - what the caret does not do is go to the end of the field.
+An edit at the end of the field leaves the caret at the end, where the field's own answer
+puts it anyway.
 
 ## Sizing
 
