@@ -190,26 +190,34 @@ private struct ChipOptionalAccessibility: ViewModifier {
   }
 }
 
-/// SwiftUI's disabled bordered style drops a toggle's selected fill, so a disabled chip draws
-/// the same whether or not it is selected. A selected chip is a tinted container, so a dimmed
-/// one keeps that tint at a fraction of its strength, over the control and its label. The
-/// control itself is untouched: same size, same dimmed label, same accessibility.
+/// SwiftUI's disabled bordered style drops a toggle's selected fill, so a disabled chip draws the
+/// same whether or not it is selected. A dimmed control fades toward the page it sits on, so the
+/// fill comes back as that fade plus a little of the tint the bordered style fills with: lighter
+/// and paler than the enabled fill, and never the grey of a disabled unselected chip. Both shapes
+/// stay mounted and only their opacity moves, so a chip that becomes disabled keeps one view and
+/// its VoiceOver focus with it.
 private struct ChipDisabledFill: ViewModifier {
+  /// How far a disabled selected chip fades toward the page, and how much of the tint survives
+  /// the fade. A stronger tint than this paints the chip darker than the enabled one.
+  private static let fadeToPage = 0.45
+  private static let survivingTint = 0.09
+
   let selected: Bool
   let disabled: Bool
 
   func body(content: Content) -> some View {
-    if selected && disabled {
-      // A fifth of the tint. `Color.accentColor.opacity(_:)` loses its colour in a UIKit
-      // host, so the shape carries the strength.
-      content.overlay {
+    // The strength is on the shapes: `Color.opacity(_:)` reaches a UIKit host without its hue.
+    let dimmedSelection: Double = selected && disabled ? 1 : 0
+    content.overlay {
+      ZStack {
         Capsule()
-          .fill(Color.accentColor)
-          .opacity(0.2)
-          .allowsHitTesting(false)
+          .fill(Color(uiColor: .systemBackground))
+          .opacity(Self.fadeToPage * dimmedSelection)
+        Capsule()
+          .fill(.tint)
+          .opacity(Self.survivingTint * dimmedSelection)
       }
-    } else {
-      content
+      .allowsHitTesting(false)
     }
   }
 }

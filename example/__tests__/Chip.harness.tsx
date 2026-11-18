@@ -244,6 +244,11 @@ function chroma(colour: string): number {
   return (sorted[2] ?? 0) - (sorted[0] ?? 0);
 }
 
+/** How light a colour is, as the sum of its channels: the strength a dimmed chip has to give up. */
+function lightness(colour: string): number {
+  return channels(colour).reduce((total, channel) => total + channel, 0);
+}
+
 /** The red, green and blue of a `#RRGGBB` colour. */
 function channels(colour: string): number[] {
   return [1, 3, 5].map((offset) =>
@@ -1382,7 +1387,7 @@ describe('Chip · the selected fill in every state (G12)', () => {
   const itIos = Platform.OS === 'ios' ? it : it.skip;
 
   itIos(
-    'paints a disabled selected chip apart from an unselected one and from itself',
+    'paints a disabled selected chip apart from an unselected one, and dimmer than an enabled one',
     async () => {
       await renderEveryState();
       const on = await paintOf('on');
@@ -1414,33 +1419,45 @@ describe('Chip · the selected fill in every state (G12)', () => {
         3,
         Math.round((chroma(on) - chroma(off)) / KEPT)
       );
+      const apart = colourDistance(dimOn, dimOff);
+      const lighter = lightness(dimOn) - lightness(on);
+      const paler = chroma(on) - chroma(dimOn);
+      const dimmedColour = chroma(dimOn) - chroma(dimOff);
       console.log(
         `chip iOS yardstick: enabled=${enabled} colour=${chroma(on) - chroma(off)} ` +
-          `so a disabled chip must keep ${kept} and ${keptColour}`
+          `so a disabled chip must keep ${kept} and ${keptColour}: apart=${apart} ` +
+          `lighter=${lighter} paler=${paler} colour=${dimmedColour}`
       );
 
       // The bug: once disabled, the same two chips drew one fill.
       expect(
-        colourDistance(dimOn, dimOff) >= kept,
+        apart >= kept,
         `a disabled chip paints ${dimOn} selected and ${dimOff} unselected, only ` +
-          `${colourDistance(dimOn, dimOff)} apart against an enabled pair ${enabled} ` +
+          `${apart} apart against an enabled pair ${enabled} ` +
           `apart: the selection does not reach the screen once the chip is disabled. ` +
           `${seen}`
       ).toBe(true);
 
-      // Dimmed, not enabled: the selected container survives at reduced strength.
+      // Dimmed means weaker than the enabled chip, never merely a different colour: a disabled
+      // selected chip is lighter than the enabled one and carries less of its colour. A dimmed
+      // selection painted darker or louder than the enabled chip is a disabled chip drawing
+      // stronger than its enabled self, which is what these two bounds are for.
       expect(
-        colourDistance(dimOn, on) >= kept,
-        `a disabled selected chip paints ${dimOn}, the enabled one ${on}: ${colourDistance(
-          dimOn,
-          on
-        )} apart, inside the ${kept} a dimmed chip has to stay within. ${seen}`
+        lighter >= kept,
+        `a disabled selected chip paints ${dimOn} where the enabled one is ${on}: the dimmed ` +
+          `chip is ${lighter} lighter and has to be at least ${kept} lighter - a dimmed ` +
+          `selection is lighter than the selection it dims. ${seen}`
+      ).toBe(true);
+      expect(
+        paler >= keptColour,
+        `a disabled selected chip paints ${dimOn} carrying ${chroma(dimOn)} of colour where ` +
+          `the enabled ${on} carries ${chroma(on)}: it is ${paler} paler and has to be at ` +
+          `least ${keptColour} paler. ${seen}`
       ).toBe(true);
 
       // And what separates the disabled pair is the selected colour, dimmed.
       expect(
-        chroma(dimOn) - chroma(dimOff) >= keptColour &&
-          chroma(dimOn) <= chroma(on),
+        dimmedColour >= keptColour,
         `the disabled pair differs, but not in a dimmed selected colour: ${dimOn} ` +
           `carries ${chroma(dimOn)} of colour against ${dimOff}'s ${chroma(
             dimOff
