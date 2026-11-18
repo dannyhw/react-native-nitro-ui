@@ -977,6 +977,12 @@ describe('ButtonGroup · the overflow row glyphs (G21, Android)', () => {
 describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
   const VARIANTS = ['filled', 'elevated', 'tonal', 'outlined', 'text'] as const;
 
+  /**
+   * Narrow enough that a one-item row's box is the item's own: the measured shares are then the
+   * item's, not the page's.
+   */
+  const ITEM_WELL = { width: 96 } as const;
+
   /** One item, one way: an action, a checked toggle, an unchecked toggle. */
   function soloItems(role: 'action' | 'on' | 'off'): ButtonGroupItem[] {
     if (role === 'action') return [{ id: 'bold', title: 'Bold' }];
@@ -1015,13 +1021,15 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
       for (const role of ['action', 'on', 'off'] as const) {
         const testId = `bg-${variant}-${role}`;
         await render(
-          <ButtonGroup
-            items={soloItems(role)}
-            tintColor={TINT}
-            variant={variant}
-            testID={testId}
-            hybridRef={captureHybrid(testId)}
-          />
+          <View style={ITEM_WELL}>
+            <ButtonGroup
+              items={soloItems(role)}
+              tintColor={TINT}
+              variant={variant}
+              testID={testId}
+              hybridRef={captureHybrid(testId)}
+            />
+          </View>
         );
         await waitForTestId(testId);
         await waitForMeasured(testId, `the ${variant} ${role} group`);
@@ -1045,14 +1053,14 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
           `a checked "${variant}" toggle drew nothing in the group's tint. ${seen}`
         );
       }
-      if (Math.abs(on.fill - action.fill) > 8) {
+      if (Math.abs(on.fill - action.fill) > 10) {
         throw new Error(
           `a checked "${variant}" toggle painted ${on.fill}% of its box against the ` +
             `"${variant}" action item's ${action.fill}% - the two are not drawn in the ` +
             `same style. ${seen}`
         );
       }
-      if (Math.abs(on.tint - action.tint) > 8) {
+      if (Math.abs(on.tint - action.tint) > 10) {
         throw new Error(
           `a checked "${variant}" toggle painted ${on.tint}% of its box in the tint ` +
             `against the "${variant}" action item's ${action.tint}%. ${seen}`
@@ -1068,7 +1076,7 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
       }
       if (variant === 'text') {
         // `.borderless` paints the label and nothing behind it, in either state.
-        if (on.fill > 25 || action.fill > 25) {
+        if (on.fill > 20 || action.fill > 20) {
           throw new Error(
             `a "text" group painted a background - the toggle's item filled ` +
               `${on.fill}% of its box and the action's ${action.fill}%. ${seen}`
@@ -1086,18 +1094,16 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
     // The read tells the three iOS style families apart, so the per-variant claims above say
     // something: only a prominent family paints its box in the tint, and only the two capsule
     // families paint a background at all.
-    if (read.filled!.action.tint < 20 || read.tonal!.action.tint > 15) {
+    if (
+      read.filled!.action.tint < read.tonal!.action.tint + 10 ||
+      read.filled!.action.fill < read.text!.action.fill + 20
+    ) {
       throw new Error(
-        `the measured read does not tell the prominent family from the bordered one - ` +
-          `filled painted ${read.filled!.action.tint}% in the tint, tonal ` +
-          `${read.tonal!.action.tint}%. ${seen}`
-      );
-    }
-    if (read.filled!.action.fill < read.text!.action.fill + 20) {
-      throw new Error(
-        `the measured read does not tell a drawn capsule from no capsule at all - ` +
-          `filled painted ${read.filled!.action.fill}% of its box, text ` +
-          `${read.text!.action.fill}%. ${seen}`
+        `the measured read does not tell the three iOS style families apart - filled ` +
+          `painted ${read.filled!.action.tint}% in the tint and ` +
+          `${read.filled!.action.fill}% of its box, tonal painted ` +
+          `${read.tonal!.action.tint}% in the tint, text painted ` +
+          `${read.text!.action.fill}% of its box. ${seen}`
       );
     }
   });

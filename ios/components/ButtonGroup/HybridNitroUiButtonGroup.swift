@@ -960,13 +960,14 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
 
 // MARK: - Drawing probe (test-only)
 
-/// How far a pixel may sit from the neutral backdrop and still count as "nothing drawn here".
-/// A translucent material over the backdrop stays well under this.
+/// How far a pixel may sit from the white backdrop and still count as "nothing drawn here". The
+/// backdrop is the page's own light appearance, so a control's pale capsule is still a thing.
 private let nitroUiDrawingInkBudget = 24
 
-/// How far a pixel may sit from the group's tint and still count as drawn in it. The tint is
-/// composited over the material behind it, so a sampled pixel is close to it, rarely exactly it.
-private let nitroUiTintBudget = 30
+/// How far a pixel may sit from the group's tint and still count as drawn in it. A label's glyph
+/// is anti-aliased over the fill behind it, so only its centre pixels are the tint itself and the
+/// budget has to cover the rest. A grey label is nowhere near a colour that was picked for it.
+private let nitroUiTintBudget = 120
 
 /// What the box `view` is drawing, as `size=<WxH>,fill=<%>,tint=<%>`: the share of the box that
 /// differs from a neutral backdrop, and the share that is the group's own tint.
@@ -995,16 +996,14 @@ private func nitroUiSampleDrawing(
       data: &data, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
       space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
   else { return "no context" }
-  let backdrop = 128
-  context.setFillColor(UIColor(white: 0.5, alpha: 1).cgColor)
+  let backdrop = 255
+  context.setFillColor(UIColor.white.cgColor)
   context.fill(CGRect(x: 0, y: 0, width: width, height: height))
   context.draw(bitmap, in: CGRect(x: 0, y: 0, width: width, height: height))
   var target: (red: Int, green: Int, blue: Int)?
-  if let rgb = tint?.usingColorSpace(.sRGB) {
-    target = (
-      Int((rgb.redComponent * 255).rounded()), Int((rgb.greenComponent * 255).rounded()),
-      Int((rgb.blueComponent * 255).rounded())
-    )
+  if let tint {
+    let argb = UInt32(truncatingIfNeeded: Int64(tint.nitroUiARGBValue))
+    target = (Int((argb >> 16) & 0xff), Int((argb >> 8) & 0xff), Int(argb & 0xff))
   }
   var filled = 0, tinted = 0
   for row in 0..<height {
@@ -1028,5 +1027,5 @@ private func nitroUiSampleDrawing(
   let area = width * height
   return
     "size=\(Int(bounds.width))x\(Int(bounds.height)),fill=\(filled * 100 / area),"
-    + "tint=\(tint == nil ? "-" : tinted * 100 / area)"
+    + "tint=\(tint == nil ? "-" : String(tinted * 100 / area))"
 }
