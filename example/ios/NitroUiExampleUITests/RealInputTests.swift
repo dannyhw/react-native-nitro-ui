@@ -2366,9 +2366,11 @@ final class RealInputTests: XCTestCase {
     return item
   }
 
-  /// What one toggle item's own element tells a screen reader: that it is a toggle, which state it
-  /// is in, and that the state is told once — a reader is given a switch's value, and a `selected`
-  /// trait on top of it is the same word twice.
+  /// What one toggle item tells a screen reader: that the group offers exactly one element to act
+  /// on for it, that the element is a toggle, which state it is in, and that the state is told once
+  /// — a reader is given a switch's value, and a `selected` trait on top of it is the same word
+  /// twice. Type, value and state all come from that one element, so a row that draws a second one
+  /// for the item cannot answer the question through the first.
   private func assertToggleElement(
     _ identifier: String,
     _ title: String,
@@ -2376,7 +2378,23 @@ final class RealInputTests: XCTestCase {
     file: StaticString = #filePath,
     line: UInt = #line
   ) {
-    let item = buttonGroupItem(identifier, titled: title)
+    let items = actionableButtonGroupItems(identifier, titled: title)
+    if items.count != 1 {
+      dumpHierarchy(
+        "the group \"\(identifier)\" offers \(items.count) elements for the toggle item "
+          + "\"\(title)\""
+      )
+    }
+    XCTAssertEqual(
+      items.count,
+      1,
+      "the group \"\(identifier)\" offers \(items.count) elements to a reader for the toggle "
+        + "item \"\(title)\", which hears that item that many times and cannot say which one a "
+        + "tap reaches",
+      file: file,
+      line: line
+    )
+    guard let item = items.first else { return }
     let said = "\(quoted(item.label)) type=\(item.elementType.rawValue) value=\(String(describing: item.value)) selected=\(item.isSelected)"
     XCTAssertEqual(
       item.elementType,
@@ -2385,8 +2403,14 @@ final class RealInputTests: XCTestCase {
       file: file,
       line: line
     )
+    let deadline = Date().addingTimeInterval(3)
+    var shown = nativeState(of: item)
+    while shown != expected && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      shown = nativeState(of: item)
+    }
     XCTAssertEqual(
-      nativeItemState(of: identifier, title),
+      shown,
       expected,
       "the toggle item \"\(title)\" does not say it is \(expected): \(said)",
       file: file,
@@ -2401,10 +2425,30 @@ final class RealInputTests: XCTestCase {
     )
   }
 
-  /// Whether one item's own element says it is checked, as "on"/"off".
-  private func nativeItemState(of identifier: String, _ title: String) -> String? {
-    let item = buttonGroupItem(identifier, titled: title)
-    guard item.exists else { return nil }
+  /// The element types a reader can act on, which is every control shape an item of a group can
+  /// arrive as. A container or a stray label that repeats the item's name is not one: a reader is
+  /// not asked to do anything with it.
+  private static let actionableItemTypes: Set<XCUIElement.ElementType> = [
+    .button, .imageButton, .cell, .link, .switch, .checkBox, .radioButton, .menuItem,
+  ]
+
+  /// The elements of one group that a reader can act on under one title. Two of them for one item
+  /// is the defect rather than a second thing to read: the reader hears that item twice, and a tap
+  /// cannot say which element it moves.
+  private func actionableButtonGroupItems(
+    _ identifier: String,
+    titled title: String
+  ) -> [XCUIElement] {
+    app
+      .descendants(matching: .any)[identifier].firstMatch
+      .descendants(matching: .any)
+      .matching(NSPredicate(format: "label == %@", title))
+      .allElementsBoundByIndex
+      .filter { RealInputTests.actionableItemTypes.contains($0.elementType) }
+  }
+
+  /// Whether one element says it is checked, as "on"/"off".
+  private func nativeState(of item: XCUIElement) -> String? {
     if item.isSelected { return "on" }
     let raw = item.value
     let text = (raw as? NSNumber)?.stringValue ?? (raw as? String) ?? ""
@@ -2413,6 +2457,13 @@ final class RealInputTests: XCTestCase {
     case "0", "0.0", "false": return "off"
     default: return nil
     }
+  }
+
+  /// Whether one item's own element says it is checked, as "on"/"off".
+  private func nativeItemState(of identifier: String, _ title: String) -> String? {
+    let item = buttonGroupItem(identifier, titled: title)
+    guard item.exists else { return nil }
+    return nativeState(of: item)
   }
 
   /// Tap one item until the echo it should move arrives.
