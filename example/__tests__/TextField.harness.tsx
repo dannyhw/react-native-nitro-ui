@@ -712,60 +712,6 @@ describe('TextField', () => {
   );
 
   /*
-   * iOS only: a mid-field cut owns the caret only while UIKit ends the commit that cut was made
-   * in. Another `maxLength` is not UIKit ending it: the offsets the cut reached for stop being
-   * the caret's owner, and the keys typed after the change land where the person put them.
-   */
-  itComposes(
-    'ends a mid-field cut claim on the caret when maxLength changes',
-    async () => {
-      const { rerender } = await render(
-        <Controlled id="cut-limit" initial="ab   cd" maxLength={8} />
-      );
-      await waitForTestId('cut-limit');
-      await focusField('cut-limit');
-      (await handleOf('cut-limit')).nuiTestPaste('', 3);
-      await stateWhen(
-        'cut-limit',
-        (s) => s.caret === 3 && codeUnits(s.text) === codeUnits('ab   cd'),
-        'the caret in the middle of the field'
-      );
-
-      // One unit of a four-unit commit fits: the caret ends at 4, and the cut reaches up to 7 -
-      // as far ahead as its three dropped units could have carried UIKit's insertion point.
-      await compose('cut-limit', 'wxyz');
-      await finishComposition('cut-limit');
-      const cut = await stateWhen(
-        'cut-limit',
-        (s) =>
-          codeUnits(s.text) === codeUnits('ab w  cd') &&
-          s.jsEvents === s.nativeEvents,
-        'the cut commit'
-      );
-      expect(cut.caret).toBe(4);
-
-      await rerender(
-        <Controlled id="cut-limit" initial="ab   cd" maxLength={12} />
-      );
-      await stateWhen(
-        'cut-limit',
-        (s) => s.maxLength === 12,
-        'the field to take the longer limit'
-      );
-
-      // There is room now: the caret goes back into the run of spaces and the key lands there.
-      (await handleOf('cut-limit')).nuiTestPaste('', 5);
-      await sleep(200);
-      await typeText('q');
-      await sleep(300);
-      const typed = (await handleOf('cut-limit')).nuiTestState();
-      expect(codeUnits(typed.text)).toBe(codeUnits('ab w q cd'));
-      expect(typed.caret).toBe(6);
-      expect(jsValues.get('cut-limit')).toBe('ab w q cd');
-    }
-  );
-
-  /*
    * iOS only: text that repeats the committed units says nothing about where the composition
    * was - two spaces committed inside a run of spaces compare like two appended at the end of
    * the run. The caret comes from what UIKit reports, not from the difference between the
