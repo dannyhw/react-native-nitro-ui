@@ -102,6 +102,9 @@ or provider error. After that, replan around it.
 
 - Merge ready branches as one train with one run of the merge gates. Hold a branch a few
   hours to share a run rather than re-gate each.
+- Name the merge branch `merge/<name>` (`merge/train`, `merge/x55`), never `task/<ID>-...`:
+  a `task/` branch under HEAD keeps that task's records, so `task-records.mjs --archive`
+  would leave them on `main`.
 - Run `node scripts/gate.mjs need --for merge` as its own command and read it. Never pipe
   it or chain it to the merge.
 - Run only the gates `need --for merge` lists. When the merge branch has no green or red run
@@ -110,6 +113,12 @@ or provider error. After that, replan around it.
   gate the task branch or the last merge run passed on the same files is not run again. A
   green from elsewhere counts only on the conditions in `docs/agents/gates.md` "Runs from
   other branches". `check` always runs on the merge branch.
+- Take the merge lease with a note that lists the gates it will run, in order, and says
+  which one needs a quiet machine:
+  `lease.mjs acquire --task <ID> --boot --note "check, harness:ios + harness:android; then real-input:ios, quiet machine"`.
+  Change it with `lease.mjs note <ID> "<text>"` when the plan changes. Before each device
+  step, read the other leases' notes in `lease.mjs list`, and do not start a run beside one
+  whose note says it needs a quiet machine now.
 - Under one lease for both platforms, after building both apps, run `harness:ios` beside
   `harness:android` (or either beside `real-input:android`), then `real-input:ios` with
   nothing beside it: its touches are dropped when another device run loads the machine.
