@@ -1192,4 +1192,191 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
       );
     }
   });
+
+  /**
+   * What a control is drawn into and draws there: the height it measured and was laid out at, and
+   * the drawing sampled inside its bounds. The two have to agree before either is read - a box
+   * still at the size the sizing engine had for it describes a layout the control never agreed
+   * to, and a box the control has not measured yet is not the one the drawing fills.
+   */
+  async function readBox(
+    testId: string,
+    what: string
+  ): Promise<{ height: number; drawn: number; fill: number; tint: number }> {
+    const deadline = nitroUiCore.now() + 10000;
+    for (;;) {
+      const raw = (await probeRow(testId)).drawing ?? '';
+      const box = /^size=(\d+)x(\d+),/.exec(raw);
+      const fill = /,fill=(\d+)(?:,|$)/.exec(raw);
+      const tint = /,tint=(\d+)(?:,|$)/.exec(raw);
+      const measuredSize = measured(testId);
+      const boxSize = sizeOf(testId);
+      if (
+        box != null &&
+        fill != null &&
+        tint != null &&
+        measuredSize != null &&
+        boxSize != null &&
+        Math.abs(Number(box[2]) - measuredSize.height) < 1 &&
+        Math.abs(boxSize.height - measuredSize.height) < 1
+      ) {
+        return {
+          height: measuredSize.height,
+          drawn: Number(box[2]),
+          fill: Number(fill[1]),
+          tint: Number(tint[1]),
+        };
+      }
+      if (nitroUiCore.now() > deadline) {
+        throw new Error(
+          `"${testId}" (${what}) is drawn into a box that never took the size it ` +
+            `measured - laid out at ${describeSize(sizeOf(testId))}, sampled at ` +
+            `"${(await probeRow(testId)).drawing ?? 'nothing'}", measured ` +
+            `${describeSize(measured(testId))}.`
+        );
+      }
+      await sleep(100);
+    }
+  }
+
+  /** One item, in a well of its own, in the group's colour. */
+  async function showSolo(
+    testId: string,
+    variant: 'text' | 'tonal',
+    items: ButtonGroupItem[]
+  ): Promise<void> {
+    await render(
+      <View style={ITEM_WELL}>
+        <ButtonGroup
+          items={items}
+          tintColor={TINT}
+          variant={variant}
+          testID={testId}
+          hybridRef={captureHybrid(testId)}
+        />
+      </View>
+    );
+    await waitForTestId(testId);
+  }
+
+  it('draws a checked text toggle inside the box the row was measured into', async () => {
+    if (Platform.OS !== 'ios') return;
+
+    // Every row is one item with a title no other test here measures: the measured size is
+    // cached per configuration and the item titles are part of it, so a second row with the
+    // same title would be laid out at the first one's size instead of measuring itself.
+    const oneToggle = (title: string, checked: boolean): ButtonGroupItem[] => [
+      {
+        id: 'item',
+        title,
+        toggle: true,
+        defaultChecked: checked ? true : undefined,
+      },
+    ];
+    const oneAction = (title: string): ButtonGroupItem[] => [
+      { id: 'item', title },
+    ];
+
+    // The two heights a `text` item can be measured at: the capsule a checked toggle draws, and
+    // the label alone a `text` action item draws.
+    await showSolo('bg-box-checked', 'text', oneToggle('North', true));
+    const checkedFirst = await readBox(
+      'bg-box-checked',
+      'the text group measured with its toggle checked'
+    );
+    await showSolo('bg-box-quiet', 'tonal', oneAction('South'));
+    const quiet = await readBox(
+      'bg-box-quiet',
+      'the same label inside a bordered item'
+    );
+    await showSolo('bg-box-text', 'text', oneAction('South'));
+    const text = await readBox(
+      'bg-box-text',
+      'the same label as a text action item'
+    );
+
+    // The row this is about: measured while its toggle is unchecked, then checked by a press
+    // that re-measures nothing.
+    await showSolo('bg-box-toggle', 'text', oneToggle('South', false));
+    const off = await readBox(
+      'bg-box-toggle',
+      'the text group holding an unchecked toggle'
+    );
+    await pressItem('bg-box-toggle', 'item');
+    await pollUntil(
+      () => (reportOf('bg-box-toggle').checked === 'item' ? true : null),
+      () =>
+        new Error(
+          `the toggle never reached the row - it reports "${handleOf(
+            'bg-box-toggle'
+          ).nuiTestStateReport()}".`
+        )
+    );
+    const on = await readBox(
+      'bg-box-toggle',
+      'the same group with its toggle checked'
+    );
+
+    const seen =
+      `checked-first=${JSON.stringify(checkedFirst)} quiet=${JSON.stringify(quiet)} ` +
+      `text=${JSON.stringify(text)} off=${JSON.stringify(off)} ` +
+      `on=${JSON.stringify(on)}`;
+
+    // A `text` group holding a toggle is measured at the height of a capsule before anything is
+    // checked, which is the only way the checked state has a box to be drawn in: nothing
+    // re-measures the row when an item is checked.
+    if (Math.abs(off.height - quiet.height) > 0.6) {
+      throw new Error(
+        `a "text" group holding a toggle measured ${off.height} pt high with its toggle ` +
+          `unchecked against the ${quiet.height} pt the same label measures inside a ` +
+          `capsule, so the taller state has nowhere to be drawn. ${seen}`
+      );
+    }
+    // And the same height after it is checked: the flip repaints the item and moves nothing.
+    if (Math.abs(on.height - off.height) > 0.01) {
+      throw new Error(
+        `checking a toggle moved the "text" group's box from ${off.height} pt to ` +
+          `${on.height} pt. ${seen}`
+      );
+    }
+    if (Math.abs(on.height - checkedFirst.height) > 0.6) {
+      throw new Error(
+        `a "text" group measured with its toggle unchecked is ${on.height} pt high once ` +
+          `checked, against the ${checkedFirst.height} pt of one measured while checked, ` +
+          `so the checked capsule is drawn outside its box. ${seen}`
+      );
+    }
+    // The two drawings those heights name: the quiet capsule while checked, and far less of the
+    // box while unchecked. Neither a row that grew without drawing a capsule, nor a `text` group
+    // whose toggle had simply become a capsule in both states, gets past both of these.
+    if (!sameDrawing(on, quiet)) {
+      throw new Error(
+        `a checked toggle in a "text" group drew ${JSON.stringify(on)} against the ` +
+          `same label in a bordered item, ${JSON.stringify(quiet)}. ${seen}`
+      );
+    }
+    if (on.fill <= off.fill + 20) {
+      throw new Error(
+        `a "text" group's toggle paints no more of its box checked (${JSON.stringify(
+          on
+        )}) than unchecked (${JSON.stringify(off)}), so the unchecked item is not the ` +
+          `label alone whose height is being reserved. ${seen}`
+      );
+    }
+    // None of this reaches a `text` group that holds no toggle, and the read still tells the two
+    // heights apart.
+    if (text.height + 2 > off.height) {
+      throw new Error(
+        `a "text" group with no toggle is ${text.height} pt high against the ` +
+          `${off.height} pt of one holding a toggle: without a toggle a "text" row is ` +
+          `the height of a label alone. ${seen}`
+      );
+    }
+    if (text.height + 2 > quiet.height) {
+      throw new Error(
+        `the read no longer tells a "text" item's height (${text.height} pt) from a ` +
+          `capsule's (${quiet.height} pt), so the heights above say nothing. ${seen}`
+      );
+    }
+  });
 });
