@@ -25,10 +25,14 @@ const SCREEN_DEADLINE_MS = 15_000;
 const TAB_SWIPES = 10;
 
 /**
- * Run the a11y pass over every control, on the device `adbShell` speaks to.
+ * Run the a11y pass over its cases, on the device `adbShell` speaks to.
  *
- * @param {(id: string, title: string) => import('./a11y-sweep.mjs').A11ySweepLog} begin
- *   opens one log line per case, the way the control checks open theirs
+ * @param {(
+ *   id: string,
+ *   title: string,
+ *   options: {rerun: string[]}
+ * ) => import('./a11y-sweep.mjs').A11ySweepLog} begin opens one log line per case, the
+ *   way the control checks open theirs
  * @param {object} device
  * @param {(command: string) => string} device.adbShell one `adb shell` command, stdout;
  *   the caller owns the serial and the adb server, as every device read in this gate does
@@ -38,6 +42,8 @@ const TAB_SWIPES = 10;
  * @param {ReadonlyArray<{ id: string, label: string }>} device.tabs the example's tabs,
  *   in bar order, read from `example/src/App.tsx`
  * @param {string} device.appId the example's package, relaunched before the first dump
+ * @param {ReadonlyArray<import('./a11y.mjs').A11yControl>} [device.cases] the cases to
+ *   read; every case when left out
  * @returns {Promise<{covered: string[], matched: string[], stale: string[]}>}
  */
 export async function runA11ySweepOnDevice(begin, device) {
@@ -48,19 +54,23 @@ export async function runA11ySweepOnDevice(begin, device) {
     // A daemon that is already down is the state this pass needs in any case.
   }
   await harness.startFromLaunch();
-  return await runA11ySweep(begin, {
-    goToScreen: (screen, log) => harness.goToScreen(screen, log),
-    dump: () => harness.hierarchy(),
-    scrollToTop: () => harness.scrollToTop(),
-    scrollPage: async (pixels) => {
-      // The empty strip at the right edge: anywhere else the swipe can start on
-      // Material 3's own calendar scroller and turn the month instead of the page.
-      const { width, height } = harness.size();
-      const y = Math.round(height * 0.7);
-      harness.swipe(width - 8, y, width - 8, y - pixels, 400);
-      await sleep(500);
+  return await runA11ySweep(
+    begin,
+    {
+      goToScreen: (screen, log) => harness.goToScreen(screen, log),
+      dump: () => harness.hierarchy(),
+      scrollToTop: () => harness.scrollToTop(),
+      scrollPage: async (pixels) => {
+        // The empty strip at the right edge: anywhere else the swipe can start on
+        // Material 3's own calendar scroller and turn the month instead of the page.
+        const { width, height } = harness.size();
+        const y = Math.round(height * 0.7);
+        harness.swipe(width - 8, y, width - 8, y - pixels, 400);
+        await sleep(500);
+      },
     },
-  });
+    device.cases
+  );
 }
 
 /**

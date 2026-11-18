@@ -259,25 +259,3 @@ export function iosCheckName(id) {
   }
   return `testRealInput${pascal}`;
 }
-
-/**
- * Select the controls a run should cover.
- *
- * @param {ReadonlyArray<string>} ids Control ids, or empty for every control.
- * @returns {ReadonlyArray<RealInputControl>}
- */
-export function selectControls(ids) {
-  if (ids.length === 0) {
-    return REAL_INPUT_CONTROLS;
-  }
-  return ids.map((id) => {
-    const control = REAL_INPUT_CONTROLS.find((entry) => entry.id === id);
-    if (control == null) {
-      const known = REAL_INPUT_CONTROLS.map((entry) => entry.id).join(', ');
-      throw new Error(
-        `real-input: unknown control "${id}". Known controls: ${known}.`
-      );
-    }
-    return control;
-  });
-}

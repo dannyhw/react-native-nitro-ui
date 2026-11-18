@@ -60,7 +60,7 @@ Devices only from `node scripts/lease.mjs acquire --task <ID> --boot`.
 Before review run exactly what `node scripts/gate.mjs need --for review` asks for. Do
 not run real-input gates unless the brief's Proof names one; they run at merge. A task
 that changes real-input tests proves them with a filtered run naming what it touched:
-`--control <id>`, and on iOS `--a11y <case>` or `--tab-targets`.
+`--control <id>`, `--a11y <case>`, and on iOS `--tab-targets`.
 Commit after each item of code. The report goes in one final commit, with its red
 proofs written in it. Do not push. Never `pkill` or `killall`.
 Budget: <N> hours. At the budget, commit, write the report with what is and is not

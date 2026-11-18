@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  checkoutFact,
   DISK_ALERT_GB,
   DISK_WARN_GB,
   REMIND_AFTER_HOURS,
@@ -177,6 +178,14 @@ describe('the facts', () => {
     expect(diskFact(DISK_ALERT_GB - 1).level).toBe('alert');
     expect(diskFact(451).state).toBe(diskFact(449).state);
     expect(diskFact(null)).toBeNull();
+  });
+
+  it('checkout: warns while behind origin/main, with one state however far behind', () => {
+    expect(checkoutFact(null)).toBe(null);
+    expect(checkoutFact(0)).toMatchObject({ level: 'ok', state: 'current' });
+    expect(checkoutFact(3)).toMatchObject({ level: 'warn', state: 'behind' });
+    expect(checkoutFact(3).text).toContain('3 commit(s) behind origin/main');
+    expect(checkoutFact(7).state).toBe(checkoutFact(3).state);
   });
 
   it('worktrees: warns with the branches that can go', () => {
@@ -451,6 +460,86 @@ describe('watchdog.mjs, end to end', () => {
     expect(status.stdout).toContain('INFO  orchestrator: idle');
     expect(status.stdout).toMatch(/ disk: \d+ GB free/);
     expect(fs.existsSync(file)).toBe(false);
+  });
+
+  /**
+   * A checkout of its own: the watchdog and the modules it imports, committed, with an
+   * `origin/main` that is `ahead` commits further on. Run from there, it reports on itself.
+   */
+  function fixtureCheckout(ahead) {
+    const { home } = setUp();
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'watchdog-checkout-'));
+    cleanup.push(repo);
+    fs.mkdirSync(path.join(repo, 'scripts'));
+    for (const name of [
+      'watchdog.mjs',
+      'watchdog-core.mjs',
+      'lease-core.mjs',
+    ]) {
+      fs.copyFileSync(
+        path.join(process.cwd(), 'scripts', name),
+        path.join(repo, 'scripts', name)
+      );
+    }
+    // The fixture's own git settings, never the machine's (signing, hooks, identity).
+    const gitEnv = Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))
+    );
+    Object.assign(gitEnv, {
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_SYSTEM: '/dev/null',
+      GIT_AUTHOR_NAME: 'Test',
+      GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'Test',
+      GIT_COMMITTER_EMAIL: 'test@example.invalid',
+    });
+    const git = (...args) =>
+      spawnSync('git', ['-C', repo, ...args], {
+        encoding: 'utf8',
+        env: gitEnv,
+      });
+    git('init', '-q', '-b', 'main');
+    git('add', '-A');
+    git('commit', '-qm', 'base');
+    const base = git('rev-parse', 'HEAD').stdout.trim();
+    for (let n = 0; n < ahead; n += 1) {
+      git('commit', '-q', '--allow-empty', '-m', `later ${n}`);
+    }
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('reset', '-q', '--hard', base);
+    const bin = path.join(path.dirname(home), 'bin');
+    const run = (args) =>
+      spawnSync(
+        process.execPath,
+        [path.join(repo, 'scripts', 'watchdog.mjs'), ...args],
+        {
+          encoding: 'utf8',
+          timeout: 120_000,
+          env: {
+            ...process.env,
+            PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+            NITRO_UI_HOME: home,
+          },
+        }
+      );
+    return { run };
+  }
+
+  it('warns when the checkout it runs from is behind origin/main, and says when it caught up', () => {
+    const { run } = fixtureCheckout(2);
+    const behind = run([]);
+    expect(behind.status).toBe(10);
+    expect(behind.stdout).toContain(
+      'WARN  checkout: this checkout is 2 commit(s) behind origin/main'
+    );
+    expect(run(['--status']).stdout).toContain('WARN  checkout: ');
+
+    const current = fixtureCheckout(0);
+    const first = current.run([]);
+    expect(first.stdout).not.toContain('checkout:');
+    expect(current.run(['--status']).stdout).toContain(
+      'INFO  checkout: up to date with origin/main'
+    );
   });
 
   it('refuses a malformed fact instead of recording it', () => {

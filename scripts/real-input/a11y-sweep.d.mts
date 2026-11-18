@@ -25,7 +25,11 @@ export interface A11ySweepNavigation {
 }
 
 export function runA11ySweep(
-  begin: (id: string, title: string) => A11ySweepLog,
+  begin: (
+    id: string,
+    title: string,
+    options: { rerun: string[] }
+  ) => A11ySweepLog,
   navigation: A11ySweepNavigation,
   controls?: ReadonlyArray<A11yControl>
 ): Promise<{ covered: string[]; matched: string[]; stale: string[] }>;

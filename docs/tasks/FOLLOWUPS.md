@@ -336,3 +336,18 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - oxlint raises 13 `no-path-concat` warnings and a few others (empty `if` blocks, a bare `eslint-enable`) that ESLint did not; none fails lint.
   - A few unchanged code comments still describe Prettier, `.prettierignore` lines 37 and 40 carry task ids, and `create-react-native-library.tools` in `package.json` still lists `eslint`.
   - Only Switch, ContextMenu and TextField had run on bun before the full Android run; the e2e docs call the mobile driver package unverified on bun.
+- Device pool and leases, open after lease notes and stale-row detection:
+  - Nothing removes a stale pool row; `avd:x16_avd` on emulator-5574 stays marked stale until it is removed.
+  - `devices.json` validation accepts two pairs on one emulator port.
+  - `scripts/device-pool.mjs` is not on the gate tool's tooling list, so any change to it owes both harness gates.
+  - No test shows an idle live device is still reaped when an older stale row shares its serial.
+  - Two rows holding the same live lease are both marked stale by `list`, each naming the other; reaping is unaffected.
+  - The watchdog's suggested `git merge --ff-only` fails when the checkout has commits of its own, and "behind" is as of the last fetch.
+  - An adb server started by anything other than the pool still runs in its caller's working directory.
+- Real-input, open after the Android `--a11y` filter and the iOS stall limit:
+  - `--rerun-failed` on a red Android `a11y:debt` spends a device run that cannot go green, since the debt check exists only while it fails; iOS has the same gap.
+  - A rerun of one failed Android control still reads every accessibility case, so it can still meet the hosted DatePicker zero-sized read.
+  - The iOS stall path runs `xcrun simctl terminate` with no timeout, so a wedged simulator service could still hang the stop; the end-of-run cleanup has the same exposure.
+  - No test covers a red Android run with both a failed control and a failed accessibility case.
+  - The Android plan's `full` field is read only by tests.
+  - `check-runner.test.js` "runs no more steps at once than --jobs" failed once at load 77 and passed on rerun.

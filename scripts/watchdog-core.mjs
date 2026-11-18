@@ -82,6 +82,28 @@ export function leasesFact(leases, nowMs) {
   };
 }
 
+/**
+ * Whether the checkout the watchdog runs from has every commit of `origin/main`: one that is
+ * behind runs old checks, and old copies of the scripts it reports on.
+ *
+ * @param {number | null} behind commits on `origin/main` that HEAD lacks; `null` when unknown
+ * @returns {Fact | null}
+ */
+export function checkoutFact(behind) {
+  if (!Number.isInteger(behind) || behind < 0) return null;
+  return {
+    key: 'checkout',
+    level: behind > 0 ? 'warn' : 'ok',
+    // Not the count: each merge while it stays behind is not news.
+    state: behind > 0 ? 'behind' : 'current',
+    text:
+      behind > 0
+        ? `this checkout is ${behind} commit(s) behind origin/main, so these checks ` +
+          'are old ones. Run `git merge --ff-only origin/main` in it.'
+        : 'up to date with origin/main',
+  };
+}
+
 /** Conclusions that say the code is good or bad. Anything else says nothing. */
 const CI_GREEN = ['success'];
 const CI_RED = ['failure', 'timed_out', 'startup_failure', 'action_required'];
