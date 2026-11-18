@@ -1,5 +1,5 @@
 import { test } from '@e2e-dev/mobile';
-import { expect, type Locator, type Screen } from 'e2e';
+import { expect, type Screen } from 'e2e';
 
 import {
   boxOf,
@@ -11,8 +11,6 @@ import {
   reveal,
   tapBand,
   textOf,
-  type Box,
-  type Point,
 } from './support';
 import { actsOnOneNamedNode } from './reader';
 import {
@@ -35,21 +33,6 @@ const PRESSABLE_IN_ROW = 'Pressable inside a pressed row';
 /** A row with `onPress` whose content is a nitro-ui wrapper around React Native text. */
 const ROW_AND_CONTEXT_MENU = 'Row with onPress and a context menu';
 const CONTEXT_MENU_IN_ROW = 'form-row-context-menu';
-
-/** The Android view React Native draws the app's content into. */
-const CONTENT_ROOT = 'android:id/content';
-
-/**
- * A row the keyboard opt-out check measures at the end of the list.
- *
- * Not one of the last rows: a Form that opts out leaves its own tail where the keyboard
- * stands, so the only rows readable at the end of the list with the keys up are the ones
- * well above it. Padding under the last row still lifts this one, by the same amount.
- */
-const CONTENT_RULER = 'Downloads';
-
-/** Drags enough to reach the end of the list from wherever the list happens to be. */
-const END_DRAGS = 14;
 
 /** How long a counter or a box is watched for a second value or a second move. */
 const SETTLE_MS = 500;
@@ -330,117 +313,6 @@ test('a tap on a nitro-ui wrapper of React Native content inside a pressing row 
   await staysAt(screen, opens, '0');
 });
 
-test('opting out of keyboard avoidance leaves the content and its offset alone', async ({
-  app,
-  screen,
-}) => {
-  await app.open();
-  await openScreen(screen, 'form');
-  const field = editableField(screen, 'Note');
-  const focus = screen.getByTestId('form-field-focus');
-  const avoid = screen.getByTestId('form-avoid-echo');
-  const ruler = screen.getByText(CONTENT_RULER);
-
-  // The toggle is tapped first, while the page is still at its top: this check travels to
-  // the end of a long form twice, so it starts no further down it than it has to.
-  await screen.getByLabel('Keyboard avoidance').tap();
-  await expect(avoid).toHaveText('no');
-
-  // The end of the list is where a reservation shows: content that grows under the last
-  // row lifts every row there. Both readings are taken there, once with no keyboard and
-  // once with one.
-  await reveal(screen, field);
-  const path = await endDragPath(screen);
-  const atEnd = await endBox(screen, ruler, path);
-  // Back to the field, and parked low in the page as the default case parks it: a field
-  // the keyboard does not reach is never scrolled, avoidance on or off, so the offset
-  // check below would be true of a Form that ignores the prop as much as of this one.
-  await revealLowInPage(screen, field);
-  const parked = await boxIfPresent(field);
-  if (parked == null) {
-    throw new Error(
-      'real-input: the Note field has no box to watch for a move.'
-    );
-  }
-  await expect(focus).toHaveText('no');
-
-  await withRealKeyboard(async () => {
-    await focusField(field);
-    expect(
-      await textOf(screen, 'form-field-focus'),
-      'a real tap on the Note field did not focus it, so a Form that does nothing ' +
-        'would look like a Form that opted out'
-    ).toBe('yes');
-    const { keyboardTop } = await expectKeyboard();
-    const band = await tapBand(screen);
-    expect(
-      band.bottom - keyboardTop,
-      `the premise of this check is missing: the keyboard is only ` +
-        `${String(Math.round(band.bottom - keyboardTop))} px tall, so padding room ` +
-        'for it would not be a change anything could see'
-    ).toBeGreaterThan(120);
-
-    expect(
-      parked.y + parked.height,
-      `the premise of this check is missing: the field was parked with its bottom at ` +
-        `${String(Math.round(parked.y + parked.height))} px, above the keyboard's top at ` +
-        `${String(Math.round(keyboardTop))} px, so nothing covered it and no Form would ` +
-        'have scrolled for it'
-    ).toBeGreaterThan(keyboardTop);
-
-    // The field is read here, before the list is travelled below: a Form that scrolls
-    // for its keyboard has already moved the row by the time the keys are up, and the
-    // travel that follows reads the end of the content, not this row.
-    const afterFocus = await boxIfPresent(field);
-    if (afterFocus == null) {
-      throw new Error(
-        `real-input: the focused Note field left the tree; it was parked at ` +
-          `${JSON.stringify(parked)}.`
-      );
-    }
-    expect(
-      Math.abs(afterFocus.y - parked.y),
-      `focusing the field left it ${String(
-        Math.round(Math.abs(afterFocus.y - parked.y))
-      )} px from where it was parked (${String(Math.round(parked.y))} px, now ` +
-        `${String(Math.round(afterFocus.y))} px) with keyboard avoidance off: the Form ` +
-        'scrolled for a keyboard it was told to leave alone'
-    ).toBeLessThanOrEqual(2);
-
-    const stillUp = await expectKeyboard();
-    // The same travel again with the keyboard up. It starts above the field, which is
-    // under the keyboard by now: a `TextInput` owns a gesture that begins inside it, and
-    // a gesture that begins under the keyboard belongs to the keyboard's own window.
-    const upPath = {
-      from: {
-        x: path.from.x,
-        y: Math.min(afterFocus.y - 40, stillUp.keyboardTop - 60),
-      },
-      to: path.to,
-    };
-    expect(
-      upPath.from.y - upPath.to.y,
-      `the field starts at ${String(
-        Math.round(afterFocus.y)
-      )} px and the keyboard at ${String(
-        Math.round(stillUp.keyboardTop)
-      )} px, which leaves only ${String(
-        Math.round(upPath.from.y - upPath.to.y)
-      )} px of travel above them for the list to travel along`
-    ).toBeGreaterThan(120);
-    const after = await endBox(screen, ruler, upPath);
-    expect(
-      Math.abs(after.y - atEnd.y),
-      `the Form's content sits ${String(
-        Math.round(atEnd.y - after.y)
-      )} px higher at the end of its list with the keyboard up (top ` +
-        `${String(Math.round(stillUp.keyboardTop))} px) than with no keyboard, which ` +
-        "is what padding the bottom of its scroll content by the keyboard's own " +
-        'height does to it'
-    ).toBeLessThanOrEqual(12);
-  });
-});
-
 /**
  * Read a counter, wait, and read it again.
  *
@@ -458,64 +330,6 @@ async function staysAt(
     await textOf(screen, testId),
     `"${testId}" moved off "${text}" while the screen was watched`
   ).toBe(text);
-}
-
-/**
- * A node's box, or `null` at once when it is not in the tree.
- *
- * `boundingBox` waits for a node to appear, and a row the list has recycled away never
- * does, so a scroll search that reads it blind pays the action timeout per read.
- */
-async function boxIfPresent(locator: Locator): Promise<Box | null> {
-  if ((await locator.count()) === 0) return null;
-  return boxOf(locator);
-}
-
-/**
- * The drag that pulls the list to its end, measured while nothing is above it.
- *
- * The path cannot be read once a keyboard is up: the IME's own window carries the
- * same `android:id/content` id, so the content view is two nodes by then. The travel
- * stays in the top half of the band, where a keyboard cannot be.
- */
-async function endDragPath(
-  screen: Screen
-): Promise<{ from: Point; to: Point }> {
-  const content = await boxOf(screen.getByTestId(CONTENT_ROOT));
-  const band = await tapBand(screen);
-  if (content == null) {
-    throw new Error('real-input: the content view has no box to drag along.');
-  }
-  const span = band.bottom - band.top;
-  const from = {
-    x: content.x + content.width * 0.05,
-    y: band.top + span * 0.5,
-  };
-  return { from, to: { x: from.x, y: band.top + span * 0.1 } };
-}
-
-/**
- * Where a row sits once the list has been dragged to the end of its content.
- *
- * A fixed number of drags reaches the end without claiming to know where it is; the
- * reading that matters is this one against the same one taken with a keyboard up.
- */
-async function endBox(
-  screen: Screen,
-  ruler: Locator,
-  path: { from: Point; to: Point }
-): Promise<{ y: number; height: number }> {
-  for (let dragNumber = 1; dragNumber <= END_DRAGS; dragNumber += 1) {
-    await drag(screen, path.from, path.to, 500);
-  }
-  const box = await boxIfPresent(ruler);
-  if (box == null) {
-    throw new Error(
-      `real-input: the "${CONTENT_RULER}" row is not on screen at the end of the ` +
-        'list, so the content there cannot be read.'
-    );
-  }
-  return box;
 }
 
 /**

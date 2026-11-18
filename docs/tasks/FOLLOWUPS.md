@@ -20,7 +20,9 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
 - `bottom-sheet.e2e.ts` "a drag up on the two-detent header expands the sheet", the header did
   not move, 2026-11-16, `real-input:android` started 18:45 UTC beside an iOS gate; again
   2026-11-18 on the TextField merge run started 22:18 UTC (the first test of the run, the header's
-  top 1391 before and after the drag), green on `--rerun-failed`. Seen twice. Not quarantined: no
+  top 1391 before and after the drag), green on `--rerun-failed`; a third time 2026-11-19 on the
+  ButtonGroup merge run started 03:21 UTC, the same reading, green on `--rerun-failed`. Seen three
+  times. Not quarantined: no
   log shows the driver at fault, so a drag the sheet ignored is treated as a bug with a low hit
   rate and gets a bugfix task.
 - `BottomSheet.harness.tsx` (iOS), a chunk lost to "the native app crashed during test execution"
@@ -35,6 +37,22 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
 Tests skipped with a `QUARANTINED <date>` comment after a second sighting, each with its fix task.
 A line here blocks no merge. Its fix queues behind components, and one still here after two weeks
 is raised with the owner once.
+
+- `form.e2e.ts` "opting out of keyboard avoidance leaves the content and its offset alone"
+  (Android), quarantined 2026-11-18. It failed twice in a row on the ButtonGroup merge tree
+  (`merge/FIX7`, full run and its `--rerun-failed`) with the Note field focused, no keyboard on
+  screen and the field's box gone from the tree, and passed alone on that tree and on `main`; it
+  also failed repeatedly while its own task was written. The Form's state read correctly at the
+  failure (`avoid no`, `keyboardAvoidance: off`), so the keyboard or the tree read is at fault, not
+  the Form's offset. One fix was tried and judged not to apply: blocking the Form's
+  `requestChildRectangleOnScreen` forward does nothing, because the ScrollView's content container
+  never passes it on and Compose's `requestRectangleOnScreen` walks every ancestor anyway. Fix
+  task: read `form-avoid-echo`, the report's `keyboard=` and `scroll=` before the focus tap and at
+  the failure, and add a deterministic Android harness case (an `ime:<dp>` and a `rect:<row>` test
+  command through `nuiTestCommand`, then assert `scroll=` holds while opted out and moves while
+  not). iOS's opt-out case still runs. The Android real-input runner counts a skipped test as a failure,
+  so the case was taken out of `form.e2e.ts` rather than skipped; it is on `main` at `49b84b9d`
+  (`git show 49b84b9d:example/e2e/real-input/form.e2e.ts`) for the fix task to restore.
 
 Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into tasks F1–F6:
 
