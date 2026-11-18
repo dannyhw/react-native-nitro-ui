@@ -536,6 +536,10 @@ node scripts/lease.mjs release <ID>                     # devices stay up, on pu
   address is derived from the pair, and the emulator is asked (`adb -s <serial> emu avd name`)
   which AVD is behind that serial before anything is powered off. A device that cannot identify
   itself stays up.
+- A console port runs one emulator, so when two rows of `pool.json` name one serial, only one
+  describes the device on it: the one a live lease holds or a run is using, or else the one the
+  pool recorded there last. The other row is stale. `list` marks it `stale:` and names the row
+  that holds the serial, and a reap, an exclusive acquire's included, does nothing through it.
 - A run in flight is never interrupted. A gate claims the devices of its lease for the duration
   of the run (`scripts/gate.mjs`), so a reap cannot power off an emulator mid-suite, and a
   second gate aimed at the same device is refused before it starts.

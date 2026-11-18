@@ -237,7 +237,7 @@ describe('what an emulator is started with', () => {
     expect(await recorded('emu.argv')).toContain('-port 5574');
   });
 
-  it('starts the emulator and adb in the pool state directory, not the caller\'s', async () => {
+  it("starts the emulator and adb in the pool state directory, not the caller's", async () => {
     // A state directory apart from the stubs, not created yet, and not this test's own
     // working directory (the checkout): an emulator keeps the directory it started in.
     const state = join(home, 'state');

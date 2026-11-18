@@ -821,7 +821,8 @@ describe('the CLI, in a real state directory', () => {
   });
 
   it('carries a note from acquire to list, changes it, and clears it', () => {
-    const plan = 'merge: check, harness:ios; then real-input:ios, quiet machine';
+    const plan =
+      'merge: check, harness:ios; then real-input:ios, quiet machine';
     expect(
       cli(['acquire', '--task', 'M1', '--note', plan, '--config', config])
         .status

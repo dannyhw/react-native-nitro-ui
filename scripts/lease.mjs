@@ -52,7 +52,7 @@ import {
   withLock,
   writeJsonAtomic,
 } from './lease-core.mjs';
-import { DevicePool } from './device-pool.mjs';
+import { DevicePool, staleWhy } from './device-pool.mjs';
 
 const USAGE =
   'usage: node scripts/lease.mjs acquire --task <id> [--platform ios|android|both]\n' +
@@ -677,7 +677,9 @@ function main(argv) {
  */
 function noteCommand(args, paths) {
   if (args.length !== 2) {
-    throw new Error(`note needs a lease id and a text ("" clears it)\n${USAGE}`);
+    throw new Error(
+      `note needs a lease id and a text ("" clears it)\n${USAGE}`
+    );
   }
   const [who, text] = args;
   const note = normalizeNote(text);
@@ -693,7 +695,8 @@ function noteCommand(args, paths) {
         changed.push(next);
         return next;
       });
-      if (changed.length > 0) writeJsonAtomic(paths.leases, { ...state, leases });
+      if (changed.length > 0)
+        writeJsonAtomic(paths.leases, { ...state, leases });
       return changed;
     },
   });
@@ -906,11 +909,13 @@ function poolSummary(devices, paths) {
 function poolRows(devices, paths) {
   return poolSummary(devices, paths).map((x) => {
     const who = x.leaseTask ? `lease ${x.leaseTask}` : 'no lease';
-    const use = x.busy
-      ? `in use (${x.claims.map((c) => c.gate ?? `pid ${c.pid}`).join(', ')})`
-      : `idle ${x.idleMinutes}m of ${
-          x.idleShutdownMinutes ?? IDLE_SHUTDOWN_DEFAULT_MINUTES
-        }m`;
+    const use = x.stale
+      ? staleWhy(x.stale)
+      : x.busy
+        ? `in use (${x.claims.map((c) => c.gate ?? `pid ${c.pid}`).join(', ')})`
+        : `idle ${x.idleMinutes}m of ${
+            x.idleShutdownMinutes ?? IDLE_SHUTDOWN_DEFAULT_MINUTES
+          }m`;
     // The serial or UDID as well as the pool key: the key names an AVD, not the device
     // to address.
     const where = x.serial ?? x.udid ?? '';

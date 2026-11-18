@@ -27,6 +27,7 @@ import {
   poolKeysForPair,
   poolStatePath,
   readPool,
+  serialHolder,
 } from '../device-pool.mjs';
 
 const MINUTE = 60_000;
@@ -1710,6 +1711,173 @@ describe('list', () => {
       idleMinutes: 0,
     });
     expect(existsPoolFile(home)).toBe(true);
+  });
+});
+
+describe('two pool rows on one serial', () => {
+  let home;
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), 'nitro-ui-stale-'));
+  });
+
+  afterEach(() => {
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  // Both AVDs are declared on one console port, so neither devices.json nor a lease on the
+  // pair's serial tells the reaper which row is stale: only the other row can.
+  const SHARED = {
+    ...DEVICES,
+    pairs: [
+      {
+        id: 'pair-old',
+        ios: null,
+        android: { avd: 'x16_avd', emulatorPort: 5574, adbPort: 5043 },
+        metroPort: 8299,
+      },
+      ...DEVICES.pairs,
+    ],
+  };
+
+  const write = (rows, leases = []) => {
+    writeFileSync(
+      join(home, 'pool.json'),
+      JSON.stringify({ version: 1, devices: rows }, null, 2)
+    );
+    writeFileSync(join(home, 'leases.json'), JSON.stringify({ leases }));
+  };
+
+  // Idle well past the limit, with no lease: without the rule, the reaper asks the emulator
+  // on emulator-5574 who it is.
+  const staleRow = () =>
+    entryOf({
+      key: 'avd:x16_avd',
+      leaseId: null,
+      usedAgo: 300 * MINUTE,
+      serial: 'emulator-5574',
+      adbPort: 5043,
+    });
+
+  const deviceIo = (calls) =>
+    calls.filter((c) => c[0] === 'avd-name' || c[0] === 'emu-kill');
+
+  it.each([
+    [
+      'a live lease',
+      () =>
+        entryOf({
+          key: 'avd:nitro-ui-a',
+          leaseId: 'L-1',
+          usedAgo: 400 * MINUTE,
+        }),
+      [lease('L-1', { task: 'M9', pairId: 'pair-a' })],
+      () => false,
+      'lease M9 holds it',
+    ],
+    [
+      'a run in flight',
+      () =>
+        entryOf({
+          key: 'avd:nitro-ui-a',
+          leaseId: null,
+          usedAgo: 400 * MINUTE,
+          claims: [{ pid: 4242, gate: 'harness:android' }],
+        }),
+      [],
+      (pid) => pid === 4242,
+      'a run is using it',
+    ],
+    [
+      'a later record',
+      () =>
+        entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 5 * MINUTE }),
+      [],
+      () => false,
+      'the pool recorded it there later',
+    ],
+  ])(
+    'never acts through the other row when the serial has %s',
+    (_name, holderRow, leases, isPidAlive, why) => {
+      write([staleRow(), holderRow()], leases);
+      const { pool, calls } = fakePool({
+        home,
+        devices: SHARED,
+        isPidAlive,
+        state: {
+          serials: ['emulator-5574'],
+          avdNames: { 'emulator-5574': 'nitro-ui-a' },
+        },
+      });
+      const done = pool.reap();
+      expect(done.refused).toContainEqual({
+        key: 'avd:x16_avd',
+        why: `stale: emulator-5574 is avd:nitro-ui-a's (${why})`,
+      });
+      expect(done.reaped).toEqual([]);
+      expect(deviceIo(calls)).toEqual([]);
+      // Named by an exclusive acquire, it is still not acted on.
+      const forced = pool.reap({
+        shutdownKeys: ['avd:x16_avd'],
+        reason: 'exclusive acquire',
+      });
+      expect(forced.refused.map((x) => x.key)).toContain('avd:x16_avd');
+      expect(deviceIo(calls)).toEqual([]);
+
+      const rows = pool.summary();
+      expect(rows.find((x) => x.key === 'avd:x16_avd').stale).toEqual({
+        key: 'avd:nitro-ui-a',
+        serial: 'emulator-5574',
+        why,
+      });
+      expect(rows.find((x) => x.key === 'avd:nitro-ui-a').stale).toBe(null);
+    }
+  );
+
+  it('rechecks the serial before each device, in case another row took it meanwhile', () => {
+    write([staleRow()]);
+    const { pool, calls } = fakePool({
+      home,
+      devices: SHARED,
+      state: { serials: ['emulator-5574'] },
+    });
+    // Between the plan and the act, a lease boots nitro-ui-a on the same serial.
+    let planned = false;
+    const realWithPool = pool.withPool.bind(pool);
+    pool.withPool = (fn) => {
+      const result = realWithPool(fn);
+      if (!planned && result?.planned != null) {
+        planned = true;
+        write(
+          [
+            staleRow(),
+            entryOf({ key: 'avd:nitro-ui-a', leaseId: 'L-2', usedAgo: 0 }),
+          ],
+          [lease('L-2', { task: 'M8', pairId: 'pair-a' })]
+        );
+      }
+      return result;
+    };
+    const done = pool.reap();
+    expect(done.reaped).toEqual([]);
+    expect(done.kept).toContainEqual(
+      expect.objectContaining({
+        key: 'avd:x16_avd',
+        reason: "stale: emulator-5574 is avd:nitro-ui-a's (lease M8 holds it)",
+      })
+    );
+    expect(deviceIo(calls)).toEqual([]);
+  });
+
+  it('leaves a row alone that shares no serial, and two rows seen at the same moment', () => {
+    const a = entryOf({ key: 'avd:nitro-ui-a', leaseId: null, usedAgo: 5 });
+    const b = entryOf({ key: 'avd:nitro-ui-b', leaseId: null, usedAgo: 1 });
+    expect(serialHolder(a, [a, b], { nowMs: NOW, leases: [] })).toBe(null);
+    const twin = { ...a, key: 'avd:x16_avd', id: 'x16_avd' };
+    expect(serialHolder(a, [a, twin], { nowMs: NOW, leases: [] })).toBe(null);
+    expect(serialHolder(twin, [a, twin], { nowMs: NOW, leases: [] })).toBe(
+      null
+    );
   });
 });
 
