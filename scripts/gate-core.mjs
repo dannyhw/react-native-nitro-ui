@@ -468,6 +468,7 @@ export const ANDROID_REAL_INPUT_ONLY_PATHS = [
 export const IOS_REAL_INPUT_ONLY_PATHS = [
   'scripts/real-input/ios.mjs',
   'scripts/real-input/ios-log.mjs',
+  'scripts/real-input/ios-xcodebuild.mjs',
 ];
 
 /** The device gates that have a digest of their own. */
