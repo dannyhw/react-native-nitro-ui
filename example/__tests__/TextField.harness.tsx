@@ -293,6 +293,10 @@ function LatencyArm({ arm }: { arm: 'nitro' | 'rn' }) {
 }
 const rnFocus: { current: (() => void) | null } = { current: null };
 
+/** UTF-16 code units, so a space UIKit substituted for another space still compares. */
+const codeUnits = (text: string) =>
+  Array.from(text, (c) => c.charCodeAt(0)).join(',');
+
 function percentile(values: number[], p: number): number {
   const sorted = [...values].sort((a, b) => a - b);
   return (
@@ -598,7 +602,9 @@ describe('TextField', () => {
       (await handleOf('cut-caret')).nuiTestPaste('x', 3);
       const pasted = await stateWhen(
         'cut-caret',
-        (s) => s.text === 'ab x cd' && s.jsEvents === s.nativeEvents,
+        (s) =>
+          codeUnits(s.text) === codeUnits('ab x cd') &&
+          s.jsEvents === s.nativeEvents,
         'the paste'
       );
       expect(pasted.caret).toBe(4);
@@ -609,12 +615,16 @@ describe('TextField', () => {
       await finishComposition('cut-caret');
       const cut = await stateWhen(
         'cut-caret',
-        (s) => s.text === 'ab xy cd' && s.jsEvents === s.nativeEvents,
+        (s) =>
+          codeUnits(s.text) === codeUnits('ab xy cd') &&
+          s.jsEvents === s.nativeEvents,
         'the cut commit'
       );
       expect(cut.caret).toBe(5);
       expect(cut.caret).toBeLessThan(cut.text.length);
-      expect(jsValues.get('cut-caret')).toBe('ab xy cd');
+      expect(codeUnits(jsValues.get('cut-caret') ?? '')).toBe(
+        codeUnits('ab xy cd')
+      );
     }
   );
 
