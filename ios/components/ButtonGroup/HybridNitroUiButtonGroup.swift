@@ -452,7 +452,7 @@ struct ButtonGroupContent: NitroUIContent {
       Button(action: { model.press(item.id) }) {
         itemLabel(item, inControlGroup: inControlGroup)
       }
-      .modifier(ItemButtonStyle(variant: model.variant))
+      .modifier(ItemButtonStyle(style: ItemStyle(variant: model.variant)))
       .controlSize(model.scale.controlSize)
       .modifier(OptionalItemTint(color: inControlGroup ? nil : model.tint))
       .disabled(model.disabled || item.disabled)
@@ -545,53 +545,67 @@ private struct AnyLabelStyle: LabelStyle {
   }
 }
 
-/// The variant's button style, one branch per variant.
+/// Which of iOS's three button-style families a control draws in. iOS has no elevated or outlined
+/// style, so those variants share a family with the nearest one. No hairline stroke is added for
+/// `outlined`: a row of stroked capsules reads as several borders.
+enum ItemStyle {
+  case prominent
+  case bordered
+  case borderless
+
+  init(variant: ButtonVariant) {
+    switch variant {
+    case .filled, .elevated: self = .prominent
+    case .tonal, .outlined: self = .bordered
+    case .text: self = .borderless
+    }
+  }
+
+  /// What a toggle draws in one of its states.
+  func state(_ isOn: Bool) -> ItemStyle {
+    guard isOn else {
+      // Unchecked keeps the family and drops the prominent fill, so it is the quiet item of the
+      // row rather than the grey one.
+      return self == .prominent ? .bordered : self
+    }
+    // Checked is one step up: the fill carries the group's tint, which is more than any unchecked
+    // item in the same row shows of itself.
+    return self == .borderless ? .bordered : .prominent
+  }
+}
+
+/// The style family an item draws in.
 private struct ItemButtonStyle: ViewModifier {
-  let variant: ButtonVariant
+  let style: ItemStyle
 
   func body(content: Content) -> some View {
-    switch variant {
-    case .filled, .elevated:
-      // iOS has no elevated style; the prominent one is the nearest.
+    switch style {
+    case .prominent:
       content.buttonStyle(.borderedProminent)
-    case .tonal, .outlined:
-      // No outlined style either: `.bordered` is the nearest. No hairline stroke is added: a row of
-      // stroked capsules reads as several borders.
+    case .bordered:
       content.buttonStyle(.bordered)
-    case .text:
+    case .borderless:
       content.buttonStyle(.borderless)
     }
   }
 }
 
 /// A toggle item drawn in the group's `variant`, so it sits in the same style family as an action
-/// item beside it: the variant's own button style in both states, the on state in the group's tint
-/// and the off state in a neutral one.
+/// item beside it: the variant's own style while unchecked and one step up from it while checked,
+/// both in the group's tint. Grey belongs to disabled items, and an unchecked toggle is not one.
 ///
 /// A `Toggle` with `.toggleStyle(.button)` ignores `buttonStyle` — iOS gives it one look — so this
-/// draws a `Button` and says the toggle's state on the result.
+/// draws a `Button` in the state's style.
 private struct ItemToggleStyle: ToggleStyle {
   let variant: ButtonVariant
   let tint: UIColor?
-
-  /// What an unchecked item is drawn in. A prominent capsule needs a fill a white label stays
-  /// legible on; the bordered and borderless styles colour the label, where a label colour is the
-  /// right neutral.
-  private func offColor(_ variant: ButtonVariant) -> UIColor {
-    switch variant {
-    case .filled, .elevated:
-      return .systemGray
-    case .tonal, .outlined, .text:
-      return .secondaryLabel
-    }
-  }
 
   func makeBody(configuration: Configuration) -> some View {
     Button(action: { configuration.isOn.toggle() }) {
       configuration.label
     }
-    .modifier(ItemButtonStyle(variant: variant))
-    .modifier(OptionalItemTint(color: configuration.isOn ? tint : offColor(variant)))
+    .modifier(ItemButtonStyle(style: ItemStyle(variant: variant).state(configuration.isOn)))
+    .modifier(OptionalItemTint(color: tint))
     .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
   }
 }

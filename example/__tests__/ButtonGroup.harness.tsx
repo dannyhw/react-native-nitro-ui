@@ -1004,9 +1004,28 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
    */
   const ITEM_WELL = { width: 96 } as const;
 
-  /** One item, one way: an action, a checked toggle, an unchecked toggle. */
-  function soloItems(role: 'action' | 'on' | 'off'): ButtonGroupItem[] {
+  /**
+   * One item, one way. Each is drawn in a group of its own, because the measured box is the
+   * control's: a row of two items would report the two drawings added together.
+   */
+  type Role = 'action' | 'on' | 'off' | 'disabled' | 'disabledAction';
+
+  const ROLES: readonly Role[] = [
+    'action',
+    'on',
+    'off',
+    'disabled',
+    'disabledAction',
+  ];
+
+  function soloItems(role: Role): ButtonGroupItem[] {
     if (role === 'action') return [{ id: 'bold', title: 'Bold' }];
+    if (role === 'disabledAction') {
+      return [{ id: 'bold', title: 'Bold', disabled: true }];
+    }
+    if (role === 'disabled') {
+      return [{ id: 'bold', title: 'Bold', toggle: true, disabled: true }];
+    }
     return [
       {
         id: 'bold',
@@ -1034,12 +1053,28 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
     return { fill: Number(fill[1]), tint: Number(tint[1]) };
   }
 
-  it('draws a toggle item in the group variant, like the action item of it', async () => {
+  /** How far two measured drawings may sit and still be called the same drawing. Two boxes drawn
+   * by one style share every pixel but the anti-aliased ones, which is a point or two; the iOS
+   * style families are tens of points apart. */
+  const SAME_DRAWING = 6;
+
+  /** The smallest tint share a label drawn in the group's colour reaches. A grey label, which is
+   * what a disabled item is drawn in, measures none of it. */
+  const TINT_SEEN = 3;
+
+  function sameDrawing(a: Drawing, b: Drawing): boolean {
+    return (
+      Math.abs(a.fill - b.fill) <= SAME_DRAWING &&
+      Math.abs(a.tint - b.tint) <= SAME_DRAWING
+    );
+  }
+
+  it('draws an unchecked toggle in the group tint, one step below the checked one', async () => {
     if (Platform.OS !== 'ios') return;
-    const read: Record<string, Record<'action' | 'on' | 'off', Drawing>> = {};
+    const read: Record<string, Record<Role, Drawing>> = {};
     for (const variant of VARIANTS) {
-      read[variant] = {} as Record<'action' | 'on' | 'off', Drawing>;
-      for (const role of ['action', 'on', 'off'] as const) {
+      read[variant] = {} as Record<Role, Drawing>;
+      for (const role of ROLES) {
         const testId = `bg-${variant}-${role}`;
         await render(
           <View style={ITEM_WELL}>
@@ -1060,54 +1095,68 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
 
     const seen = VARIANTS.map(
       (variant) =>
-        `${variant}: action=${JSON.stringify(read[variant]!.action)} ` +
-        `on=${JSON.stringify(read[variant]!.on)} ` +
-        `off=${JSON.stringify(read[variant]!.off)}`
+        `${variant}: ` +
+        ROLES.map(
+          (role) => `${role}=${JSON.stringify(read[variant]![role])}`
+        ).join(' ')
     ).join('; ');
 
+    // Two drawings the mapping is written against: `.bordered` in the group's tint, which is what
+    // a `tonal` action item draws, and `.borderedProminent` in it, which is what a `filled` one
+    // draws. Every cell of the table is compared against one of these rather than a number.
+    const quiet = read.tonal!.action;
+    const loud = read.filled!.action;
+
     for (const variant of VARIANTS) {
-      const { action, on, off } = read[variant]!;
-      // The on state is drawn like the action item beside it would be: the same amount of the
-      // box painted, and the same amount of it in the group's tint.
-      if (on.tint === 0) {
+      const { action, on, off, disabled, disabledAction } = read[variant]!;
+
+      // Unchecked is never grey: the box carries the group's own colour.
+      if (off.tint < TINT_SEEN) {
         throw new Error(
-          `a checked "${variant}" toggle drew nothing in the group's tint. ${seen}`
+          `an unchecked "${variant}" toggle drew only ${off.tint}% of its box in ` +
+            `the group's tint, so it reads as a disabled item rather than as an ` +
+            `unchecked one. ${seen}`
         );
       }
-      if (Math.abs(on.fill - action.fill) > 10) {
+      // Unchecked draws the quiet drawing: the variant's own look for every variant but
+      // `filled`/`elevated`, whose unchecked item drops the prominent fill.
+      const offIs = variant === 'text' ? action : quiet;
+      if (!sameDrawing(off, offIs)) {
         throw new Error(
-          `a checked "${variant}" toggle painted ${on.fill}% of its box against the ` +
-            `"${variant}" action item's ${action.fill}% - the two are not drawn in the ` +
-            `same style. ${seen}`
+          `an unchecked "${variant}" toggle drew ${JSON.stringify(off)} against ` +
+            `the ${variant === 'text' ? 'variant' : 'quiet'} item's ` +
+            `${JSON.stringify(offIs)}. ${seen}`
         );
       }
-      if (Math.abs(on.tint - action.tint) > 10) {
+      // Checked is one step louder in the same family: the prominent capsule, except for
+      // `text`, whose checked item takes the quiet capsule and keeps its tinted label.
+      const onIs = variant === 'text' ? quiet : loud;
+      if (!sameDrawing(on, onIs)) {
         throw new Error(
-          `a checked "${variant}" toggle painted ${on.tint}% of its box in the tint ` +
-            `against the "${variant}" action item's ${action.tint}%. ${seen}`
+          `a checked "${variant}" toggle drew ${JSON.stringify(on)} against the ` +
+            `${variant === 'text' ? 'quiet' : 'prominent'} item's ` +
+            `${JSON.stringify(onIs)}. ${seen}`
         );
       }
-      // The off state draws the same shape with nothing in the tint: it tells apart from the
-      // on state without leaving the variant's style family.
-      if (off.tint > 2) {
+      if (sameDrawing(on, off)) {
         throw new Error(
-          `an unchecked "${variant}" toggle painted ${off.tint}% of its box in the ` +
-            `tint, so on and off draw the same thing. ${seen}`
+          `a "${variant}" toggle draws the same thing checked (${JSON.stringify(on)}) ` +
+            `and unchecked (${JSON.stringify(off)}). ${seen}`
         );
       }
-      if (variant === 'text') {
-        // `.borderless` paints the label and nothing behind it, in either state.
-        if (on.fill > 20 || action.fill > 20) {
-          throw new Error(
-            `a "text" group painted a background - the toggle's item filled ` +
-              `${on.fill}% of its box and the action's ${action.fill}%. ${seen}`
-          );
-        }
-      } else if (Math.abs(off.fill - on.fill) > 12) {
+      // A disabled item is the grey an unchecked item is not: no tint in it, in either role, and
+      // the unchecked item is apart from it by more than the read's noise.
+      if (disabled.tint > SAME_DRAWING || disabledAction.tint > SAME_DRAWING) {
         throw new Error(
-          `an unchecked "${variant}" toggle painted ${off.fill}% of its box against ` +
-            `the checked one's ${on.fill}% - the capsule is not drawn in both states. ` +
-            seen
+          `"${variant}" drew a disabled item in the group's tint (toggle ` +
+            `${disabled.tint}%, action ${disabledAction.tint}%), so the read no longer ` +
+            `tells a disabled item from an unchecked one. ${seen}`
+        );
+      }
+      if (off.tint <= disabled.tint + TINT_SEEN) {
+        throw new Error(
+          `an unchecked "${variant}" toggle (${JSON.stringify(off)}) draws like the ` +
+            `disabled item beside it (${JSON.stringify(disabled)}). ${seen}`
         );
       }
     }
@@ -1116,14 +1165,13 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
     // something: only a prominent family paints its box in the tint, and only the two capsule
     // families paint a background at all.
     if (
-      read.filled!.action.tint < read.tonal!.action.tint + 10 ||
-      read.filled!.action.fill < read.text!.action.fill + 20
+      loud.tint < quiet.tint + 10 ||
+      loud.fill < read.text!.action.fill + 20
     ) {
       throw new Error(
         `the measured read does not tell the three iOS style families apart - filled ` +
-          `painted ${read.filled!.action.tint}% in the tint and ` +
-          `${read.filled!.action.fill}% of its box, tonal painted ` +
-          `${read.tonal!.action.tint}% in the tint, text painted ` +
+          `painted ${loud.tint}% in the tint and ${loud.fill}% of its box, tonal painted ` +
+          `${quiet.tint}% in the tint, text painted ` +
           `${read.text!.action.fill}% of its box. ${seen}`
       );
     }
