@@ -163,7 +163,7 @@ class ButtonGroupModelTest {
     assertEquals(false, model.menuOpen)
     assertEquals(
       "checked=none;visible=none;overflow=none;row=none;shown=none;menu=closed;" +
-        "probes=0;a11y=none",
+        "overflowIcons=-;probes=0;a11y=none",
       model.stateReport(),
     )
     model.applyDefaults(listOf("bold"))

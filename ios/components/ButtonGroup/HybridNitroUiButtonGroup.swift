@@ -176,6 +176,8 @@ final class ButtonGroupModel: NitroUiModel {
   /// report reads only strings published under the lock.
   private var checkedReport = "none"
   private var accessibilityReport = "none"
+  /// What the control's own box was drawing at the last row probe, or `none`.
+  private var drawingReport = "none"
   /// How many probes have answered, so a test can tell its own from the previous one's.
   private var probes = 0
   /// Whether the row composed an overflow control, and how many items it drew; `-1` before the
@@ -196,10 +198,15 @@ final class ButtonGroupModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// Answer a row probe from the last placement. Safe from any thread.
-  func publishRowReport(order: [String]) {
+  /// Answer a row probe from the last placement, and from what the box was drawing. Safe from any
+  /// thread. [drawing] is read from the rendered layer, so it arrives from the probe itself.
+  func publishRowReport(
+    order: [String],
+    drawing: String
+  ) {
     reportLock.lock()
     probes += 1
+    drawingReport = drawing
     if placedVisible < 0 {
       rowReport = "visible=none;overflow=none;row=none;shown=none"
     } else {
@@ -240,7 +247,7 @@ final class ButtonGroupModel: NitroUiModel {
     defer { reportLock.unlock() }
     return
       "checked=\(checkedReport);\(rowReport);menu=\(placedOverflow ? "composed" : "none");"
-      + "probes=\(probes);a11y=\(accessibilityReport)"
+      + "drawing=\(drawingReport);probes=\(probes);a11y=\(accessibilityReport)"
   }
 
   func resetAll() {
@@ -263,6 +270,7 @@ final class ButtonGroupModel: NitroUiModel {
     reportLock.lock()
     rowReport = "visible=none;overflow=none;row=none;shown=none"
     accessibilityReport = "none"
+    drawingReport = "none"
     probes = 0
     placedVisible = -1
     placedOverflow = false
@@ -435,9 +443,10 @@ struct ButtonGroupContent: NitroUIContent {
       Toggle(isOn: toggleBinding(item)) {
         itemLabel(item, inControlGroup: inControlGroup)
       }
-      .toggleStyle(.button)
+      .toggleStyle(
+        ItemToggleStyle(variant: model.variant, tint: inControlGroup ? nil : model.tint)
+      )
       .controlSize(model.scale.controlSize)
-      .modifier(OptionalItemTint(color: inControlGroup ? nil : model.tint))
       .disabled(model.disabled || item.disabled)
     } else {
       Button(action: { model.press(item.id) }) {
@@ -552,6 +561,38 @@ private struct ItemButtonStyle: ViewModifier {
     case .text:
       content.buttonStyle(.borderless)
     }
+  }
+}
+
+/// A toggle item drawn in the group's `variant`, so it sits in the same style family as an action
+/// item beside it: the variant's own button style in both states, the on state in the group's tint
+/// and the off state in a neutral one.
+///
+/// A `Toggle` with `.toggleStyle(.button)` ignores `buttonStyle` — iOS gives it one look — so this
+/// draws a `Button` and says the toggle's state on the result.
+private struct ItemToggleStyle: ToggleStyle {
+  let variant: ButtonVariant
+  let tint: UIColor?
+
+  /// What an unchecked item is drawn in. A prominent capsule needs a fill a white label stays
+  /// legible on; the bordered and borderless styles colour the label, where a label colour is the
+  /// right neutral.
+  private func offColor(_ variant: ButtonVariant) -> UIColor {
+    switch variant {
+    case .filled, .elevated:
+      return .systemGray
+    case .tonal, .outlined, .text:
+      return .secondaryLabel
+    }
+  }
+
+  func makeBody(configuration: Configuration) -> some View {
+    Button(action: { configuration.isOn.toggle() }) {
+      configuration.label
+    }
+    .modifier(ItemButtonStyle(variant: variant))
+    .modifier(OptionalItemTint(color: configuration.isOn ? tint : offColor(variant)))
+    .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
   }
 }
 
@@ -885,7 +926,7 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
   func nuiTestOpenOverflow() throws {
   }
 
-  /// Read what the row laid out, on the main thread. Returns at once.
+  /// Read what the row laid out and what the box drew, on the main thread. Returns at once.
   func nuiTestProbeRow() throws {
     let host = self.host
     let model = self.model
@@ -894,7 +935,10 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
       // recycled host may not have laid out its new mount yet.
       host.setNeedsLayout()
       host.layoutIfNeeded()
-      model.publishRowReport(order: model.items.map(\.id))
+      model.publishRowReport(
+        order: model.items.map(\.id),
+        drawing: nitroUiSampleDrawing(of: host, tint: model.tint)
+      )
     }
     if Thread.isMainThread {
       report()
@@ -912,4 +956,77 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
   func nuiTestStateReport() throws -> String {
     return model.stateReport()
   }
+}
+
+// MARK: - Drawing probe (test-only)
+
+/// How far a pixel may sit from the neutral backdrop and still count as "nothing drawn here".
+/// A translucent material over the backdrop stays well under this.
+private let nitroUiDrawingInkBudget = 24
+
+/// How far a pixel may sit from the group's tint and still count as drawn in it. The tint is
+/// composited over the material behind it, so a sampled pixel is close to it, rarely exactly it.
+private let nitroUiTintBudget = 30
+
+/// What the box `view` is drawing, as `size=<WxH>,fill=<%>,tint=<%>`: the share of the box that
+/// differs from a neutral backdrop, and the share that is the group's own tint.
+///
+/// The rendered layer is the only thing in-process that tells one variant's drawing from
+/// another's: a SwiftUI control keeps its capsule, its fill and its label colours to itself. The
+/// backdrop makes every pixel comparable, including the ones a translucent material leaves open.
+private func nitroUiSampleDrawing(
+  of view: UIView,
+  tint: UIColor?
+) -> String {
+  let bounds = view.bounds
+  guard bounds.width >= 2, bounds.height >= 2 else {
+    return "size=\(Int(bounds.width))x\(Int(bounds.height)),fill=-,tint=-"
+  }
+  let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
+    view.drawHierarchy(in: bounds, afterScreenUpdates: true)
+  }
+  guard let bitmap = image.cgImage else { return "no image" }
+  let width = bitmap.width, height = bitmap.height
+  let bytesPerRow = 4 * width
+  var data = [UInt8](repeating: 0, count: bytesPerRow * height)
+  guard
+    let space = CGColorSpace(name: CGColorSpace.sRGB),
+    let context = CGContext(
+      data: &data, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
+      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+  else { return "no context" }
+  let backdrop = 128
+  context.setFillColor(UIColor(white: 0.5, alpha: 1).cgColor)
+  context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+  context.draw(bitmap, in: CGRect(x: 0, y: 0, width: width, height: height))
+  var target: (red: Int, green: Int, blue: Int)?
+  if let rgb = tint?.usingColorSpace(.sRGB) {
+    target = (
+      Int((rgb.redComponent * 255).rounded()), Int((rgb.greenComponent * 255).rounded()),
+      Int((rgb.blueComponent * 255).rounded())
+    )
+  }
+  var filled = 0, tinted = 0
+  for row in 0..<height {
+    for column in 0..<width {
+      let offset = row * bytesPerRow + column * 4
+      // Every pixel is opaque after the backdrop, so the channels are final.
+      let red = Int(data[offset]), green = Int(data[offset + 1]), blue = Int(data[offset + 2])
+      if abs(red - backdrop) + abs(green - backdrop) + abs(blue - backdrop)
+        > nitroUiDrawingInkBudget
+      {
+        filled += 1
+      }
+      if let target,
+        abs(red - target.red) + abs(green - target.green) + abs(blue - target.blue)
+          <= nitroUiTintBudget
+      {
+        tinted += 1
+      }
+    }
+  }
+  let area = width * height
+  return
+    "size=\(Int(bounds.width))x\(Int(bounds.height)),fill=\(filled * 100 / area),"
+    + "tint=\(tint == nil ? "-" : tinted * 100 / area)"
 }

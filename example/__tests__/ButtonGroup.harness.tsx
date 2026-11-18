@@ -842,3 +842,263 @@ describe('ButtonGroup · G20', () => {
     expect(events).toEqual([]);
   });
 });
+
+/** The colour no scheme uses, so a pixel matching it was painted by the app's `tintColor`. */
+const TINT = '#E01B24';
+
+describe('ButtonGroup · the overflow row glyphs (G21, Android)', () => {
+  /**
+   * The tail of this row cannot fit a 220-point well, and the tail carries both an item with a
+   * glyph and one without: the rows that draw are the ones this reads.
+   */
+  const ICONED: ButtonGroupItem[] = [
+    { id: 'day', title: 'Day' },
+    { id: 'week', title: 'Week' },
+    { id: 'month', title: 'Month' },
+    { id: 'quarter', title: 'Quarter', androidIcon: 'nitroui_test_star' },
+    { id: 'year', title: 'Year' },
+    { id: 'all', title: 'All time', androidIcon: 'nitroui_test_close' },
+  ];
+
+  const glyphOf = (id: string): ButtonGroupItem['androidIcon'] =>
+    ICONED.find((item) => item.id === id)?.androidIcon;
+
+  /** Open the overflow the way the indicator's tap does, and wait for the rows to draw. */
+  async function openOverflow(testId: string): Promise<void> {
+    handleOf(testId).nuiTestOpenOverflow();
+    await pollUntil(
+      () => (reportOf(testId).menu === 'open' ? true : null),
+      () =>
+        new Error(
+          `"${testId}" never opened its overflow menu - it reports "${handleOf(
+            testId
+          ).nuiTestStateReport()}".`
+        ),
+      8000
+    );
+    // The menu state flips before the popup composes its rows.
+    await sleep(250);
+  }
+
+  /** The rows that drew a glyph, as `id` to the colour it drew it with. */
+  function glyphRows(testId: string): Map<string, string> {
+    const rows = new Map<string, string>();
+    const raw = reportOf(testId).overflowIcons ?? '';
+    for (const pair of raw.split(',')) {
+      const at = pair.indexOf('#');
+      if (at > 0) rows.set(pair.slice(0, at), pair.slice(at + 1));
+    }
+    return rows;
+  }
+
+  it('draws an overflowed item its glyph, and nothing for an item without one', async () => {
+    if (Platform.OS === 'ios') return;
+    poison([sizingKey('standard', 'filled', 'medium', 'automatic', ICONED)]);
+    const { rerender } = await render(
+      <View style={WELL}>
+        <ButtonGroup
+          items={ICONED}
+          testID="bg-menu-icons"
+          hybridRef={captureHybrid('bg-menu-icons')}
+        />
+      </View>
+    );
+    await waitForTestId('bg-menu-icons');
+    const row = await probeRow('bg-menu-icons');
+    const shown = (row.shown ?? 'none').split(',');
+    const hidden = ICONED.map((item) => item.id).filter(
+      (id) => !shown.includes(id)
+    );
+    const withGlyph = hidden.filter((id) => glyphOf(id) != null);
+    const withoutGlyph = hidden.filter((id) => glyphOf(id) == null);
+    if (withGlyph.length === 0 || withoutGlyph.length === 0) {
+      throw new Error(
+        `the overflowed items must hold both kinds: with a glyph ` +
+          `${JSON.stringify(withGlyph)}, without ` +
+          `${JSON.stringify(withoutGlyph)} (shown: ${JSON.stringify(shown)}).`
+      );
+    }
+
+    await openOverflow('bg-menu-icons');
+    const drew = await pollUntil(
+      () => {
+        const rows = glyphRows('bg-menu-icons');
+        return rows.size > 0 ? rows : null;
+      },
+      () =>
+        new Error(
+          `no overflow row drew a glyph while the menu was open - it reports ` +
+            `"${handleOf('bg-menu-icons').nuiTestStateReport()}".`
+        ),
+      8000
+    );
+    for (const id of withGlyph) {
+      const tint = drew.get(id);
+      if (tint == null || !/^[0-9A-F]{6}$/.test(tint)) {
+        throw new Error(
+          `the overflow row for "${id}" (androidIcon ` +
+            `"${String(glyphOf(id))}") drew no glyph, or drew one with no colour: ` +
+            `"${String(tint)}" in "${handleOf(
+              'bg-menu-icons'
+            ).nuiTestStateReport()}".`
+        );
+      }
+    }
+    for (const id of withoutGlyph) {
+      if (drew.has(id)) {
+        throw new Error(
+          `the overflow row for "${id}" has no androidIcon and drew a glyph in ` +
+            `"${String(drew.get(id))}" anyway.`
+        );
+      }
+    }
+
+    // The same group with `titleOnly`: the rows keep their items and lose their glyphs.
+    await rerender(
+      <View style={WELL}>
+        <ButtonGroup
+          items={ICONED}
+          labelStyle="titleOnly"
+          testID="bg-menu-icons"
+          hybridRef={captureHybrid('bg-menu-icons')}
+        />
+      </View>
+    );
+    await sleep(EVENT_QUIET_MS);
+    if (glyphRows('bg-menu-icons').size > 0) {
+      throw new Error(
+        `with labelStyle="titleOnly" a row still reports a glyph: ` +
+          `"${handleOf('bg-menu-icons').nuiTestStateReport()}".`
+      );
+    }
+  });
+});
+
+describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
+  const VARIANTS = ['filled', 'elevated', 'tonal', 'outlined', 'text'] as const;
+
+  /** One item, one way: an action, a checked toggle, an unchecked toggle. */
+  function soloItems(role: 'action' | 'on' | 'off'): ButtonGroupItem[] {
+    if (role === 'action') return [{ id: 'bold', title: 'Bold' }];
+    return [
+      {
+        id: 'bold',
+        title: 'Bold',
+        toggle: true,
+        defaultChecked: role === 'on' ? true : undefined,
+      },
+    ];
+  }
+
+  /** What the control's box measured at the last row probe: the share drawn at all, and the
+   * share drawn in the group's own tint. */
+  type Drawing = { fill: number; tint: number };
+
+  async function drawingOf(testId: string, what: string): Promise<Drawing> {
+    const probed = await probeRow(testId);
+    const raw = probed.drawing ?? '';
+    const fill = /,fill=(\d+)(?:,|$)/.exec(raw);
+    const tint = /,tint=(\d+)(?:,|$)/.exec(raw);
+    if (fill == null || tint == null) {
+      throw new Error(
+        `"${testId}" (${what}) reported no measured drawing: "${raw}".`
+      );
+    }
+    return { fill: Number(fill[1]), tint: Number(tint[1]) };
+  }
+
+  it('draws a toggle item in the group variant, like the action item of it', async () => {
+    if (Platform.OS !== 'ios') return;
+    const read: Record<string, Record<'action' | 'on' | 'off', Drawing>> = {};
+    for (const variant of VARIANTS) {
+      read[variant] = {} as Record<'action' | 'on' | 'off', Drawing>;
+      for (const role of ['action', 'on', 'off'] as const) {
+        const testId = `bg-${variant}-${role}`;
+        await render(
+          <ButtonGroup
+            items={soloItems(role)}
+            tintColor={TINT}
+            variant={variant}
+            testID={testId}
+            hybridRef={captureHybrid(testId)}
+          />
+        );
+        await waitForTestId(testId);
+        await waitForMeasured(testId, `the ${variant} ${role} group`);
+        read[variant][role] = await drawingOf(testId, `${variant} ${role}`);
+      }
+    }
+
+    const seen = VARIANTS.map(
+      (variant) =>
+        `${variant}: action=${JSON.stringify(read[variant]!.action)} ` +
+        `on=${JSON.stringify(read[variant]!.on)} ` +
+        `off=${JSON.stringify(read[variant]!.off)}`
+    ).join('; ');
+
+    for (const variant of VARIANTS) {
+      const { action, on, off } = read[variant]!;
+      // The on state is drawn like the action item beside it would be: the same amount of the
+      // box painted, and the same amount of it in the group's tint.
+      if (on.tint === 0) {
+        throw new Error(
+          `a checked "${variant}" toggle drew nothing in the group's tint. ${seen}`
+        );
+      }
+      if (Math.abs(on.fill - action.fill) > 8) {
+        throw new Error(
+          `a checked "${variant}" toggle painted ${on.fill}% of its box against the ` +
+            `"${variant}" action item's ${action.fill}% - the two are not drawn in the ` +
+            `same style. ${seen}`
+        );
+      }
+      if (Math.abs(on.tint - action.tint) > 8) {
+        throw new Error(
+          `a checked "${variant}" toggle painted ${on.tint}% of its box in the tint ` +
+            `against the "${variant}" action item's ${action.tint}%. ${seen}`
+        );
+      }
+      // The off state draws the same shape with nothing in the tint: it tells apart from the
+      // on state without leaving the variant's style family.
+      if (off.tint > 2) {
+        throw new Error(
+          `an unchecked "${variant}" toggle painted ${off.tint}% of its box in the ` +
+            `tint, so on and off draw the same thing. ${seen}`
+        );
+      }
+      if (variant === 'text') {
+        // `.borderless` paints the label and nothing behind it, in either state.
+        if (on.fill > 25 || action.fill > 25) {
+          throw new Error(
+            `a "text" group painted a background - the toggle's item filled ` +
+              `${on.fill}% of its box and the action's ${action.fill}%. ${seen}`
+          );
+        }
+      } else if (Math.abs(off.fill - on.fill) > 12) {
+        throw new Error(
+          `an unchecked "${variant}" toggle painted ${off.fill}% of its box against ` +
+            `the checked one's ${on.fill}% - the capsule is not drawn in both states. ` +
+            seen
+        );
+      }
+    }
+
+    // The read tells the three iOS style families apart, so the per-variant claims above say
+    // something: only a prominent family paints its box in the tint, and only the two capsule
+    // families paint a background at all.
+    if (read.filled!.action.tint < 20 || read.tonal!.action.tint > 15) {
+      throw new Error(
+        `the measured read does not tell the prominent family from the bordered one - ` +
+          `filled painted ${read.filled!.action.tint}% in the tint, tonal ` +
+          `${read.tonal!.action.tint}%. ${seen}`
+      );
+    }
+    if (read.filled!.action.fill < read.text!.action.fill + 20) {
+      throw new Error(
+        `the measured read does not tell a drawn capsule from no capsule at all - ` +
+          `filled painted ${read.filled!.action.fill}% of its box, text ` +
+          `${read.text!.action.fill}%. ${seen}`
+      );
+    }
+  });
+});
