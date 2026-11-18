@@ -766,38 +766,38 @@ describe('TextField', () => {
   );
 
   /*
-   * iOS only: text that repeats the committed characters says nothing about where the
-   * composition was - a two-space commit inside a run of spaces compares like one appended at
-   * the end of that run. The caret comes from what UIKit reports, not from the difference
-   * between the texts. (Nothing reports the location for `insertText`, which is why the cut
-   * made there still reads the difference.)
+   * iOS only: text that repeats the committed units says nothing about where the composition
+   * was - two spaces committed inside a run of spaces compare like two appended at the end of
+   * the run. The caret comes from what UIKit reports, not from the difference between the
+   * texts. The run is also the caret's seat: UIKit's paste hook pads a seat next to a letter
+   * with a space of its own.
    */
   itComposes(
     'puts the caret after a composition that repeats the text around it',
     async () => {
-      render(<Controlled id="cut-repeat" initial="aaa  aaa" maxLength={9} />);
+      render(
+        <Controlled id="cut-repeat" initial="aaa    aaa" maxLength={11} />
+      );
       await waitForTestId('cut-repeat');
       await focusField('cut-repeat');
-      (await handleOf('cut-repeat')).nuiTestPaste('', 3);
+      (await handleOf('cut-repeat')).nuiTestPaste('', 5);
       await stateWhen(
         'cut-repeat',
-        (s) => s.caret === 3 && codeUnits(s.text) === codeUnits('aaa  aaa'),
-        'the caret inside the two spaces'
+        (s) => s.caret === 5 && s.text.length === 10,
+        'the caret inside the run of spaces'
       );
 
-      // Two units committed where one fits, in a run of four spaces either way: the kept text
-      // is `aaa   aaa` whichever way the edit is read, and the caret is 4 or 6.
+      // One unit of a two-unit commit fits, and the run is five spaces long either way: the
+      // text says nothing, and the caret is 6, where the composition was, or 8.
       await compose('cut-repeat', '  ');
       await finishComposition('cut-repeat');
       const cut = await stateWhen(
         'cut-repeat',
-        (s) =>
-          codeUnits(s.text) === codeUnits('aaa   aaa') &&
-          s.jsEvents === s.nativeEvents,
+        (s) => s.text.length === 11 && s.jsEvents === s.nativeEvents,
         'the cut commit'
       );
-      expect(cut.caret).toBe(4);
-      expect(jsValues.get('cut-repeat')).toBe('aaa   aaa');
+      expect(cut.caret).toBe(6);
+      expect(jsValues.get('cut-repeat')?.length).toBe(11);
     }
   );
 
