@@ -20,6 +20,7 @@ import { screen, userEvent } from '@react-native-harness/ui';
 import {
   TextField,
   nitroUiCore,
+  type TextFieldKeyboardType,
   type TextFieldHandle,
 } from 'react-native-nitro-ui';
 import { waitForHandle } from './handles';
@@ -299,6 +300,31 @@ function percentile(values: number[], p: number): number {
   );
 }
 
+/** A field whose keyboard props a test moves one at a time. */
+function Keyboard({
+  autoCorrect = true,
+  keyboardType = 'default',
+  secureTextEntry = false,
+}: {
+  autoCorrect?: boolean;
+  keyboardType?: TextFieldKeyboardType;
+  secureTextEntry?: boolean;
+}) {
+  const [value, setValue] = useState('');
+  return (
+    <TextField
+      testID="keyboard"
+      value={value}
+      onChangeText={setValue}
+      autoCorrect={autoCorrect}
+      keyboardType={keyboardType}
+      secureTextEntry={secureTextEntry}
+      autoCapitalize="none"
+      hybridRef={capture('keyboard')}
+    />
+  );
+}
+
 beforeAll(async () => {
   // Pay the first mount's one-time costs (the font, the hosting controller class,
   // Compose's text stack) outside any test's timeout.
@@ -553,6 +579,64 @@ describe('TextField', () => {
         Array.from('ab xy cd', (c) => c.charCodeAt(0)).join(',')
       );
       expect(jsValues.get('paste-mid')).toBe('ab xy cd');
+    }
+  );
+
+  /*
+   * iOS only: a composition opened by `setMarkedText` commits without the delegate's
+   * `shouldChangeCharactersIn`, which is the edit native's backstop cuts. The caret the
+   * backstop leaves behind is the half of that cut a text message cannot show.
+   */
+  itComposes(
+    'keeps the caret after the part of a mid-field edit the backstop keeps',
+    async () => {
+      render(<Controlled id="cut-caret" initial="ab  cd" maxLength={8} />);
+      await waitForTestId('cut-caret');
+      await focusField('cut-caret');
+      // The paste is the seam that moves the caret: one code unit, which still fits,
+      // dropped between the two spaces.
+      (await handleOf('cut-caret')).nuiTestPaste('x', 3);
+      const pasted = await stateWhen(
+        'cut-caret',
+        (s) => s.text === 'ab x cd' && s.jsEvents === s.nativeEvents,
+        'the paste'
+      );
+      expect(pasted.caret).toBe(4);
+
+      // Three code units committed where one fits. The backstop keeps `y`, and the caret
+      // stays behind what it kept rather than going to the end of the field.
+      await compose('cut-caret', 'yz');
+      await finishComposition('cut-caret');
+      const cut = await stateWhen(
+        'cut-caret',
+        (s) => s.text === 'ab xy cd' && s.jsEvents === s.nativeEvents,
+        'the cut commit'
+      );
+      expect(cut.caret).toBe(5);
+      expect(cut.caret).toBeLessThan(cut.text.length);
+      expect(jsValues.get('cut-caret')).toBe('ab xy cd');
+    }
+  );
+
+  /*
+   * iOS only, and the same commit at the end of the field: the caret there is the end
+   * either way, which is what makes the case above the one that says something.
+   */
+  itComposes(
+    'leaves the caret at the end when the cut is at the end',
+    async () => {
+      render(<Controlled id="cut-tail" initial="abcd" maxLength={5} />);
+      await waitForTestId('cut-tail');
+      await focusField('cut-tail');
+      await compose('cut-tail', 'xyz');
+      await finishComposition('cut-tail');
+      const cut = await stateWhen(
+        'cut-tail',
+        (s) => s.text === 'abcdx' && s.jsEvents === s.nativeEvents,
+        'the cut at the tail'
+      );
+      expect(cut.caret).toBe(cut.text.length);
+      expect(jsValues.get('cut-tail')).toBe('abcdx');
     }
   );
 
@@ -863,6 +947,70 @@ describe('TextField', () => {
         `${summary.nitro.p95.toFixed(1)}, rn p50 ${summary.rn.p50.toFixed(1)} / p95 ` +
         `${summary.rn.p95.toFixed(1)}`
     );
+  });
+
+  /*
+   * What the keyboard was told, read from it rather than from the props that asked for
+   * it: on Android the `EditorInfo` the focused field hands the IME, on iOS the trait it
+   * attaches with. `'unknown'` means the field has not been asked yet, so every wait
+   * below goes past it and never reads a wish as an answer.
+   */
+  it('tells the keyboard what autoCorrect asked for', async () => {
+    const { rerender } = await render(<Keyboard />);
+    await waitForTestId('keyboard');
+    await focusField('keyboard');
+
+    const asFound = await stateWhen(
+      'keyboard',
+      (s) => s.suggestions !== 'unknown',
+      'the focused field to read its keyboard back'
+    );
+    expect(asFound.focused).toBe(true);
+    expect(asFound.suggestions).toBe('offered');
+
+    // `autoCorrect={false}` has to send Android's `TYPE_TEXT_FLAG_NO_SUGGESTIONS`: a
+    // keyboard left without the autocorrect flag alone still draws its suggestion strip.
+    await rerender(<Keyboard autoCorrect={false} />);
+    const refused = await stateWhen(
+      'keyboard',
+      (s) => s.suggestions === 'refused',
+      'the keyboard to be told no suggestions'
+    );
+    expect(refused.focused).toBe(true);
+    expect(refused.autoCorrect).toBe(false);
+
+    // Back on a field that never lost focus: the change reaches the keyboard that is up.
+    await rerender(<Keyboard autoCorrect />);
+    await stateWhen(
+      'keyboard',
+      (s) => s.suggestions === 'offered',
+      'the keyboard to be told suggestions are back'
+    );
+
+    // A phone keyboard: the refused flag belongs to the text class, where in another
+    // class the same bit means something else. iOS has one trait whatever the keyboard.
+    await rerender(<Keyboard autoCorrect={false} keyboardType="phone-pad" />);
+    const phone = await stateWhen(
+      'keyboard',
+      (s) => s.suggestions !== 'unknown',
+      'the phone keyboard to be read back'
+    );
+    console.log(`text field phone keyboard told: ${phone.suggestions}`);
+    expect(phone.suggestions).toBe(iOS ? 'refused' : 'offered');
+
+    // A secure field with the default is told what it was told before this prop existed
+    // to be turned off: nothing about suggestions.
+    await rerender(<Keyboard secureTextEntry />);
+    // A secure field is a different composable, so it may arrive without focus; asking
+    // for it again is a no-op when it never went away.
+    await focusField('keyboard');
+    const secure = await stateWhen(
+      'keyboard',
+      (s) => s.suggestions !== 'unknown',
+      'the secure field to be read back'
+    );
+    expect(secure.secure).toBe(true);
+    expect(secure.suggestions).toBe('offered');
   });
 
   it('comes back from the pool with none of its previous owner', async () => {
