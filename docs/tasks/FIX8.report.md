@@ -11,7 +11,8 @@ middle of a full field therefore threw the caret to the end of the field. `Nitro
 now answers with the caret as well as the text: the offset just after the part of the edit that was
 kept. `userEdited` puts it there, an edit refused whole goes back where it was asked for, and an
 edit at the end still leaves the caret at the end. UIKit finishes a composition's own insertion
-after that and can move the caret a little further; it no longer lands at the end of the field.
+after that and puts its own insertion point after the whole insertion, after the callback that
+reported the edit, so a cut inside a commit owes its caret until `unmarkText()` has returned.
 The editing code is `TextField`'s and `SearchField`'s shared half, so a search field gets the
 caret too.
 
@@ -87,10 +88,9 @@ taken back out, against the same suite that passes on the real tree.
   `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt` (which predates
   this task) and `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiTextField.kt`, and
   could become one internal helper.
-- Android `autoCorrect={false}` on a secure field sends no `TYPE_TEXT_FLAG_NO_SUGGESTIONS`, because
-  the flag is only added when `autoCorrect` itself is off: Compose's own `EditorInfo` for a password
-  field carries no suggestions flag either, so such a field still reads as `offered`. The harness
-  case asserts that read-back.
+- A secure field that keeps `autoCorrect` on reads `offered`, and a change to `autoCorrect` on a
+  focused secure field does not restart its input session, so the flag reaches that keyboard only
+  when the field is next focused.
 - `BottomSheet.harness` (iOS) lost one chunk to "the native app crashed during test execution",
   with no crash log to print, on an earlier run of this tree taken while the machine was busy with
   another task's run; a later full run of the same tree passed all 30 suites. An app death the
