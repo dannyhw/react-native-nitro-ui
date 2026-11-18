@@ -114,8 +114,9 @@ export interface NitroUiChipMethods extends HybridViewMethods {
   /**
    * Test-only: what the last `nuiTestPixelProbe` found:
    * `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
-   * closest=#<RRGGBB>`, or `n=<probes> no pixels` on iOS, which has no Android
-   * glyph to sample. Empty before the first probe.
+   * closest=#<RRGGBB>`. iOS samples the whole chip rather than a glyph slot, so
+   * `mean` is the colour its drawing settles at. `n=<probes> no pixels` is the
+   * refusal for a box too small to sample. Empty before the first probe.
    *
    * @internal Not app API.
    */

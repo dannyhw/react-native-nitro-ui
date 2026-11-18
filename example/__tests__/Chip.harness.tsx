@@ -179,6 +179,78 @@ function reportOf(testId: string): Record<string, string> {
   return fields;
 }
 
+/**
+ * Ask `testId` for the pixels it is drawing, and wait for that probe's own answer. A
+ * refusal to sample is a failed read, so it is an error here rather than a reading.
+ */
+async function pixelProbe(testId: string, color: number, what: string) {
+  const handle = handles.get(testId);
+  if (handle == null) {
+    throw new Error(
+      `testID "${testId}" has no handle - it was never rendered.`
+    );
+  }
+  const before = handle.nuiTestPixelReport();
+  handle.nuiTestPixelProbe(color);
+  const report = await pollUntil(
+    () => {
+      const next = handle.nuiTestPixelReport();
+      return next === '' || next === before ? null : next;
+    },
+    () =>
+      new Error(
+        `the pixel probe for "${testId}" (${what}) never reported. Last: ` +
+          `"${handle.nuiTestPixelReport()}".`
+      ),
+    8000
+  );
+  if (!/ hits=\d+ mean=#[0-9A-F]{6}/.test(report)) {
+    throw new Error(
+      `the pixel probe for "${testId}" (${what}) reported a line that is not a ` +
+        `sample: ${report}`
+    );
+  }
+  return report;
+}
+
+/** The area a probe found in the colour it asked for. */
+function probeHits(report: string): number {
+  const hits = / hits=(\d+)/.exec(report);
+  return hits == null ? 0 : Number(hits[1]);
+}
+
+/** The colour a probe says the whole box averages at, as `#RRGGBB`. */
+function probeMean(report: string): string {
+  const mean = / mean=(#[0-9A-F]{6})/.exec(report);
+  if (mean == null) {
+    throw new Error(`the pixel probe report carries no mean colour: ${report}`);
+  }
+  return mean[1] ?? '';
+}
+
+/** Per-channel-sum distance between two `#RRGGBB` colours. */
+function colourDistance(a: string, b: string): number {
+  const first = channels(a);
+  const second = channels(b);
+  return first.reduce(
+    (total, channel, index) => total + Math.abs(channel - second[index]!),
+    0
+  );
+}
+
+/** How far a colour's widest channel sits above its narrowest: how coloured it is. */
+function chroma(colour: string): number {
+  const [lowest, highest] = channels(colour).sort((a, b) => a - b);
+  return (highest ?? 0) - (lowest ?? 0);
+}
+
+/** The red, green and blue of a `#RRGGBB` colour. */
+function channels(colour: string): number[] {
+  return [1, 3, 5].map((offset) =>
+    Number.parseInt(colour.slice(offset, offset + 2), 16)
+  );
+}
+
 /** Poll until the chip is drawing `displayed` (`1`, `0` or `none`). */
 async function waitForDisplayed(testId: string, displayed: string) {
   return pollUntil(
@@ -922,46 +994,6 @@ describe('Chip · the androidIcon (G21)', () => {
   /** Material's icon size for both the assist and the filter chip. */
   const ICON_DP = 18;
 
-  /** Ask `testId` for its pixels, and wait for that probe's own answer. */
-  async function pixelProbe(testId: string, color: number, what: string) {
-    const handle = handles.get(testId);
-    if (handle == null) {
-      throw new Error(
-        `testID "${testId}" has no handle - it was never rendered.`
-      );
-    }
-    const before = handle.nuiTestPixelReport();
-    handle.nuiTestPixelProbe(color);
-    const report = await pollUntil(
-      () => {
-        const next = handle.nuiTestPixelReport();
-        return next === '' || next === before ? null : next;
-      },
-      () =>
-        new Error(
-          `the pixel probe for "${testId}" (${what}) never reported. Last: ` +
-            `"${handle.nuiTestPixelReport()}".`
-        ),
-      8000
-    );
-    if (
-      !/ hits=\d+ mean=#[0-9A-F]{6}/.test(report) &&
-      !/no pixels/.test(report) &&
-      !/size=\d+x\d+ no pixels/.test(report)
-    ) {
-      throw new Error(
-        `the pixel probe for "${testId}" (${what}) reported a line that is neither a ` +
-          `sample nor a refusal: ${report}`
-      );
-    }
-    return report;
-  }
-
-  function probeHits(report: string): number {
-    const hits = / hits=(\d+)/.exec(report);
-    return hits == null ? 0 : Number(hits[1]);
-  }
-
   /** The colour the chip tinted its glyph with, or `null` when none drew. */
   function iconTintOf(testId: string): string | null {
     const tint = reportOf(testId).iconTint;
@@ -1058,13 +1090,26 @@ describe('Chip · the androidIcon (G21)', () => {
     ]);
     console.log(`chip glyph boxes: ${logged(boxes)}`);
     if (Platform.OS !== 'android') {
-      // iOS ignores `androidIcon`: the chip with the prop is the chip without it, and
-      // the probe refuses rather than answering zero.
+      // iOS ignores `androidIcon`, and now says so with pixels: the chip with the prop
+      // paints what the chip without it paints. A glyph would move the mean colour of
+      // the box by its own share of ink, and none of that appeared.
       expect(sameSize(boxes.get('asset')!, boxes.get('plain')!)).toBe(true);
       expect(reportOf('asset').iconTint).toBe('-');
-      expect(await pixelProbe('asset', 0x000000, 'the iOS refusal')).toContain(
-        'no pixels'
+      const assetMean = probeMean(
+        await pixelProbe('asset', 0x000000, 'the chip with a drawable')
       );
+      const plainMean = probeMean(
+        await pixelProbe('plain', 0x000000, 'the chip without one')
+      );
+      console.log(
+        `chip glyph iOS means: asset=${assetMean} plain=${plainMean} ` +
+          `apart=${colourDistance(assetMean, plainMean)}`
+      );
+      expect(
+        colourDistance(assetMean, plainMean) < 8,
+        `iOS painted the chip with \`androidIcon\` at ${assetMean} against ` +
+          `${plainMean} without it - the prop drew something.`
+      ).toBe(true);
       return;
     }
 
@@ -1247,4 +1292,151 @@ describe('Chip · the androidIcon (G21)', () => {
     expect(probeHits(report)).toBe(0);
     expect(/ n=1 |^n=1 /.test(report) || report.startsWith('n=1')).toBe(true);
   });
+});
+
+/**
+ * The chip's fill, read back off the screen. Every number is the mean colour of one chip's
+ * own box, so a state that never reaches the display cannot pass: the enabled pair is the
+ * control on the read, and two chips mounted the same way say what the read costs in noise.
+ */
+describe('Chip · the selected fill in every state (G12)', () => {
+  /** One label for every chip, so only the paint can tell two of them apart. */
+  const LABEL = 'Filters';
+
+  /** The smallest separation asked for, in channel sums. Well above what one label's ink
+   *  moves the mean by, and well below the gap between two of the chip's own fills. */
+  const SEPARATION = 60;
+
+  /** What two chips of one drawing may sit apart - the noise floor of the read itself. */
+  const NOISE = 10;
+
+  type Spec = { testId: string; selected: boolean; disabled?: boolean };
+
+  const SPECS: Spec[] = [
+    { testId: 'on', selected: true },
+    { testId: 'on-twin', selected: true },
+    { testId: 'off', selected: false },
+    { testId: 'disabled-on', selected: true, disabled: true },
+    { testId: 'disabled-off', selected: false, disabled: true },
+  ];
+
+  /** Every state at once: laid out, drawn, and settled at the size the control measured. */
+  async function renderEveryState(): Promise<Map<string, Size>> {
+    await render(
+      <View style={rowStyle}>
+        {SPECS.map((spec) => (
+          <Chip
+            key={spec.testId}
+            label={LABEL}
+            selected={spec.selected}
+            disabled={spec.disabled}
+            testID={spec.testId}
+            hybridRef={captureHybrid(spec.testId)}
+          />
+        ))}
+      </View>,
+      { timeout: 20000 }
+    );
+    const boxes = new Map<string, Size>();
+    for (const spec of SPECS) {
+      await waitForTestId(spec.testId);
+      const content = await waitForMeasured(spec.testId, spec.testId);
+      boxes.set(
+        spec.testId,
+        await waitForBox(spec.testId, content, spec.testId)
+      );
+      expect(sameSize(content, WRONG_SIZE)).toBe(false);
+      await waitForDisplayed(spec.testId, spec.selected ? '1' : '0');
+    }
+    return boxes;
+  }
+
+  /** What `testId` paints, as the mean colour of its own box. */
+  async function paintOf(testId: string): Promise<string> {
+    return probeMean(await pixelProbe(testId, 0x000000, testId));
+  }
+
+  it('measures one size whether or not it is disabled', async () => {
+    const boxes = await renderEveryState();
+    const logged = [...boxes.entries()]
+      .map(([id, size]) => `${id}=${describeSize(size)}`)
+      .join(' ');
+    console.log(`chip disabled sizes: ${logged}`);
+    // `disabled` is in no sizing key: a chip that changed size when it was disabled would
+    // be laid out at an enabled chip's box and repaint nothing.
+    expect(
+      sameSize(boxes.get('disabled-on')!, boxes.get('on')!),
+      `a disabled selected chip measures ${describeSize(
+        boxes.get('disabled-on')!
+      )} where the enabled one is ${describeSize(boxes.get('on')!)} - ${logged}`
+    ).toBe(true);
+    expect(
+      sameSize(boxes.get('disabled-off')!, boxes.get('off')!),
+      `a disabled unselected chip measures ${describeSize(
+        boxes.get('disabled-off')!
+      )} where the enabled one is ${describeSize(boxes.get('off')!)} - ${logged}`
+    ).toBe(true);
+  });
+
+  const itIos = Platform.OS === 'ios' ? it : it.skip;
+
+  itIos(
+    'paints a disabled selected chip apart from an unselected one and from itself',
+    async () => {
+      await renderEveryState();
+      const on = await paintOf('on');
+      const twin = await paintOf('on-twin');
+      const off = await paintOf('off');
+      const dimOn = await paintOf('disabled-on');
+      const dimOff = await paintOf('disabled-off');
+      const seen =
+        `on=${on} twin=${twin} off=${off} ` +
+        `disabledOn=${dimOn} disabledOff=${dimOff}`;
+      console.log(`chip iOS fill: ${seen}`);
+
+      expect(
+        colourDistance(on, twin) < NOISE,
+        `two chips mounted the same way read ${on} and ${twin}, ` +
+          `${colourDistance(on, twin)} apart: the read is too unsteady to separate ` +
+          `anything. ${seen}`
+      ).toBe(true);
+
+      // The control on the read: an enabled chip says "selected" with its fill.
+      expect(
+        colourDistance(on, off) > SEPARATION,
+        `the read cannot tell an enabled selected chip (${
+          on
+        }) from an unselected one (${off}) - ${seen}`
+      ).toBe(true);
+
+      // The bug: once disabled, the same two chips drew one fill.
+      expect(
+        colourDistance(dimOn, dimOff) > SEPARATION,
+        `a disabled chip paints ${dimOn} selected and ${
+          dimOff
+        } unselected, ${colourDistance(
+          dimOn,
+          dimOff
+        )} apart: the selection does not reach the screen once the chip is ` +
+          `disabled. ${seen}`
+      ).toBe(true);
+
+      // Dimmed, not enabled: the selected container survives at reduced strength.
+      expect(
+        colourDistance(dimOn, on) > SEPARATION / 2,
+        `a disabled selected chip paints ${dimOn}, the same as the enabled ` +
+          `${on}: a disabled chip now looks like an enabled one. ${seen}`
+      ).toBe(true);
+
+      // And what separates them is the selected colour, not any difference at all.
+      expect(
+        chroma(dimOn) - chroma(dimOff) > 30,
+        `the disabled pair differs, but not in the selected colour: ${
+          dimOn
+        } carries ${chroma(dimOn)} of colour and ${
+          dimOff
+        } carries ${chroma(dimOff)}. ${seen}`
+      ).toBe(true);
+    }
+  );
 });
