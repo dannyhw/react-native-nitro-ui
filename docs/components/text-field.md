@@ -31,7 +31,7 @@ open (below).
 | `multiline`          | `boolean \| undefined`                                        | `false`       | `UITextView` instead of `UITextField` / `TextFieldLineLimits.MultiLine`. Grows with its text.                                      |
 | `keyboardType`       | `TextFieldKeyboardType \| undefined`                          | `'default'`   | `UIKeyboardType` / Compose `KeyboardType` (table below).                                                                           |
 | `autoCapitalize`     | `'none' \| 'sentences' \| 'words' \| 'characters'`            | `'sentences'` | `autocapitalizationType` / `KeyboardCapitalization`.                                                                               |
-| `autoCorrect`        | `boolean \| undefined`                                        | `true`        | `autocorrectionType` and `spellCheckingType` / `autoCorrectEnabled`.                                                               |
+| `autoCorrect`        | `boolean \| undefined`                                        | `true`        | `autocorrectionType` and `spellCheckingType` / `autoCorrectEnabled` and `TYPE_TEXT_FLAG_NO_SUGGESTIONS` (below).                   |
 | `secureTextEntry`    | `boolean \| undefined`                                        | `false`       | `isSecureTextEntry` / `BasicSecureTextField` (reveals the last typed character). Single-line only.                                 |
 | `maxLength`          | `number \| null \| undefined`                                 | none          | Enforced natively, in UTF-16 code units (see below).                                                                               |
 | `returnKeyType`      | `'default' \| 'done' \| 'go' \| 'next' \| 'search' \| 'send'` | `'default'`   | `returnKeyType` / `ImeAction`. Single-line only.                                                                                   |
@@ -63,6 +63,15 @@ A secure field gets Android's password keyboard (`KeyboardType.Password`), or it
 number-password keyboard (`KeyboardType.NumberPassword`) with `keyboardType="number-pad"`.
 On iOS a change to `keyboardType`, `returnKeyType`, `autoCapitalize`, `autoCorrect`
 or `secureTextEntry` while the field is focused reloads the keyboard that is up.
+
+`autoCorrect={false}` turns corrections and suggestions off in the way each platform's
+keyboard understands. iOS gets `autocorrectionType = .no` and `spellCheckingType = .no`.
+Android sends both `TYPE_TEXT_FLAG_NO_SUGGESTIONS` and no autocorrect flag, as React
+Native's `TextInput` does: the suggestion strip goes away with it, which leaving the
+autocorrect flag alone does not achieve. The flag belongs to Android's text keyboard, so
+`keyboardType="number-pad"` and `"phone-pad"` are sent what they are sent with the
+default, and so is a secure field that keeps `autoCorrect` on. Changing `autoCorrect` on
+a focused field restarts its input session, so the keyboard that is up takes the change.
 
 ### `ref`: `focus()` and `blur()`
 
@@ -162,6 +171,12 @@ the field without it (a committed composition, `insertText`). Only the first kee
 the text after a mid-text insertion: pasting `xyz` at the middle of `ab··cd` under a
 limit of 8 gives `ab xy cd`, where cutting the end would give `ab xyz c`
 (`scripts/native-tests/text-limit.test.swift`, and the harness's paste case).
+
+Either way the caret stays where the person was typing: it ends just after the part of
+the edit that was kept, so a mid-field commit that lost its last characters leaves the
+caret between what it kept and the text after it, and an edit that fitted nowhere is
+put back where it was asked for. An edit at the end of the field leaves the caret at the
+end, where the field's own answer puts it anyway.
 
 ## Sizing
 
