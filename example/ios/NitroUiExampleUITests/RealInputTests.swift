@@ -6054,8 +6054,27 @@ final class RealInputTests: XCTestCase {
       as: "the Form after a real tap turned its keyboard avoidance off"
     )
 
-    try scrollIntoView("form-note-field", as: "the note field")
-    let field = try required("form-note-field", as: "the note field")
+    // The note field is the Form's last row on iOS, so its park is the list's end, which sits
+    // below the band `scrollIntoView` aims at. The list realises a row only while it draws it,
+    // so the field is not in the tree until the list has been scrolled to it.
+    let identifier = "form-note-field"
+    let field = app.descendants(matching: .any)[identifier].firstMatch
+    var realised = false
+    for _ in 0..<14 {
+      app.swipeUp()
+      if field.waitForExistence(timeout: 1) {
+        realised = true
+        break
+      }
+    }
+    guard realised else {
+      dumpHierarchy("the note field never appeared, however far the list was scrolled")
+      XCTFail(
+        "the note field near the bottom of the form never became a realised row, so this check "
+          + "has no field to focus."
+      )
+      throw RealInputCheckAborted(identifier: identifier)
+    }
     XCTAssertEqual(
       try read(Echo.formFieldFocus),
       "no",
@@ -6101,6 +6120,13 @@ final class RealInputTests: XCTestCase {
       window.maxY - 120,
       "the keyboard is only \(window.maxY - keyboard.frame.minY) pt tall, so a reservation for "
         + "it would be a change nothing could see."
+    )
+    XCTAssertGreaterThan(
+      before.frame.maxY,
+      keyboard.frame.minY,
+      "the keys stand at \(keyboard.frame.minY) and the field was parked ending at "
+        + "\(before.frame.maxY): the keyboard does not cover where the field was, so a Form that "
+        + "scrolled for it could still leave the field where it stands."
     )
 
     let after = settleFormKeyboard(field: field)
