@@ -5987,7 +5987,15 @@ final class RealInputTests: XCTestCase {
       as: "the row of a tap on React Native content inside it"
     )
 
-    row.atFraction(0.05).fingerTap()
+    // The row's own tap is aimed clear of the pressable, which sits at the row's leading edge:
+    // a point a few per cent into the row would be a second tap on the pressable instead.
+    let onRowOnly = row.atFraction(0.9)
+    XCTAssert(
+      row.frame.minX + 0.9 * row.frame.width > control.frame.maxX + 8,
+      "a point 90% into the row \"\(row.frame)\" is not clear of the pressable's box "
+        + "\"\(control.frame)\", so the row's own tap and the pressable's would be one tap."
+    )
+    onRowOnly.fingerTap()
     try assertEchoStays(Echo.formRowInnerPresses, "2", as: "the row's own tap, after the content's")
     try assertEchoStays(
       Echo.formRowInnerInnerPresses,
