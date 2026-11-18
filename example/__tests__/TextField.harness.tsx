@@ -621,13 +621,46 @@ describe('TextField', () => {
           s.jsEvents === s.nativeEvents,
         'the cut commit'
       );
-      // UIKit finishes its own commit after the backstop has written, and can nudge the
-      // insertion point one further. What the fix guarantees - and what a plain `text` write
-      // throws away - is that the caret stays at or after the kept part, inside the field.
-      expect(cut.caret).toBeGreaterThanOrEqual(5);
+      expect(cut.caret).toBe(5);
       expect(cut.caret).toBeLessThan(cut.text.length);
       expect(codeUnits(jsValues.get('cut-caret') ?? '')).toBe(
         codeUnits('ab xy cd')
+      );
+    }
+  );
+
+  /*
+   * iOS only, and the same commit with room for one unit of a four-unit edit: here "just after
+   * what was kept", "one past that" and "after the whole insertion" are three different offsets,
+   * which a cut that drops a single unit cannot tell apart.
+   */
+  itComposes(
+    'puts the caret after the kept unit when a cut drops most of the edit',
+    async () => {
+      render(<Controlled id="cut-long" initial="ab  cdef" maxLength={9} />);
+      await waitForTestId('cut-long');
+      await focusField('cut-long');
+      (await handleOf('cut-long')).nuiTestPaste('', 3);
+      await stateWhen(
+        'cut-long',
+        (s) => s.caret === 3 && codeUnits(s.text) === codeUnits('ab  cdef'),
+        'the caret between the two spaces'
+      );
+
+      // `w` is kept, so the caret belongs at 4 - not at 5 (one past it), 7 (after the whole
+      // `wxyz` insertion) or 9 (the end of the field).
+      await compose('cut-long', 'wxyz');
+      await finishComposition('cut-long');
+      const cut = await stateWhen(
+        'cut-long',
+        (s) =>
+          codeUnits(s.text) === codeUnits('ab w cdef') &&
+          s.jsEvents === s.nativeEvents,
+        'the cut commit'
+      );
+      expect(cut.caret).toBe(4);
+      expect(codeUnits(jsValues.get('cut-long') ?? '')).toBe(
+        codeUnits('ab w cdef')
       );
     }
   );
