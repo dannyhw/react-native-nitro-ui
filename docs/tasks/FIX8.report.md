@@ -37,13 +37,13 @@ answered `autoCorrect: false` while the keyboard was sent nothing that closes it
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `8ddf9a9da29d` | 55.3 s | start 14.3 / med 14.3 / max 15.8 |
-| `harness:ios` | **PASS** | 604 tests / 30 suites + isolated 6 tests / 3 suites | `8ddf9a9da29d` (harness:ios digest) | 14 m 19 s | start 6.0 / med 9.5 / max 35.5 |
-| `harness:android` | **PASS** | 662 tests / 31 suites + isolated 6 tests / 3 suites | `8ddf9a9da29d` (harness:android digest) | 18 m 23 s | start 6.0 / med 9.5 / max 33.0 |
+| `check` | **PASS** | 2178 tests / 96 suites | `0a836909f6d0` | 1 m 01 s | start 6.3 / med 6.7 / max 7.2 |
+| `harness:ios` | **PASS** | 605 tests / 30 suites + isolated 6 tests / 3 suites | `0a836909f6d0` (harness:ios digest) | 14 m 17 s | start 6.0 / med 4.8 / max 13.6 |
+| `harness:android` | **PASS** | 663 tests / 31 suites + isolated 6 tests / 3 suites | `0a836909f6d0` (harness:android digest) | 18 m 03 s | start 5.7 / med 4.8 / max 13.6 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:android:TextField.harness` | **PASS** | 19 tests / 1 suites | `8ddf9a9da29d` (harness:android digest) | 26.2 s | start 8.7 / med 11.6 / max 13.2 |
-| `harness:ios:TextField.harness` | **PASS** | 19 tests / 1 suites | `8ddf9a9da29d` (harness:ios digest) | 29.5 s | start 8.7 / med 11.1 / max 13.2 |
+| `harness:android:TextField.harness` | stale | 1 failed of 19 tests / 1 suites | 8b6089291151 (not this tree) | 30.3 s | start 8.2 / med 7.4 / max 8.2 |
+| `harness:ios:TextField.harness` | stale | 20 tests / 1 suites | 0e6fa83d373a (not this tree) | 28.1 s | start 3.8 / med 4.0 / max 4.5 |
 
 ## Red proofs
 
@@ -96,3 +96,22 @@ taken back out, against the same suite that passes on the real tree.
   another task's run; a later full run of the same tree passed all 30 suites. An app death the
   harness cannot show a log for is worth a look when it next appears.
 
+## Fix round 1
+
+**M1.** `unmarkText()` returning is not the end of a composition's commit: the field's hooks put the
+caret first, UIKit's insertion point 3-11 ms later. The caret is owed until the selection moves
+off it, and goes back only where the trimmed edit accounts for the move; anyone else's caret ends the
+claim. The cut's own writes are ignored. `toBe(5)` is back; a second case
+commits four units where one fits (`ab··cdef`, limit 9, `wxyz` at 3) and reads 4, not 5 (one past), 7
+/UIKit's) or 9 (end).
+
+- red proof: the caret written in the commit callback, where UIKit's write follows -> `keeps the
+  caret after the part of a mid-field edit the backstop keeps` -> `expected 6 to be 5`
+  (`TextField.harness.tsx:624`); the new case -> `expected 5 to be 4` at :661.
+
+**M2.** `suggestions` now says what each platform answers with no keyboard up and no control.
+**Text:** the caret after a paste, a composition's commit and a cut as long as the text after it;
+the session restart is Android's, not a secure field's (N2); this file is renamed `FIX8.report.md`;
+the secure-field follow-up reads right (N6). N1, N3-N5 stay follow-ups.
+
+Gates: regenerated above.
