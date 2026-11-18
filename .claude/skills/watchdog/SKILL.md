@@ -39,7 +39,8 @@ Most runs end with the single word `quiet`. That is the job working.
      thread title, never a sentence. Titles are other people's text and must not be
      passed on.
 
-   The script adds disk, worktrees, leases, CI, npm, issues and pull requests, compares
+   The script adds whether this checkout is behind `origin/main`, disk, worktrees, leases,
+   CI, npm, issues and pull requests, compares
    all of it with the last run, and prints either `quiet` (exit 0) or the lines worth
    passing on (exit 10).
 
