@@ -104,43 +104,63 @@ enum NitroUiCommitDelta {
     )
   }
 
-  /// The text a field may keep when it ended up past `limit` without the delegate's cut. It is
-  /// `incoming` with the edit trimmed to what `fitting` allows, so text outside the edit keeps its
-  /// place. An edit that cannot fit at all is refused.
-  static func clamped(displayed: String, incoming: String, limit: Int) -> String {
+  /// The text a field may keep when it ended up past `limit` without the delegate's cut, and the
+  /// caret that goes with it.
+  struct Clamp: Equatable {
+    let text: String
+    /// The UTF-16 offset just after the part of the edit that was kept, or `nil` when the field
+    /// already holds `text` and UIKit's own caret is the right one. Writing `text` into a control
+    /// moves its caret to the end, so a cut made in the middle has to put the caret back.
+    let caret: Int?
+  }
+
+  /// `clamped`, and where the caret belongs once the text has been written back.
+  static func clamp(displayed: String, incoming: String, limit: Int) -> Clamp {
     guard (incoming as NSString).length > limit else {
-      return incoming
+      return Clamp(text: incoming, caret: nil)
     }
     guard let change = edit(displayed: displayed, incoming: incoming) else {
-      return displayed
+      return Clamp(text: displayed, caret: nil)
     }
     // A deletion adds nothing, so there is nothing to cap: text already past the limit stays as the
     // user left it.
     if change.insertion.isEmpty {
-      return incoming
+      return Clamp(text: incoming, caret: nil)
     }
     guard change.apply(to: displayed) == incoming else {
       // No single edit describes the change, so there is nothing more specific to cut than the
-      // end of the text - the answer that is right for text appended at the end.
-      return NitroUiTextLimit.truncate(incoming, to: limit)
+      // end of the text - the answer that is right for text appended at the end, where the caret
+      // belongs as well.
+      return Clamp(text: NitroUiTextLimit.truncate(incoming, to: limit), caret: nil)
     }
     // Nothing of the edit fits: refuse it whole, its deletion included, the way the keyboard
-    // path (`shouldChangeCharactersIn`) does.
+    // path (`shouldChangeCharactersIn`) does, and leave the caret where the edit was asked for.
     guard let allowed = NitroUiTextLimit.fitting(
       current: displayed,
       range: NSRange(location: change.location, length: change.deletionLength),
       replacement: change.insertion,
       limit: limit
     ) else {
-      return displayed
+      return Clamp(text: displayed, caret: change.location)
     }
     if allowed == change.insertion {
-      return incoming
+      return Clamp(text: incoming, caret: nil)
     }
-    return Edit(
+    let kept = Edit(
       location: change.location,
       deletionLength: change.deletionLength,
       insertion: allowed
-    ).apply(to: displayed)
+    )
+    return Clamp(
+      text: kept.apply(to: displayed),
+      caret: kept.location + (allowed as NSString).length
+    )
+  }
+
+  /// The text a field may keep when it ended up past `limit` without the delegate's cut. It is
+  /// `incoming` with the edit trimmed to what `fitting` allows, so text outside the edit keeps its
+  /// place. An edit that cannot fit at all is refused.
+  static func clamped(displayed: String, incoming: String, limit: Int) -> String {
+    clamp(displayed: displayed, incoming: incoming, limit: limit).text
   }
 }

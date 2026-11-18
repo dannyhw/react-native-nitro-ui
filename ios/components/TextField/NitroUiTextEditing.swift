@@ -261,14 +261,19 @@ extension NitroUiTextOwner {
       // A backstop for text that got past the delegate's cut (a composition's commit, or
       // `insertText`). It cuts the edit, not the tail of the field, so the text around a
       // mid-field insertion keeps its place.
-      let kept = NitroUiCommitDelta.clamped(
+      let kept = NitroUiCommitDelta.clamp(
         displayed: model.state.displayed.string,
         incoming: text,
         limit: limit
       )
-      if kept != text {
-        text = kept
+      if kept.text != text {
+        text = kept.text
         control.nuiSetText(text)
+        // Writing the text moves the caret to the end; a cut made in the middle belongs where
+        // the person was typing.
+        if let caret = kept.caret {
+          control.nuiSetCaret(at: caret)
+        }
       }
     }
     let next = NitroUiText(text)
