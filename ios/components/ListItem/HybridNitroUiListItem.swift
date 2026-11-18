@@ -25,6 +25,11 @@ final class ListItemModel: NitroUiModel {
   /// Whether a `Form.Row` is drawing this item. Its cell already provides the insets, the
   /// shape and the highlight, so the item draws edge-to-edge with no background of its own.
   var insideRow = false
+
+  /// Inside a row the item installs no recogniser and hands its `onPress` up to the cell, so the
+  /// row reads this view as the content it laid out rather than as a control that took the tap.
+  override var pressOwnedByRow: Bool { insideRow }
+
   var disabled = false
   var testID: String?
   var accessibilityLabel: String?

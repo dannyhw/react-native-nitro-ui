@@ -38,7 +38,7 @@ own gestures and its own controls.
 | Prop                | Type                     | Default | Maps to                                                                             |
 | ------------------- | ------------------------ | ------- | ----------------------------------------------------------------------------------- |
 | `children`          | `ReactNode`              | —       | `Form.Section`s, or rows directly.                                                  |
-| `keyboardAvoidance` | `boolean \| undefined`   | `true`  | Keeps the focused row above the keyboard, on both platforms.                        |
+| `keyboardAvoidance` | `boolean \| undefined`   | `true`  | Keeps the focused row above the keyboard; `false` leaves the keyboard to the app.   |
 | `style`             | `ViewStyle`              | —       | Already grows into the space it is given; `flex: 1` is how a screen hands that out. |
 | `hybridRef`         | `(view: handle) => void` | —       | **Internal.** Test seam for this repo's harness.                                    |
 
@@ -71,6 +71,22 @@ You rarely write `Form.Row`: `Form.Section` wraps every direct child in one, so 
 app names the component only to add `onPress` or an accessory. A row without
 `onPress` leaves its content alone — a `Switch` inside it keeps its own
 accessibility element and its own touches.
+
+A row *with* `onPress` answers the taps that land on it and gives up the ones that land
+on a view nitro-ui draws inside it: a `Switch` in a pressing row flips and reports its
+change once, and the row's `onPress` does not fire, as with a switch trailing a Material
+`ListItem`. A tap beside the switch still presses the row.
+
+- Any view nitro-ui draws takes the tap, interactive or not: a `Progress` does, and so
+  does a disabled `Switch`, where the tap flips nothing and presses nothing.
+- A component that only holds your children, such as a `ContextMenu` around a `Text`,
+  draws nothing under the finger, so the row answers that tap.
+- A `ListItem` inside a row has no press of its own and hands its `onPress` to the row,
+  so a tap on the item presses the row once and the row's highlight shows it.
+- React Native's own views are the exception: a `Pressable`, `Switch` or `TextInput`
+  inside a pressing row answers the tap *and* presses the row, because nothing tells
+  such a view apart from plain row content when the touch arrives. Put a control that
+  must not press the row in a row without `onPress`.
 
 `Form.Row` is a direct child of `Form` or `Form.Section` — see Rows.
 
@@ -174,6 +190,13 @@ does it (`keyboardAvoidance`, on by default). iOS grows the list's bottom inset 
 the keyboard and scrolls the focused row in; Android reserves the IME inset in its
 scroll content and asks the scroll ancestor to make the focused row visible. A
 `TextField` or `SearchField` in a row near the bottom stays visible on both.
+
+`keyboardAvoidance={false}` means the Form does nothing for the keyboard at all: no
+bottom inset, no padding under its scroll content, no scroll for the focused row, and
+its content keeps the height and the offset it had before the keys appeared. The
+keyboard still comes up over the form, so a field near the bottom of a long one ends up
+behind it and moving it clear is yours: reserve the room in your own layout, or scroll
+the row yourself.
 
 ## `measure()` is right once scrolling settles
 

@@ -12,6 +12,11 @@ class NitroUiModel: ObservableObject {
   /// A `let`, so the publisher's identity never changes.
   let objectWillChange = ObservableObjectPublisher()
 
+  /// Whether a `Form.Row`'s cell owns this component's press, making its view the row's content.
+  /// Only an item drawn inside a row hands its press up to the cell; a control that answers its
+  /// own taps leaves this `false`.
+  var pressOwnedByRow: Bool { false }
+
   init() { }
 }
 

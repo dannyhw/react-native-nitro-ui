@@ -298,6 +298,44 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
 
   func gestureRecognizer(
     _ gestureRecognizer: UIGestureRecognizer,
+    shouldReceive touch: UITouch
+  ) -> Bool {
+    // Only the row's own press is declined; any other recognizer given this delegate keeps
+    // every touch.
+    guard gestureRecognizer === pressGesture else { return true }
+    // A touch that lands on a hosted control inside the row is that control's, and the row
+    // leaves it: the recognizer is never given the touch, so nothing is cancelled for the
+    // control either.
+    return isPressable && !hostedControlCovers(touch.location(in: container))
+  }
+
+  /// Whether a hosted control's box holds this point of the container.
+  private func hostedControlCovers(_ point: CGPoint) -> Bool {
+    holdsHostedControl(container, at: point)
+  }
+
+  /// Whether `view` holds a hosted control whose box covers `point`, given in the coordinates
+  /// of `view`.
+  ///
+  /// Geometric rather than `hitTest`: a React Native subtree reports no touch owner until the
+  /// release, so a hosted view's box is the only sign available while the touch is still down.
+  /// Every branch whose box holds the point is asked, not only the topmost: a control can sit
+  /// behind plain content the row draws over it.
+  private func holdsHostedControl(_ view: UIView, at point: CGPoint) -> Bool {
+    if let control = view as? NitroUiHostedControl {
+      // An item that hands its press to the cell is the row's own content, box included.
+      return !control.pressOwnedByRow
+    }
+    for subview in view.subviews {
+      guard !subview.isHidden, subview.alpha > 0.01, !subview.frame.isEmpty else { continue }
+      guard subview.frame.contains(point) else { continue }
+      if holdsHostedControl(subview, at: subview.convert(point, from: view)) { return true }
+    }
+    return false
+  }
+
+  func gestureRecognizer(
+    _ gestureRecognizer: UIGestureRecognizer,
     shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
   ) -> Bool {
     true

@@ -1,5 +1,5 @@
 import { test } from '@e2e-dev/mobile';
-import { expect } from 'e2e';
+import { expect, type Locator, type Screen } from 'e2e';
 
 import {
   boxOf,
@@ -11,6 +11,8 @@ import {
   reveal,
   tapBand,
   textOf,
+  type Box,
+  type Point,
 } from './support';
 import { actsOnOneNamedNode } from './reader';
 import {
@@ -21,6 +23,36 @@ import {
 } from './keyboard';
 
 const ROW = 'Row with onPress';
+
+/** A row with `onPress` that has a hosted `Switch` in it. */
+const ROW_AND_SWITCH = 'Row with onPress and a switch';
+const SWITCH_IN_ROW = 'Switch in a pressed row';
+
+/** The same pair with React Native's own `Pressable` in place of the switch. */
+const ROW_AND_PRESSABLE = 'Row with onPress and a pressable';
+const PRESSABLE_IN_ROW = 'Pressable inside a pressed row';
+
+/** A row with `onPress` whose content is a nitro-ui wrapper around React Native text. */
+const ROW_AND_CONTEXT_MENU = 'Row with onPress and a context menu';
+const CONTEXT_MENU_IN_ROW = 'form-row-context-menu';
+
+/** The Android view React Native draws the app's content into. */
+const CONTENT_ROOT = 'android:id/content';
+
+/**
+ * A row the keyboard opt-out check measures at the end of the list.
+ *
+ * Not one of the last rows: a Form that opts out leaves its own tail where the keyboard
+ * stands, so the only rows readable at the end of the list with the keys up are the ones
+ * well above it. Padding under the last row still lifts this one, by the same amount.
+ */
+const CONTENT_RULER = 'Downloads';
+
+/** Drags enough to reach the end of the list from wherever the list happens to be. */
+const END_DRAGS = 14;
+
+/** How long a counter or a box is watched for a second value or a second move. */
+const SETTLE_MS = 500;
 
 test('a real tap on a Form row presses it once', async ({ app, screen }) => {
   await app.open();
@@ -152,6 +184,339 @@ test('a field the keyboard would cover is moved clear of it', async ({
     await fieldAboveKeyboard(field);
   });
 });
+
+test('a tap on a control inside a pressing row is the control’s, and a tap beside it is the row’s', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'form');
+  const row = screen.getByLabel(ROW_AND_SWITCH);
+  const control = screen.getByLabel(SWITCH_IN_ROW);
+  const presses = 'form-row-switch-presses';
+  const changes = 'form-row-switch-changes';
+  const value = screen.getByTestId('form-row-switch-value');
+  await reveal(screen, row, { reads: [control] });
+
+  // The row is asked to answer first: a row that never pressed at all would keep its
+  // counter still for a tap on its switch too, and that silence is not the promise.
+  const rowBox = await boxOf(row);
+  const switchBox = await boxOf(control);
+  if (rowBox == null || switchBox == null) {
+    throw new Error(
+      `real-input: the pressing row or its switch has no box to aim at: row ` +
+        `${JSON.stringify(rowBox)}, switch ${JSON.stringify(switchBox)}.`
+    );
+  }
+  const beside = { x: rowBox.x + 24, y: rowBox.y + rowBox.height / 2 };
+  expect(
+    beside.x < switchBox.x - 8,
+    `the point meant for the row (${String(Math.round(beside.x))} px) is not clear ` +
+      `of the switch's box ${JSON.stringify(switchBox)}, so the two taps would be ` +
+      'the same tap'
+  ).toBe(true);
+
+  await screen.tapAt(beside);
+  await expect(screen.getByTestId(presses)).toHaveText('1');
+  await expect(screen.getByTestId(changes)).toHaveText('0');
+  await expect(value).toHaveText('off');
+
+  // The switch's own tap: the flip and its one change report are the whole answer.
+  await screen.tapAt(await centreOf(control));
+  await expect(value).toHaveText('on');
+  await expect(screen.getByTestId(changes)).toHaveText('1');
+  await staysAt(screen, presses, '1');
+
+  // The row answers again after its content did: the rule is "whosever touch this
+  // was", not a latch that swallows every row press after the first control tap.
+  await screen.tapAt(beside);
+  await expect(screen.getByTestId(presses)).toHaveText('2');
+  await staysAt(screen, changes, '1');
+
+  await screen.tapAt(await centreOf(control));
+  await expect(value).toHaveText('off');
+  await expect(screen.getByTestId(changes)).toHaveText('2');
+  await staysAt(screen, presses, '2');
+});
+
+test('a tap on React Native content inside a pressing row is answered by both, and the row keeps answering its own', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'form');
+  const row = screen.getByLabel(ROW_AND_PRESSABLE);
+  const control = screen.getByLabel(PRESSABLE_IN_ROW);
+  const rowPresses = 'form-row-inner-presses';
+  const innerPresses = 'form-row-inner-inner-presses';
+  await reveal(screen, row, { reads: [control] });
+
+  // The documented limit of the rule: a row gives its press up to a hosted control,
+  // and React Native content cannot be told apart from plain content in the row's
+  // box, so a `Pressable` inside a pressing row answers alongside the row. One tap,
+  // both counters — the reading that would be wrong is either control alone.
+  await screen.tapAt(await centreOf(control));
+  await expect(screen.getByTestId(innerPresses)).toHaveText('1');
+  await staysAt(screen, rowPresses, '1');
+
+  // And the row is not harmed by it: its own tap, aimed beside the `Pressable` rather
+  // than at the middle of the row, still presses the row and nothing inside it.
+  const rowBox = await boxOf(row);
+  const pressableBox = await boxOf(control);
+  if (rowBox == null || pressableBox == null) {
+    throw new Error(
+      `real-input: the pressing row or its pressable has no box to aim at: row ` +
+        `${JSON.stringify(rowBox)}, pressable ${JSON.stringify(pressableBox)}.`
+    );
+  }
+  const beside = {
+    x: rowBox.x + rowBox.width - 24,
+    y: rowBox.y + rowBox.height / 2,
+  };
+  expect(
+    beside.x > pressableBox.x + pressableBox.width + 8,
+    `the point meant for the row (${String(Math.round(beside.x))} px) is not clear ` +
+      `of the pressable's box ${JSON.stringify(pressableBox)}, so the two taps would ` +
+      'be the same tap'
+  ).toBe(true);
+
+  await screen.tapAt(beside);
+  await expect(screen.getByTestId(rowPresses)).toHaveText('2');
+  await staysAt(screen, innerPresses, '1');
+});
+
+test('a tap on a nitro-ui wrapper of React Native content inside a pressing row is the row’s', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'form');
+  const row = screen.getByLabel(ROW_AND_CONTEXT_MENU);
+  const wrapper = screen.getByTestId(CONTEXT_MENU_IN_ROW);
+  const presses = 'form-row-context-presses';
+  const opens = 'form-row-context-opens';
+  await reveal(screen, row, { reads: [wrapper] });
+
+  // The tap has to land on the nitro-ui view rather than in the row's own padding: a
+  // point the row holds alone is green whatever it makes of a wrapper's children.
+  const wrapperBox = await boxOf(wrapper);
+  const rowBox = await boxOf(row);
+  if (wrapperBox == null || rowBox == null) {
+    throw new Error(
+      `real-input: the context menu or its row has no box to aim at: menu ` +
+        `${JSON.stringify(wrapperBox)}, row ${JSON.stringify(rowBox)}.`
+    );
+  }
+  const onMenu = {
+    x: wrapperBox.x + wrapperBox.width / 2,
+    y: wrapperBox.y + wrapperBox.height / 2,
+  };
+  expect(
+    onMenu.x > rowBox.x &&
+      onMenu.x < rowBox.x + rowBox.width &&
+      onMenu.y > rowBox.y &&
+      onMenu.y < rowBox.y + rowBox.height,
+    `the point meant for the context menu ${JSON.stringify(
+      onMenu
+    )} is not inside the row's box ${JSON.stringify(
+      rowBox
+    )}, so this tap would not be a tap on the row at all`
+  ).toBe(true);
+
+  await screen.tapAt(onMenu);
+  // One press for one tap, and no menu: a tap that opened the menu answered with a
+  // popup, not with the row.
+  await expect(screen.getByTestId(presses)).toHaveText('1');
+  await staysAt(screen, opens, '0');
+});
+
+test('opting out of keyboard avoidance leaves the content and its offset alone', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'form');
+  const field = editableField(screen, 'Note');
+  const focus = screen.getByTestId('form-field-focus');
+  const avoid = screen.getByTestId('form-avoid-echo');
+  const ruler = screen.getByText(CONTENT_RULER);
+
+  // The toggle is tapped first, while the page is still at its top: this check travels to
+  // the end of a long form twice, so it starts no further down it than it has to.
+  await screen.getByLabel('Keyboard avoidance').tap();
+  await expect(avoid).toHaveText('no');
+
+  // The end of the list is where a reservation shows: content that grows under the last
+  // row lifts every row there. Both readings are taken there, once with no keyboard and
+  // once with one.
+  await reveal(screen, field);
+  const path = await endDragPath(screen);
+  const atEnd = await endBox(screen, ruler, path);
+  // Back to the field, and parked low in the page as the default case parks it: a field
+  // the keyboard does not reach is never scrolled, avoidance on or off, so the offset
+  // check below would be true of a Form that ignores the prop as much as of this one.
+  await revealLowInPage(screen, field);
+  const parked = await boxIfPresent(field);
+  if (parked == null) {
+    throw new Error(
+      'real-input: the Note field has no box to watch for a move.'
+    );
+  }
+  await expect(focus).toHaveText('no');
+
+  await withRealKeyboard(async () => {
+    await focusField(field);
+    expect(
+      await textOf(screen, 'form-field-focus'),
+      'a real tap on the Note field did not focus it, so a Form that does nothing ' +
+        'would look like a Form that opted out'
+    ).toBe('yes');
+    const { keyboardTop } = await expectKeyboard();
+    const band = await tapBand(screen);
+    expect(
+      band.bottom - keyboardTop,
+      `the premise of this check is missing: the keyboard is only ` +
+        `${String(Math.round(band.bottom - keyboardTop))} px tall, so padding room ` +
+        'for it would not be a change anything could see'
+    ).toBeGreaterThan(120);
+
+    expect(
+      parked.y + parked.height,
+      `the premise of this check is missing: the field was parked with its bottom at ` +
+        `${String(Math.round(parked.y + parked.height))} px, above the keyboard's top at ` +
+        `${String(Math.round(keyboardTop))} px, so nothing covered it and no Form would ` +
+        'have scrolled for it'
+    ).toBeGreaterThan(keyboardTop);
+
+    // The field is read here, before the list is travelled below: a Form that scrolls
+    // for its keyboard has already moved the row by the time the keys are up, and the
+    // travel that follows reads the end of the content, not this row.
+    const afterFocus = await boxIfPresent(field);
+    if (afterFocus == null) {
+      throw new Error(
+        `real-input: the focused Note field left the tree; it was parked at ` +
+          `${JSON.stringify(parked)}.`
+      );
+    }
+    expect(
+      Math.abs(afterFocus.y - parked.y),
+      `focusing the field left it ${String(
+        Math.round(Math.abs(afterFocus.y - parked.y))
+      )} px from where it was parked (${String(Math.round(parked.y))} px, now ` +
+        `${String(Math.round(afterFocus.y))} px) with keyboard avoidance off: the Form ` +
+        'scrolled for a keyboard it was told to leave alone'
+    ).toBeLessThanOrEqual(2);
+
+    const stillUp = await expectKeyboard();
+    // The same travel again with the keyboard up. It starts above the field, which is
+    // under the keyboard by now: a `TextInput` owns a gesture that begins inside it, and
+    // a gesture that begins under the keyboard belongs to the keyboard's own window.
+    const upPath = {
+      from: {
+        x: path.from.x,
+        y: Math.min(afterFocus.y - 40, stillUp.keyboardTop - 60),
+      },
+      to: path.to,
+    };
+    expect(
+      upPath.from.y - upPath.to.y,
+      `the field starts at ${String(
+        Math.round(afterFocus.y)
+      )} px and the keyboard at ${String(
+        Math.round(stillUp.keyboardTop)
+      )} px, which leaves only ${String(
+        Math.round(upPath.from.y - upPath.to.y)
+      )} px of travel above them for the list to travel along`
+    ).toBeGreaterThan(120);
+    const after = await endBox(screen, ruler, upPath);
+    expect(
+      Math.abs(after.y - atEnd.y),
+      `the Form's content sits ${String(
+        Math.round(atEnd.y - after.y)
+      )} px higher at the end of its list with the keyboard up (top ` +
+        `${String(Math.round(stillUp.keyboardTop))} px) than with no keyboard, which ` +
+        "is what padding the bottom of its scroll content by the keyboard's own " +
+        'height does to it'
+    ).toBeLessThanOrEqual(12);
+  });
+});
+
+/**
+ * Read a counter, wait, and read it again.
+ *
+ * A press that arrives late is still a second press, and `toHaveText` is satisfied
+ * by the first correct reading it sees.
+ */
+async function staysAt(
+  screen: Screen,
+  testId: string,
+  text: string
+): Promise<void> {
+  await expect(screen.getByTestId(testId)).toHaveText(text);
+  await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+  expect(
+    await textOf(screen, testId),
+    `"${testId}" moved off "${text}" while the screen was watched`
+  ).toBe(text);
+}
+
+/**
+ * A node's box, or `null` at once when it is not in the tree.
+ *
+ * `boundingBox` waits for a node to appear, and a row the list has recycled away never
+ * does, so a scroll search that reads it blind pays the action timeout per read.
+ */
+async function boxIfPresent(locator: Locator): Promise<Box | null> {
+  if ((await locator.count()) === 0) return null;
+  return boxOf(locator);
+}
+
+/**
+ * The drag that pulls the list to its end, measured while nothing is above it.
+ *
+ * The path cannot be read once a keyboard is up: the IME's own window carries the
+ * same `android:id/content` id, so the content view is two nodes by then. The travel
+ * stays in the top half of the band, where a keyboard cannot be.
+ */
+async function endDragPath(
+  screen: Screen
+): Promise<{ from: Point; to: Point }> {
+  const content = await boxOf(screen.getByTestId(CONTENT_ROOT));
+  const band = await tapBand(screen);
+  if (content == null) {
+    throw new Error('real-input: the content view has no box to drag along.');
+  }
+  const span = band.bottom - band.top;
+  const from = {
+    x: content.x + content.width * 0.05,
+    y: band.top + span * 0.5,
+  };
+  return { from, to: { x: from.x, y: band.top + span * 0.1 } };
+}
+
+/**
+ * Where a row sits once the list has been dragged to the end of its content.
+ *
+ * A fixed number of drags reaches the end without claiming to know where it is; the
+ * reading that matters is this one against the same one taken with a keyboard up.
+ */
+async function endBox(
+  screen: Screen,
+  ruler: Locator,
+  path: { from: Point; to: Point }
+): Promise<{ y: number; height: number }> {
+  for (let dragNumber = 1; dragNumber <= END_DRAGS; dragNumber += 1) {
+    await drag(screen, path.from, path.to, 500);
+  }
+  const box = await boxIfPresent(ruler);
+  if (box == null) {
+    throw new Error(
+      `real-input: the "${CONTENT_RULER}" row is not on screen at the end of the ` +
+        'list, so the content there cannot be read.'
+    );
+  }
+  return box;
+}
 
 /**
  * Park a control low in its page, where the keyboard will reach it.

@@ -8,7 +8,13 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Form, Switch, TextField } from 'react-native-nitro-ui';
+import {
+  ContextMenu,
+  Form,
+  type MenuGroup,
+  Switch,
+  TextField,
+} from 'react-native-nitro-ui';
 
 // The one thing this screen reads that app code has no business reading: the Form's own
 // report, whose `keyboard=` field is UIKit's number for the keyboard. `hybridRef` and its
@@ -86,6 +92,16 @@ function Echo({
  *   press must not steal the touch from its content.
  * - `form-switch` - a `Switch` inside a row. Ten taps, ten changes and ten flips:
  *   the hosted control still gets its own touches.
+ * - `form-row-switch` - a `Switch` inside a row that has `onPress`. A tap on the
+ *   switch is the switch's: it flips and reports once, and the row's own counter
+ *   stays where it was. A tap on the same row beside the switch is the row's.
+ * - `form-row-inner` - a `Pressable` inside a row that has `onPress`, which says
+ *   out loud on the screen which of the two answered that tap.
+ * - `form-row-context` - a `ContextMenu` around plain text inside a row that has
+ *   `onPress`. The menu is a nitro-ui view, but it draws nothing where the finger
+ *   lands and holds only React Native children, so a tap on it is the row's.
+ * - `form-avoid-keyboard` - the Form's `keyboardAvoidance`, flipped by a real tap.
+ *   With it off the Form must leave its content alone while a keyboard is up.
  * - `form-outside` - a `Pressable` outside the Form. It answers whether input is
  *   alive at all, and its own counter is what proves a Form tap was a Form tap.
  * - `form-note-field` - a `TextField` several screens down, so question 5 has a
@@ -99,6 +115,14 @@ export default function FormScreen() {
   const [outsidePresses, setOutsidePresses] = useState(0);
   const [switchChanges, setSwitchChanges] = useState(0);
   const [airplane, setAirplane] = useState(false);
+  const [rowSwitch, setRowSwitch] = useState(false);
+  const [rowSwitchChanges, setRowSwitchChanges] = useState(0);
+  const [rowSwitchPresses, setRowSwitchPresses] = useState(0);
+  const [innerRowPresses, setInnerRowPresses] = useState(0);
+  const [innerInnerPresses, setInnerInnerPresses] = useState(0);
+  const [rowContextPresses, setRowContextPresses] = useState(0);
+  const [rowContextOpens, setRowContextOpens] = useState(0);
+  const [avoidKeyboard, setAvoidKeyboard] = useState(true);
   const [note, setNote] = useState('');
   const [focused, setFocused] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState<number | null>(null);
@@ -153,6 +177,31 @@ export default function FormScreen() {
     setAirplane(next);
     setSwitchChanges((n) => n + 1);
   }, []);
+  const countRowSwitch = useCallback(
+    () => setRowSwitchPresses((n) => n + 1),
+    []
+  );
+  const flipRowSwitch = useCallback((next: boolean) => {
+    setRowSwitch(next);
+    setRowSwitchChanges((n) => n + 1);
+  }, []);
+  const countInnerRow = useCallback(() => setInnerRowPresses((n) => n + 1), []);
+  const countInnerInner = useCallback(
+    () => setInnerInnerPresses((n) => n + 1),
+    []
+  );
+  const countRowContext = useCallback(
+    () => setRowContextPresses((n) => n + 1),
+    []
+  );
+  const openRowContext = useCallback(
+    () => setRowContextOpens((n) => n + 1),
+    []
+  );
+  const toggleAvoidKeyboard = useCallback(
+    () => setAvoidKeyboard((avoid) => !avoid),
+    []
+  );
 
   return (
     <View
@@ -201,6 +250,54 @@ export default function FormScreen() {
           />
           <Echo
             ink={ink}
+            label="rows2"
+            testID="form-row-switch-presses"
+            value={String(rowSwitchPresses)}
+          />
+          <Echo
+            ink={ink}
+            label="changes2"
+            testID="form-row-switch-changes"
+            value={String(rowSwitchChanges)}
+          />
+          <Echo
+            ink={ink}
+            label="value2"
+            testID="form-row-switch-value"
+            value={rowSwitch ? 'on' : 'off'}
+          />
+          <Echo
+            ink={ink}
+            label="row3"
+            testID="form-row-inner-presses"
+            value={String(innerRowPresses)}
+          />
+          <Echo
+            ink={ink}
+            label="inner3"
+            testID="form-row-inner-inner-presses"
+            value={String(innerInnerPresses)}
+          />
+          <Echo
+            ink={ink}
+            label="ctx"
+            testID="form-row-context-presses"
+            value={String(rowContextPresses)}
+          />
+          <Echo
+            ink={ink}
+            label="menu"
+            testID="form-row-context-opens"
+            value={String(rowContextOpens)}
+          />
+          <Echo
+            ink={ink}
+            label="avoid"
+            testID="form-avoid-echo"
+            value={avoidKeyboard ? 'yes' : 'no'}
+          />
+          <Echo
+            ink={ink}
             label="focus"
             testID="form-field-focus"
             value={focused ? 'yes' : 'no'}
@@ -231,19 +328,38 @@ export default function FormScreen() {
             />
           ) : null}
         </View>
-        <Pressable
-          accessibilityLabel="Outside the form"
-          onPress={countOutside}
-          style={[styles.outside, { borderColor: ink.ink }]}
-          testID="form-outside"
-        >
-          <Text style={[styles.outsideText, { color: ink.ink }]}>
-            Outside the form
-          </Text>
-        </Pressable>
+        <View style={styles.outsideRow}>
+          <Pressable
+            accessibilityLabel="Outside the form"
+            onPress={countOutside}
+            style={[styles.outside, { borderColor: ink.ink }]}
+            testID="form-outside"
+          >
+            <Text style={[styles.outsideText, { color: ink.ink }]}>
+              Outside the form
+            </Text>
+          </Pressable>
+          {/* Turns the Form's own keyboard avoidance off, which is the only way a
+              real-input check can ask what the Form does *not* do while a keyboard
+              is up. */}
+          <Pressable
+            accessibilityLabel="Keyboard avoidance"
+            onPress={toggleAvoidKeyboard}
+            style={[styles.outside, { borderColor: ink.ink }]}
+            testID="form-avoid-keyboard"
+          >
+            <Text style={[styles.outsideText, { color: ink.ink }]}>
+              keyboardAvoidance: {avoidKeyboard ? 'on' : 'off'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
-      <Form hybridRef={(view) => (formRef.current = view)} style={styles.form}>
+      <Form
+        hybridRef={(view) => (formRef.current = view)}
+        keyboardAvoidance={avoidKeyboard}
+        style={styles.form}
+      >
         <Form.Section
           footer="These settings apply to this device only."
           title="Connectivity"
@@ -296,6 +412,64 @@ export default function FormScreen() {
                 testID="form-switch"
                 value={airplane}
               />
+            </View>
+          </Form.Row>
+          {/*
+            The pair the press rule is written for: a row that presses and a hosted
+            control inside it. The label is the row's own name; the switch carries its
+            own, so a reader and a finger can be aimed at either one of the two.
+          */}
+          <Form.Row
+            accessibilityLabel="Row with onPress and a switch"
+            onPress={countRowSwitch}
+            testID="form-row-switch"
+          >
+            <View style={styles.rowContent}>
+              <Text style={styles.label}>Do not disturb</Text>
+              <Switch
+                accessibilityLabel="Switch in a pressed row"
+                onValueChange={flipRowSwitch}
+                testID="form-row-switch-control"
+                value={rowSwitch}
+              />
+            </View>
+          </Form.Row>
+          {/* React Native's own `Pressable`, so the row's rule is measured against
+              content that presses without being a hosted control. */}
+          <Form.Row
+            accessibilityLabel="Row with onPress and a pressable"
+            onPress={countInnerRow}
+            testID="form-row-inner"
+          >
+            <View style={styles.rowContent}>
+              <Pressable
+                accessibilityLabel="Pressable inside a pressed row"
+                onPress={countInnerInner}
+                style={styles.inner}
+                testID="form-row-inner-control"
+              >
+                <Text style={styles.innerText}>Press me, the row too?</Text>
+              </Pressable>
+            </View>
+          </Form.Row>
+          {/* A nitro-ui wrapper whose content is React Native's own: the menu is drawn
+              in a popup of its own, so nothing under this finger is a hosted control. */}
+          <Form.Row
+            accessibilityLabel="Row with onPress and a context menu"
+            onPress={countRowContext}
+            testID="form-row-context"
+          >
+            <View style={styles.rowContent}>
+              <ContextMenu
+                accessibilityLabel="Context menu in a pressed row"
+                group={ROW_CONTEXT_GROUP}
+                onOpen={openRowContext}
+                style={styles.context}
+                testID="form-row-context-menu"
+              >
+                <Text style={styles.label}>Account</Text>
+              </ContextMenu>
+              <Text style={styles.detail}>Long press for its menu</Text>
             </View>
           </Form.Row>
         </Form.Section>
@@ -369,6 +543,12 @@ const FILLER = [
   'Downloads',
 ];
 
+// Row titles no text on this screen repeats: iOS reads an open menu's rows from the same
+// accessibility tree as the page behind it.
+const ROW_CONTEXT_GROUP: MenuGroup = {
+  actions: [{ id: 'row-context-archive', title: 'Archive the account' }],
+};
+
 const styles = StyleSheet.create({
   page: { flex: 1 },
   echoBar: { gap: 4, paddingHorizontal: 12, paddingVertical: 6 },
@@ -381,8 +561,10 @@ const styles = StyleSheet.create({
   outside: {
     borderRadius: 8,
     borderWidth: 2,
+    flex: 1,
     paddingVertical: 10,
   },
+  outsideRow: { flexDirection: 'row', gap: 8 },
   outsideText: { fontWeight: '600', textAlign: 'center' },
   form: { flex: 1 },
   rowContent: {
@@ -404,4 +586,5 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   innerText: { fontWeight: '600' },
+  context: { paddingHorizontal: 10, paddingVertical: 6 },
 });

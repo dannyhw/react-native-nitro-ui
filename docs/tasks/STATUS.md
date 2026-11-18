@@ -15,6 +15,10 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-18 A tap on a nitro-ui control inside a `Form.Row` with `onPress` (a `Switch`, say) is the
+  control's alone and no longer also presses the row; a `ListItem` inside a row still presses
+  it; `keyboardAvoidance={false}` no longer pads an Android Form's content for the keyboard
+  (FIX6, #95).
 - 11-18 Nothing user-visible: `real-input:android -- --a11y <case>` reads one accessibility
   case and `--rerun-failed` reruns failed ones; `real-input:ios` fails within 5 minutes when no
   test starts, and names a simulator restart as the fix (X54, #97).

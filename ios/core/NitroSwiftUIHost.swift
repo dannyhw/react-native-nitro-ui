@@ -33,6 +33,21 @@ enum NitroUiSizingPolicy: Int32 {
 /// `nuiSizingId` of a view that never set one; mirrors `NitroUiSizing::NO_INSTANCE`.
 let nitroUiSizingNoInstance: Int64 = 0
 
+/// A view that is a hosted nitro-ui control rather than a container's plain content.
+///
+/// Nothing else tells a control apart from plain content at a touch point — React Native's own
+/// views claim a touch the same way a plain `View` does — so a `Form.Row` that answers presses
+/// gives its press up only to a view carrying this marker.
+protocol NitroUiHostedControl: UIView {
+  /// Whether a `Form.Row`'s cell owns this view's press, which makes the view the row's content
+  /// and its box the row's. A control that answers its own taps does not.
+  var pressOwnedByRow: Bool { get }
+}
+
+extension NitroUiHostedControl {
+  var pressOwnedByRow: Bool { false }
+}
+
 /// A `UIView` that hosts one concrete SwiftUI `Content` and applies React props to it in batches.
 /// The `UIHostingController` is created once in `init` and never replaced. Prop setters only write
 /// the model and call `markDirty()`; `commit()` applies the batch once per `afterUpdate`.
@@ -447,4 +462,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     }
     return nil
   }
+}
+
+extension NitroSwiftUIHost: NitroUiHostedControl {
+  var pressOwnedByRow: Bool { model.pressOwnedByRow }
 }

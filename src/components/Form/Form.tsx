@@ -175,8 +175,9 @@ function FormRoot({
       Math.abs(previous - y) < 0.25 ? previous : y
     );
   }) as NitroCallbackProp<(y: number) => void>;
-  // Android only: the IME inset the app's window did not consume by resizing. The scroll
-  // content grows by it, so the last row can be scrolled above the keyboard at all.
+  // Android only: the IME inset the app's window did not consume by resizing. With keyboard
+  // avoidance on, the scroll content grows by it, so the last row can be scrolled above the
+  // keyboard at all.
   const [imeInset, setImeInset] = useState(0);
   const reportImeInset = useStableCallback((inset: number): void => {
     setImeInset((previous) =>
@@ -217,7 +218,9 @@ function FormRoot({
       style={style}
       // `flexGrow` so a short form still fills the viewport with the grouped page colour.
       contentContainerStyle={
-        imeInset > 0 ? [styles.fill, { paddingBottom: imeInset }] : styles.fill
+        keyboardAvoidance && imeInset > 0
+          ? [styles.fill, { paddingBottom: imeInset }]
+          : styles.fill
       }
       // A tap outside a focused field should reach the control under it, not merely dismiss
       // the keyboard.
