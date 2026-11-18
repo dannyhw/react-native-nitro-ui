@@ -952,23 +952,44 @@ describe('ButtonGroup · the overflow row glyphs (G21, Android)', () => {
         );
       }
     }
+  });
 
-    // The same group with `titleOnly`: the rows keep their items and lose their glyphs.
-    await rerender(
+  /**
+   * A row records a glyph only as it composes, so this group is mounted with `titleOnly` from the
+   * start: a popup opened on a group that was rerendered keeps the rows it had already composed.
+   */
+  it('keeps menu rows glyph-free under labelStyle="titleOnly"', async () => {
+    if (Platform.OS === 'ios') return;
+    poison([sizingKey('standard', 'filled', 'medium', 'titleOnly', ICONED)]);
+    await render(
       <View style={WELL}>
         <ButtonGroup
           items={ICONED}
           labelStyle="titleOnly"
-          testID="bg-menu-icons"
-          hybridRef={captureHybrid('bg-menu-icons')}
+          testID="bg-menu-title-only"
+          hybridRef={captureHybrid('bg-menu-title-only')}
         />
       </View>
     );
-    await sleep(EVENT_QUIET_MS);
-    if (glyphRows('bg-menu-icons').size > 0) {
+    await waitForTestId('bg-menu-title-only');
+    const row = await probeRow('bg-menu-title-only');
+    const shown = (row.shown ?? 'none').split(',');
+    const withGlyph = ICONED.map((item) => item.id)
+      .filter((id) => !shown.includes(id))
+      .filter((id) => glyphOf(id) != null);
+    if (withGlyph.length === 0) {
       throw new Error(
-        `with labelStyle="titleOnly" a row still reports a glyph: ` +
-          `"${handleOf('bg-menu-icons').nuiTestStateReport()}".`
+        `the overflowed items must hold one with a glyph to take away, and ` +
+          `"bg-menu-title-only" shows ${JSON.stringify(shown)} - the fixture proves nothing.`
+      );
+    }
+
+    await openOverflow('bg-menu-title-only');
+    await sleep(EVENT_QUIET_MS);
+    if (glyphRows('bg-menu-title-only').size > 0) {
+      throw new Error(
+        `with labelStyle="titleOnly" an overflow row still drew a glyph: ` +
+          `"${handleOf('bg-menu-title-only').nuiTestStateReport()}".`
       );
     }
   });
