@@ -16,18 +16,16 @@ row painted goes back into the state report as `overflowIcons=<id>#<RRGGBB>`: th
 the device's dynamic palette, so a test has to ask the row rather than trust the argument.
 
 On iOS a `Toggle` with `.toggleStyle(.button)` ignores `buttonStyle`, so a toggle item is drawn by a
-style that puts the variant's `ItemButtonStyle` on a `Button` and states the value with
-`.isSelected`. It stays a `Toggle` for accessibility — the existing probe still reads
-`[Checkbox, … desc=Bold` — and the connected row is untouched, a connected group with a toggle never
-having used `ControlGroup`. Each variant keeps its own style family in both of a toggle's states:
-`filled` and `elevated` `.borderedProminent` with a grey capsule unchecked, `tonal` and `outlined`
-`.bordered` and `text` `.borderless` with a tinted label checked and the secondary label colour
-unchecked. `text` needed no bordered fallback, and the doc says what each variant ends up as.
+style that puts the variant's `ItemButtonStyle` on a `Button`. The connected row is untouched, a
+connected group with a toggle never having used `ControlGroup`. That style is round one's: it
+tinted an unchecked item grey, and the accessibility claim below it was Android's. Round 1 redrew
+the states and measured the toggle's own element on iOS — see "Fix round 1".
 
 The iOS read is measured rather than looked up: the row probe samples the host's rendered layer over
 white and publishes `drawing=size,fill=<%>,tint=<%>`. A test compares a checked toggle's shares with
-the action item of the same variant, the unchecked one's tint with nothing, the two states' fill with
-each other, and `text`'s fill with "no background painted".
+the action item of the same variant, the unchecked one's with that variant's quiet action item, a
+disabled item's with nothing, and the three families' drawings with each other — every claim is one
+measured drawing against another, none against a constant.
 
 One thing to read before the diff: the `titleOnly` half of the Android test was first written as a
 rerender of the group that had just drawn glyphs, and stayed green with the guard removed — a row
@@ -37,27 +35,13 @@ are about.
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2154 tests / 94 suites | `89e4650472b1` | 1 m 03 s | start 8.6 / med 23.1 / max 29.4 |
-| `harness:ios` | **PASS** | 604 tests / 30 suites + isolated 6 tests / 3 suites | `89e4650472b1` (harness:ios digest) | 16 m 33 s | start 8.1 / med 12.2 / max 29.0 |
-| `harness:android` | **PASS** | 662 tests / 31 suites + isolated 6 tests / 3 suites | `89e4650472b1` (harness:android digest) | 18 m 27 s | start 8.1 / med 11.4 / max 29.0 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
-| `harness:android:ButtonGroup` | stale | 2 failed of 11 tests / 1 suites | b22f756d6414 (not this tree) | 19.3 s | start 16.2 / med 15.9 / max 16.2 |
-| `harness:android:Scratchphoto` | stale | 2 tests / 1 suites | b05c5a6b47e4 (not this tree) | 30.9 s | start 7.0 / med 12.6 / max 15.1 |
-| `harness:ios:ButtonGroup` | stale | 2 failed of 11 tests / 1 suites | dff543baa82d (not this tree) | 20.5 s | start 11.4 / med 9.8 / max 11.4 |
-| `harness:ios:Scratchphoto` | stale | 2 tests / 1 suites | 57c01335fa3a (not this tree) | 31.7 s | start 58.0 / med 56.1 / max 58.0 |
+The generated table is the one under "Fix round 1" below. A report carries one table, with the
+ledger's current numbers, so round 1's own runs are not repeated here.
 
+One incident: two harness gates were started at 11:19 while `TRAIN` held `real-input:ios`, and
+were stopped 20 seconds in, before their first test. Every run in the table below started after that
+lease went idle.
 
-`need --for review`: need: review is satisfied on this code tree.
-
-The two `Scratchphoto` rows are filtered runs of a scratch harness file that held a screen open long
-enough to photograph it; the file is not in the tree, so those rows stay stale.
-
-One incident: two harness gates were started at 11:19 while `TRAIN` held `real-input:ios`, and were
-stopped 20 seconds in, before their first test. Every run in the table above started after that lease
-went idle.
 
 ## Red proofs
 
@@ -102,3 +86,63 @@ went idle.
   checkmark and no glyph: unchanged by this task, and documented as such.
 - The overflow row's glyph colour is Material's row content colour, not `tintColor` — the same thing
   `Menu` does, and what the doc claims.
+
+## Fix round 1
+
+M1. An unchecked iOS toggle keeps the group's own colour. `ItemStyle` names the three iOS style
+families and gives a toggle one step per state: unchecked is the variant's style without a `filled`
+or `elevated` group's prominent fill; checked is `.borderedProminent`, or `.bordered` where the
+variant is `text`. The read compares every cell with an action item's drawing — the quiet one and the
+loud one — and reads a disabled toggle and a disabled action item too, so grey is only ever what a
+disabled item measures.
+
+M2. The style draws and says nothing. The item's element is the `Toggle`'s own switch, already
+carrying value 1, so the `selected` trait the style added had a reader hear the state twice; it is
+gone, and `testRealInputButtonGroup` asks each toggle item for its type, its value and one state
+signal before any tap and after each of two real taps. The Summary sentence that offered Android's
+probe as iOS evidence is corrected above.
+
+N1. The doc's two "ignored" cells now name the connected group that is not ignored, and the toggle
+table and the changeset say what each state draws.
+
+### Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2178 tests / 96 suites | `aa7fe1899806` | 1 m 02 s | start 8.8 / med 12.8 / max 15.7 |
+| `harness:ios` | **PASS** | 604 tests / 30 suites + isolated 6 tests / 3 suites | `aa7fe1899806` (harness:ios digest) | 14 m 19 s | start 8.2 / med 6.9 / max 45.2 |
+| `harness:android` | **PASS** | 662 tests / 31 suites + isolated 6 tests / 3 suites | `aa7fe1899806` (harness:android digest) | 18 m 05 s | start 13.3 / med 6.4 / max 20.8 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:android:ButtonGroup` | stale | 2 failed of 11 tests / 1 suites | b22f756d6414 (not this tree) | 19.3 s | start 16.2 / med 15.9 / max 16.2 |
+| `harness:android:Scratchphoto` | stale | 2 tests / 1 suites | b05c5a6b47e4 (not this tree) | 30.9 s | start 7.0 / med 12.6 / max 15.1 |
+| `harness:ios:ButtonGroup` | stale | 1 failed of 11 tests / 1 suites | 50454797e404 (not this tree) | 20.2 s | start 3.8 / med 8.6 / max 8.6 |
+| `harness:ios:ButtonGroupPhoto` | stale | 1 tests / 1 suites | c67f7c955d2e (not this tree) | 34.6 s | start 13.4 / med 10.7 / max 13.4 |
+| `harness:ios:Scratchphoto` | stale | 2 tests / 1 suites | 57c01335fa3a (not this tree) | 31.7 s | start 58.0 / med 56.1 / max 58.0 |
+| `real-input:ios:--a11y:button-group` | **PASS** | — | `aa7fe1899806` (real-input:ios digest) | 1 m 13 s | start 7.2 / med 10.0 / max 11.5 |
+| `real-input:ios:--control:button-group` | **PASS** | — | `aa7fe1899806` (real-input:ios digest) | 2 m 59 s | start 24.9 / med 11.2 / max 24.9 |
+
+`need --for review`: need: review is satisfied on this code tree.
+
+The `Scratchphoto` and `ButtonGroupPhoto` rows are filtered runs of scratch screens that held a
+mount open to be photographed; no such file is in the tree, so those rows stay stale.
+
+### Red proofs
+
+- `ButtonGroup · the toggle variant drawing (G20, iOS) › draws an unchecked toggle in the group
+  tint, one step below the checked one` -> the unchecked state drawn as round one drew it, left in
+  SwiftUI's grey -> `an unchecked "filled" toggle drew only 0% of its box in the group's tint, so it
+  reads as a disabled item rather than as an unchecked one. filled: action={"fill":49,"tint":47}
+  on={"fill":49,"tint":47} off={"fill":49,"tint":0} disabled={"fill":53,"tint":0}; … tonal:
+  action={"fill":53,"tint":4} off={"fill":52,"tint":0}; … text: action={"fill":8,"tint":6}
+  off={"fill":8,"tint":0}`
+- the same test -> `tintColor` applied only while checked, as round one did, so the unchecked item
+  measured exactly the disabled item beside it -> `an unchecked "filled" toggle drew only 0% of its
+  box in the group's tint … filled: action={"fill":49,"tint":47} on={"fill":49,"tint":47}
+  off={"fill":53,"tint":0} disabled={"fill":53,"tint":0} disabledAction={"fill":53,"tint":0}`
+- the filtered real-input run `real-input:ios -- --control button-group` -> the style's
+  `.accessibilityAddTraits(.isSelected)` put back on a toggle item -> at
+  `example/ios/NitroUiExampleUITests/RealInputTests.swift:2480`: `the toggle item "Bold" also
+  reports itself selected, so a reader hears its state twice: "Bold" type=40 value=Optional(1)
+  selected=true`. The same run passes with the trait gone, on the element's own
+  `"Bold" type=40 value=Optional(1) selected=false`.
