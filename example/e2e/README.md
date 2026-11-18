@@ -10,7 +10,8 @@ node scripts/gate.mjs real-input:android         # every control
 node scripts/gate.mjs real-input:android -- --control slider
 ```
 
-`--control` narrows both phases; it never narrows what counts as a pass. A run is
+`--control` narrows the e2e suite and the tree checks, and `--a11y <case>` narrows
+the sweep; neither narrows what counts as a pass. A run is
 red if the e2e process fails, if any test fails, if any phase-2 check fails, or if
 the accessibility sweep produced no case.
 
@@ -32,8 +33,8 @@ node a finger lands on. Almost every control is asserted here in full.
 accessibility connection. Two passes, in this order:
 
 - `scripts/real-input/a11y-sweep-device.mjs` walks the `A11Y_CONTROLS` table and
-  grades the tree a reader sees, one case per control, on every run, filtered or
-  not. The rule is `scripts/real-input/a11y-sweep.mjs`. A run that produces no
+  grades the tree a reader sees, one case per control, on every run that does
+  not name cases with `--a11y`. The rule is `scripts/real-input/a11y-sweep.mjs`. A run that produces no
   sweep is red.
 - `scripts/real-input/android-tree-checks.mjs` then drives the device itself —
   `input tap`, `input motionevent`, `uiautomator dump` — at the leased serial only,

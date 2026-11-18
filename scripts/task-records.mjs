@@ -221,6 +221,7 @@ function main(argv) {
       symlinks: files.filter(isLink).length,
       worktrees,
       openBranches: open.filter((each) => taskOfBranch(each.branch) === task),
+      head: current || null,
       ageDays,
       since,
       keepDays,

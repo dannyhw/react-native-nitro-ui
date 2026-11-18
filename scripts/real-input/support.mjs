@@ -1,5 +1,5 @@
 /**
- * Shared plumbing for the real-input suite: run selection, evidence files,
+ * Shared plumbing for the real-input suite: evidence files,
  * Metro, and the pass/fail report both platforms print.
  *
  * The suite is deliberately separate from `react-native-harness` and from
@@ -12,44 +12,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-
-import { REAL_INPUT_CONTROLS, selectControls } from './controls.mjs';
-
-/**
- * Parse `--control <id>` (repeatable) out of a command line.
- *
- * @param {ReadonlyArray<string>} argv Arguments after the script name.
- * @returns {ReadonlyArray<(typeof REAL_INPUT_CONTROLS)[number]>}
- */
-export function chosenControls(argv) {
-  /** @type {string[]} */
-  const ids = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === '--control') {
-      const value = argv[index + 1];
-      if (value == null || value.startsWith('--')) {
-        throw new Error('real-input: --control needs a control id.');
-      }
-      ids.push(value);
-      index += 1;
-    } else if (arg === '--help' || arg === '-h') {
-      usage();
-      process.exit(0);
-    } else {
-      throw new Error(`real-input: unknown argument "${arg}".`);
-    }
-  }
-  return selectControls(ids);
-}
-
-function usage() {
-  const ids = REAL_INPUT_CONTROLS.map((control) => control.id).join(', ');
-  console.log(`Usage: bun run test:real-input:<platform> [--control <id>]
-
-Controls: ${ids}
-Omit --control to run every control.`);
-}
 
 /**
  * Where evidence for a run goes (gitignored).
