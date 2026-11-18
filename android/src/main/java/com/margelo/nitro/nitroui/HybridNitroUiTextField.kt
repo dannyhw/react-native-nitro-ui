@@ -315,10 +315,9 @@ internal fun capitalizationOf(name: String): KeyboardCapitalization =
   }
 
 /**
- * `autoCorrect={false}` as React Native sends it: `TYPE_TEXT_FLAG_NO_SUGGESTIONS`,
- * which is the flag that stops a keyboard offering suggestions and corrections - leaving them out
- * is not enough. The flag belongs to Android's text input class, where in another class it means
- * something else, so a non-text `inputType` is returned as it came.
+ * `autoCorrect={false}` as React Native sends it: `TYPE_TEXT_FLAG_NO_SUGGESTIONS`, which is the
+ * flag that stops a keyboard offering suggestions and corrections - leaving the autocorrect flag
+ * out is not enough. It is a text-class flag, so a non-text `inputType` is returned as it came.
  */
 internal fun nuiApplyAutoCorrect(inputType: Int, autoCorrect: Boolean): Int =
   if (
@@ -392,9 +391,9 @@ internal object NitroUiKeyboardNames {
   }
 
   /**
-   * Whether a keyboard handed `inputType` is left its suggestions and corrections.
-   * `TYPE_TEXT_FLAG_NO_SUGGESTIONS` is the flag a keyboard reads, and it is the same bit as
-   * `TYPE_TEXT_FLAG_MULTI_LINE`, so a multi-line field's `EditorInfo` always reads as refused.
+   * Whether a keyboard handed `inputType` is left its suggestions and corrections:
+   * `TYPE_TEXT_FLAG_NO_SUGGESTIONS` is the flag a keyboard reads for both, and the separate
+   * multi-line bit says nothing about it.
    */
   fun suggestionsOf(inputType: Int): Boolean =
     inputType and android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS == 0
