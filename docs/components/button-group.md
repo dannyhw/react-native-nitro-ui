@@ -107,12 +107,12 @@ tap.
 | Prop          | Android                                                      | iOS `standard`                                    | iOS `connected`                |
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------- | ------------------------------ |
 | `appearance`  | 12 dp apart, each item its own corners · 2 dp joined         | an 8 pt row of bordered controls · `ControlGroup` |                                |
-| `variant`     | `NitroUiM3Button` / `NitroUiM3ToggleButton`, one per variant | `ButtonStyle` per variant (see below)             | ignored                        |
+| `variant`     | `NitroUiM3Button` / `NitroUiM3ToggleButton`, one per variant | `ButtonStyle` per variant, toggle or action item  | ignored                        |
 | `size`        | `Button`'s sizes, floored at Material's 48 dp target         | `.controlSize`                                    | ignored (31 pt at every size)  |
-| `tintColor`   | the variant's container, and the checked container           | `.tint()`                                         | ignored                        |
+| `tintColor`   | the variant's container, and the checked container           | `.tint()`, on a toggle item only while checked    | ignored                        |
 | `labelStyle`  | icon and title; `automatic` = both                           | `automatic` = icon and title                      | `automatic` = icons only       |
 | `systemImage` | ignored                                                      | `Label`'s glyph                                   | `Label`'s glyph, usually alone |
-| `androidIcon` | `Icon` at the size's icon size                               | ignored                                           | ignored                        |
+| `androidIcon` | `Icon` at the size's icon size, and again in the overflow row | ignored                                           | ignored                        |
 | overflow      | Material's indicator + Material's group menu                 | a `Menu` beside the row                           | the same                       |
 | `disabled`    | `enabled = false` on each item and its menu row              | `.disabled`                                       | `.disabled`                    |
 
@@ -120,16 +120,34 @@ tap.
 measures 174.00 × 31.00 pt at every size, with every tint and with three different button styles.
 A connected iOS group therefore takes its look from `ControlGroup`.
 
-`variant` maps to the same iOS `ButtonStyle` table as [Button](button.md): `filled` and
-`elevated` to `.borderedProminent`, `tonal` and `outlined` to `.bordered`, `text` to
-`.borderless`. Unlike `Button`, a group does not stroke a hairline for `outlined`. A `text`
-toggle is drawn as the outlined toggle, because there is no text toggle.
+On Android a `text` toggle is drawn as the outlined toggle, because Material has no text toggle
+button; every other variant has its own toggle button, and each shows its checked state in its own
+way.
+
+On iOS `variant` maps to the same `ButtonStyle` table as [Button](button.md), for a toggle item as
+for an action item: `filled` and `elevated` to `.borderedProminent`, `tonal` and `outlined` to
+`.bordered`, `text` to `.borderless`. Unlike `Button`, a group does not stroke a hairline for
+`outlined`. A toggle keeps that style in both of its states, so it sits with the action item beside
+it; what changes with the state is the colour, not the shape.
+
+| `variant`       | iOS action item        | iOS toggle item, checked | iOS toggle item, unchecked |
+| --------------- | ---------------------- | ------------------------ | -------------------------- |
+| `filled`        | `.borderedProminent`   | the same, in `tintColor` | a grey capsule             |
+| `elevated`      | the same               | the same                 | a grey capsule             |
+| `tonal`         | `.bordered`            | the same, tinted label   | the same, grey label       |
+| `outlined`      | the same               | the same                 | the same                   |
+| `text`          | `.borderless`          | the same, tinted label   | the same, grey label       |
+
+The unchecked item is drawn with the system's own neutral colours — a grey capsule where the style
+is a filled one, the secondary label colour where the style colours its label — so an unchecked
+item is the same shape as a checked one without its colour. A `text` toggle shows its state that
+way too: a tinted label against a grey one, with nothing drawn behind either.
 
 ### A connected iOS group with toggles
 
-`ControlGroup` draws no on state: `Toggle(…).toggleStyle(.button)`s inside one look identical on
-and off. A connected iOS group whose items include a toggle therefore draws the standard row,
-separate bordered toggles that each show their state, on iOS only. The props and events are the
+A `Toggle` inside `ControlGroup` draws no on state: checked and unchecked are the same pixels. A
+connected iOS group whose items include a toggle therefore draws the standard row, separate toggles
+in the group's `variant` that each show their state, on iOS only. The props and events are the
 same. Android keeps its connected toggles, because Material's `ToggleButton` has a checked
 container.
 
@@ -163,6 +181,19 @@ overflow at 220 pt can be a full row across the screen.
   change. `disabled` arriving while the menu is open closes it, and so does a recycle.
 - On iOS 15 there is no `ViewThatFits`, so every item is drawn and the row clips to its box.
   Nothing moves into a menu there.
+
+### What an overflow row draws
+
+An overflowed item is drawn as one row of the same menu [Menu](menu.md) uses, by the same code.
+
+- Android draws the item's title and, when it has an `androidIcon`, that glyph in the row's leading
+  slot: Material's leading-icon size, in the colour Material gives a row's glyph. An item with no
+  `androidIcon` draws no glyph and keeps no space for one, so its title starts where every other
+  row's title starts.
+- `labelStyle="titleOnly"` costs the rows their glyphs, as it costs the items in the row theirs.
+- On a toggle item the row is checked or unchecked, and while it is checked Material's check takes
+  the leading slot in place of the glyph.
+- iOS draws the title alone: neither `systemImage` nor a glyph reaches a row of its `Menu`.
 
 `overflowAccessibilityLabel` names the overflow control on both platforms. Without it the
 platforms differ:
