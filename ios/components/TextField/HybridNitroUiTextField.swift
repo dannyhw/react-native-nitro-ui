@@ -733,7 +733,9 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
       autoCorrect: model.autoCorrect,
       maxLength: Double(model.maxLength ?? -1),
       placeholder: model.placeholder ?? "",
-      accessibilityLabel: control?.accessibilityLabel ?? "")
+      accessibilityLabel: control?.accessibilityLabel ?? "",
+      caret: Double(control?.nuiCaret ?? -1),
+      suggestions: (control?.nuiSuggestionsOffered ?? true) ? "offered" : "refused")
     stateLock.lock()
     stateSnapshot = snapshot
     stateLock.unlock()

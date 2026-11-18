@@ -2,6 +2,8 @@ package com.margelo.nitro.nitroui
 
 import android.app.Activity
 import android.view.View
+import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -368,6 +370,14 @@ internal object NitroUiKeyboardNames {
     )
   }
 
+  /**
+   * Whether a keyboard handed `inputType` is left its suggestions and corrections.
+   * `TYPE_TEXT_FLAG_NO_SUGGESTIONS` is the flag a keyboard reads, and it is the same bit as
+   * `TYPE_TEXT_FLAG_MULTI_LINE`, so a multi-line field's `EditorInfo` always reads as refused.
+   */
+  fun suggestionsOf(inputType: Int): Boolean =
+    inputType and android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS == 0
+
   fun nameOfKeyboardType(type: KeyboardType): String =
     when (type) {
       KeyboardType.Number, KeyboardType.NumberPassword -> "number-pad"
@@ -540,7 +550,7 @@ class HybridNitroUiTextField(
   private var snapshot =
     NitroUiTextFieldTestState(
       "", false, false, 0.0, 0.0, "none", true, false, false, "default", "default",
-      "sentences", true, -1.0, "", "",
+      "sentences", true, -1.0, "", "", -1.0, SUGGESTIONS_UNKNOWN,
     )
 
   init {
@@ -558,6 +568,11 @@ class HybridNitroUiTextField(
   companion object {
     // Must match the component name in the generated view manager.
     private const val SIZING_COMPONENT_NAME = "NitroUiTextField"
+
+    // What the test state reports for `suggestions`.
+    private const val SUGGESTIONS_OFFERED = "offered"
+    private const val SUGGESTIONS_REFUSED = "refused"
+    private const val SUGGESTIONS_UNKNOWN = "unknown"
 
     // The size before anything is measured, in dp: one line of `bodyLarge`, and the
     // width a field draws at under a parent that gives it none.
@@ -784,6 +799,9 @@ class HybridNitroUiTextField(
     host.tag = null
     // Resets the model, which hands the next mount a fresh `TextFieldState`.
     host.prepareForRecycle()
+    // Whatever the previous owner's keyboard was handed says nothing about the next one's.
+    probedConfig = null
+    probedSuggestions = null
     publishState()
   }
 
@@ -831,7 +849,76 @@ class HybridNitroUiTextField(
         (model.maxLength ?: -1).toDouble(),
         model.placeholder ?: "",
         model.accessibilityLabel ?: "",
+        field.selection.start.toDouble(),
+        suggestionsReport(),
       )
+  }
+
+  /** The keyboard configuration a read-back of what the IME was handed answers for. */
+  private fun keyboardConfig(): String =
+    "${model.keyboardType}/${model.autoCapitalize}/${model.autoCorrect}/${model.secureApplied}/" +
+      model.multiline
+
+  private var probedConfig: String? = null
+  private var probedSuggestions: String? = null
+
+  /**
+   * What the keyboard in use is told about suggestions: the last read-back while the field is
+   * focused, and `unknown` while there is none to read.
+   */
+  private fun suggestionsReport(): String =
+    if (model.focused && probedConfig == keyboardConfig()) {
+      probedSuggestions ?: SUGGESTIONS_UNKNOWN
+    } else {
+      SUGGESTIONS_UNKNOWN
+    }
+
+  /**
+   * Ask the focused field what it hands the IME, and republish when that is new. Once per keyboard
+   * configuration: building an `EditorInfo` closes the connection the keyboard is using, so it is
+   * not something to do on every keystroke.
+   */
+  private fun readBackSuggestions() {
+    if (!model.focused) {
+      probedConfig = null
+      probedSuggestions = null
+      return
+    }
+    val config = keyboardConfig()
+    if (probedConfig == config) return
+    val info = currentEditorInfo() ?: return
+    probedConfig = config
+    probedSuggestions =
+      if (NitroUiKeyboardNames.suggestionsOf(info.inputType)) {
+        SUGGESTIONS_OFFERED
+      } else {
+        SUGGESTIONS_REFUSED
+      }
+    publishState()
+  }
+
+  /**
+   * Compose keeps the input connection on the `AndroidComposeView` under the host. Ask as the IME
+   * does: find the descendant that is a text editor, and have it build an `EditorInfo`.
+   */
+  private fun currentEditorInfo(): EditorInfo? {
+    val queue = ArrayDeque<View>()
+    queue.add(host)
+    while (queue.isNotEmpty()) {
+      val candidate = queue.removeFirst()
+      if (candidate !== host && candidate.onCheckIsTextEditor()) {
+        val info = EditorInfo()
+        if (candidate.onCreateInputConnection(info) != null) {
+          return info
+        }
+      }
+      if (candidate is ViewGroup) {
+        for (index in 0 until candidate.childCount) {
+          queue.add(candidate.getChildAt(index))
+        }
+      }
+    }
+    return null
   }
 
   // MARK: - Methods
@@ -850,7 +937,27 @@ class HybridNitroUiTextField(
     host.post { model.blurTick += 1 }
   }
 
-  override fun nuiTestState(): NitroUiTextFieldTestState = snapshot
+  /**
+   * The last snapshot - JS must not wait for the UI thread - plus one queued read-back of what the
+   * keyboard was handed, which only a test asks for.
+   */
+  override fun nuiTestState(): NitroUiTextFieldTestState {
+    requestKeyboardRead()
+    return snapshot
+  }
+
+  private val keyboardReadQueued = AtomicBoolean(false)
+
+  /** Queue one [readBackSuggestions] on the UI thread, however many reads ask for one. */
+  private fun requestKeyboardRead() {
+    if (!keyboardReadQueued.compareAndSet(false, true)) {
+      return
+    }
+    host.post {
+      keyboardReadQueued.set(false)
+      readBackSuggestions()
+    }
+  }
 
   /** Android has no public API that opens a composition outside an IME: a no-op. */
   override fun nuiTestSetMarkedText(text: String) {}

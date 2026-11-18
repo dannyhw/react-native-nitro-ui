@@ -63,6 +63,10 @@ type FieldState = {
   maxLength: number;
   placeholder: string;
   accessibilityLabel: string;
+  /** The caret's UTF-16 offset in `text`, or `-1`. */
+  caret: number;
+  /** `'offered' | 'refused' | 'unknown'`: what the keyboard in use was told. */
+  suggestions: string;
 };
 
 /** The `hybridRef` handle; the library exports no Hybrid View types. */

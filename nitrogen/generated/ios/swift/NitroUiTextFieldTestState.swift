@@ -18,8 +18,8 @@ public extension NitroUiTextFieldTestState {
   /**
    * Create a new instance of `NitroUiTextFieldTestState`.
    */
-  init(text: String, focused: Bool, composing: Bool, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Bool, multiline: Bool, secure: Bool, keyboardType: String, returnKeyType: String, autoCapitalize: String, autoCorrect: Bool, maxLength: Double, placeholder: String, accessibilityLabel: String) {
-    self.init(std.string(text), focused, composing, nativeEvents, jsEvents, std.string(lastWrite), editable, multiline, secure, std.string(keyboardType), std.string(returnKeyType), std.string(autoCapitalize), autoCorrect, maxLength, std.string(placeholder), std.string(accessibilityLabel))
+  init(text: String, focused: Bool, composing: Bool, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Bool, multiline: Bool, secure: Bool, keyboardType: String, returnKeyType: String, autoCapitalize: String, autoCorrect: Bool, maxLength: Double, placeholder: String, accessibilityLabel: String, caret: Double, suggestions: String) {
+    self.init(std.string(text), focused, composing, nativeEvents, jsEvents, std.string(lastWrite), editable, multiline, secure, std.string(keyboardType), std.string(returnKeyType), std.string(autoCapitalize), autoCorrect, maxLength, std.string(placeholder), std.string(accessibilityLabel), caret, std.string(suggestions))
   }
 
   @inline(__always)
@@ -100,5 +100,15 @@ public extension NitroUiTextFieldTestState {
   @inline(__always)
   var accessibilityLabel: String {
     return String(self.__accessibilityLabel)
+  }
+  
+  @inline(__always)
+  var caret: Double {
+    return self.__caret
+  }
+  
+  @inline(__always)
+  var suggestions: String {
+    return String(self.__suggestions)
   }
 }

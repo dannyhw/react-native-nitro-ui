@@ -111,11 +111,29 @@ protocol NitroUiTextControl: UIView {
   var nuiModel: TextFieldModel { get }
   /// Put the caret at a UTF-16 offset, after a partial insertion was applied here.
   func nuiSetCaret(at utf16Offset: Int)
+  /// The caret's UTF-16 offset in the text; the start of a selection. `-1` when the control has
+  /// no selection to read.
+  var nuiCaret: Int { get }
+  /// Whether the keyboard attached here is told that suggestions and autocorrections are
+  /// available. iOS hands a keyboard its `autocorrectionType` trait, so the trait is the answer.
+  var nuiSuggestionsOffered: Bool { get }
   /// Report that the user changed the text (each control's own edit signal).
   func nuiReportEdit()
 }
 
 extension NitroUiTextControl {
+  /// Both controls are `UITextInput`s, and both keep their caret in the selection.
+  var nuiCaret: Int {
+    guard let input = self as? UITextInput, let selection = input.selectedTextRange else {
+      return -1
+    }
+    return input.offset(from: input.beginningOfDocument, to: selection.start)
+  }
+
+  var nuiSuggestionsOffered: Bool {
+    (self as? UITextInputTraits)?.autocorrectionType != .no
+  }
+
   /// The body of both controls' "should change characters" delegate methods. Applies
   /// `maxLength` as React Native does: the inserted text is cut to what still fits, never
   /// the end of the field, and never inside a composed character.

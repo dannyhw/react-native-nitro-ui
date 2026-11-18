@@ -89,6 +89,18 @@ export interface NitroUiTextFieldTestState {
   placeholder: string;
   /** `''` for none. */
   accessibilityLabel: string;
+  /**
+   * The caret's UTF-16 offset in `text`; a selection reports its start. `-1` when there is
+   * nothing to read.
+   */
+  caret: number;
+  /**
+   * What the keyboard in use is told about suggestions and autocorrections: `'offered'` or
+   * `'refused'`. iOS reads the field's own autocorrection trait. Android reads the
+   * `EditorInfo` a focused field hands the IME, answers `'pending'` until that has been read,
+   * and reports what the props ask for while no keyboard is up.
+   */
+  suggestions: string;
 }
 
 export interface NitroUiTextFieldMethods extends HybridViewMethods {
