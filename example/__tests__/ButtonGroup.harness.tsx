@@ -1058,8 +1058,11 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
    * style families are tens of points apart. */
   const SAME_DRAWING = 6;
 
-  /** The smallest tint share a label drawn in the group's colour reaches. A grey label, which is
-   * what a disabled item is drawn in, measures none of it. */
+  /** How far a drawn item sits from a grey one. A grey label, which is what a disabled item is
+   * drawn in, measures none of its ink in the group's colour; a label in the group's colour
+   * measures most of it. Measured on the ink and not on the box because the roles compared here
+   * are not always drawn in boxes of one size: a `text` group holding a toggle is measured at the
+   * height of a capsule while its toggle draws a label alone. */
   const TINT_SEEN = 3;
 
   function sameDrawing(a: Drawing, b: Drawing): boolean {
@@ -1067,6 +1070,14 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
       Math.abs(a.fill - b.fill) <= SAME_DRAWING &&
       Math.abs(a.tint - b.tint) <= SAME_DRAWING
     );
+  }
+
+  /** The share of what an item draws that is the group's colour. `fill` and `tint` are both
+   * shares of the same sampled box, so their ratio says the same thing whatever size that box is. */
+  function tintOfInk(drawing: Drawing): number {
+    return drawing.fill === 0
+      ? 0
+      : Math.round((drawing.tint * 100) / drawing.fill);
   }
 
   it('draws an unchecked toggle in the group tint, one step below the checked one', async () => {
@@ -1110,11 +1121,11 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
     for (const variant of VARIANTS) {
       const { action, on, off, disabled, disabledAction } = read[variant]!;
 
-      // Unchecked is never grey: the box carries the group's own colour.
-      if (off.tint < TINT_SEEN) {
+      // Unchecked is never grey: what it draws is the group's own colour.
+      if (tintOfInk(off) < TINT_SEEN) {
         throw new Error(
-          `an unchecked "${variant}" toggle drew only ${off.tint}% of its box in ` +
-            `the group's tint, so it reads as a disabled item rather than as an ` +
+          `an unchecked "${variant}" toggle drew only ${tintOfInk(off)}% of the ink it ` +
+            `draws in the group's tint, so it reads as a disabled item rather than as an ` +
             `unchecked one. ${seen}`
         );
       }
@@ -1141,10 +1152,11 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
       // In the group's own colour as well: against a capsule the fill on its own is the drawing
       // of any capsule, so a checked item that had lost the group's colour would still match the
       // item it is measured against.
-      if (on.tint < TINT_SEEN) {
+      if (tintOfInk(on) < TINT_SEEN) {
         throw new Error(
-          `a checked "${variant}" toggle drew only ${on.tint}% of its box in the group's ` +
-            `tint, so a checked item of any colour would match ${JSON.stringify(onIs)}. ${seen}`
+          `a checked "${variant}" toggle drew only ${tintOfInk(on)}% of the ink it draws in ` +
+            `the group's tint, so a checked item of any colour would match ` +
+            `${JSON.stringify(onIs)}. ${seen}`
         );
       }
       if (sameDrawing(on, off)) {
@@ -1156,13 +1168,13 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
       // A disabled item is the grey an unchecked item is not, and an unchecked item sits apart
       // from either of them by more than the read's noise: a toggle drawn in a disabled item's
       // colour is one no user can tell from a control that does nothing.
-      if (off.tint <= disabled.tint + TINT_SEEN) {
+      if (tintOfInk(off) <= tintOfInk(disabled) + TINT_SEEN) {
         throw new Error(
           `an unchecked "${variant}" toggle (${JSON.stringify(off)}) draws like the ` +
             `disabled toggle beside it (${JSON.stringify(disabled)}). ${seen}`
         );
       }
-      if (off.tint <= disabledAction.tint + TINT_SEEN) {
+      if (tintOfInk(off) <= tintOfInk(disabledAction) + TINT_SEEN) {
         throw new Error(
           `an unchecked "${variant}" toggle (${JSON.stringify(off)}) draws like the disabled ` +
             `action item beside it (${JSON.stringify(disabledAction)}). ${seen}`
