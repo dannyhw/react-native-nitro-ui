@@ -597,21 +597,20 @@ describe('TextField', () => {
       render(<Controlled id="cut-caret" initial="ab  cd" maxLength={8} />);
       await waitForTestId('cut-caret');
       await focusField('cut-caret');
-      // The paste is the seam that moves the caret: one code unit, which still fits,
-      // dropped between the two spaces.
-      (await handleOf('cut-caret')).nuiTestPaste('x', 3);
-      const pasted = await stateWhen(
+      // The paste hook doubles as the seam that moves the caret: asked to paste nothing it
+      // only puts the caret between the two spaces, so UIKit's smart insert of a real paste
+      // gets no say about the text the cut is then made in.
+      (await handleOf('cut-caret')).nuiTestPaste('', 3);
+      const positioned = await stateWhen(
         'cut-caret',
-        (s) =>
-          codeUnits(s.text) === codeUnits('ab x cd') &&
-          s.jsEvents === s.nativeEvents,
-        'the paste'
+        (s) => s.caret === 3 && codeUnits(s.text) === codeUnits('ab  cd'),
+        'the caret between the two spaces'
       );
-      expect(pasted.caret).toBe(4);
+      expect(positioned.nativeEvents).toBe(0);
 
-      // Three code units committed where one fits. The backstop keeps `y`, and the caret
+      // Three code units committed where one fits. The backstop keeps `xy`, and the caret
       // stays behind what it kept rather than going to the end of the field.
-      await compose('cut-caret', 'yz');
+      await compose('cut-caret', 'xyz');
       await finishComposition('cut-caret');
       const cut = await stateWhen(
         'cut-caret',
