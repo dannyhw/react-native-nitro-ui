@@ -183,6 +183,16 @@ export function deviceOperations({
   const simctlBin = env.NITRO_UI_SIMCTL_BIN || 'xcrun';
 
   /**
+   * The working directory of every emulator and adb call. An emulator, and an adb server an
+   * adb call forks, outlive the command and keep their working directory for days: started
+   * from a worktree, they keep its files on disk after the worktree is removed.
+   */
+  function workDir() {
+    mkdirSync(home, { recursive: true });
+    return home;
+  }
+
+  /**
    * Runs `adb` on the adb server that owns the device. Each pair has a private server, and a
    * server only lists the devices registered with it, so the port comes from the pair's
    * `adbPort`, not from the caller's shell.
@@ -195,7 +205,7 @@ export function deviceOperations({
     return spawnSync(
       adbBin,
       serverPort ? ['-P', String(serverPort), ...args] : args,
-      { encoding: 'utf8', timeout: 120_000 }
+      { encoding: 'utf8', timeout: 120_000, cwd: workDir() }
     );
   }
 
@@ -382,6 +392,7 @@ export function deviceOperations({
           detached: true,
           stdio: ['ignore', fd, fd],
           env: launchEnv,
+          cwd: workDir(),
         });
         child.unref();
         closeSync(fd);

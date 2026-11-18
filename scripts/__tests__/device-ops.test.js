@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -24,6 +25,7 @@ const STUB = (kind) =>
     'here=$(dirname "$0")',
     'answer() { cat "$here/../answers/$1" 2>/dev/null; }',
     'status() { cat "$here/../answers/$1.status" 2>/dev/null || printf 0; }',
+    ...(kind === 'adb' ? ['pwd -P > "$here/../answers/adb.cwd"'] : []),
     'case "$*" in',
     kind === 'adb'
       ? [
@@ -46,6 +48,7 @@ const EMULATOR_STUB = [
   'here=$(dirname "$0")',
   'printf %s "$*" > "$here/../answers/emu.argv"',
   'printf %s "${ANDROID_ADB_SERVER_PORT-none}" > "$here/../answers/emu.adb_server"',
+  'pwd -P > "$here/../answers/emu.cwd"',
   'exit 0',
   '',
 ].join('\n');
@@ -232,6 +235,27 @@ describe('what an emulator is started with', () => {
     expect(result).toBe(true);
     expect(await recorded('emu.adb_server')).toBe('5043');
     expect(await recorded('emu.argv')).toContain('-port 5574');
+  });
+
+  it('starts the emulator and adb in the pool state directory, not the caller\'s', async () => {
+    // A state directory apart from the stubs, not created yet, and not this test's own
+    // working directory (the checkout): an emulator keeps the directory it started in.
+    const state = join(home, 'state');
+    const opsIn = deviceOperations({
+      home: state,
+      env: {
+        NITRO_UI_ADB_BIN: join(home, 'bin/adb'),
+        NITRO_UI_SIMCTL_BIN: join(home, 'bin/xcrun'),
+        EMULATOR_BIN: join(home, 'bin/emulator'),
+      },
+    });
+    expect(process.cwd()).not.toBe(realpathSync(home));
+    await opsIn.bootEmulator({ avd: 'nitro-ui-a', port: 5574, adbPort: 5043 });
+    expect((await recorded('emu.cwd')).trim()).toBe(realpathSync(state));
+    opsIn.attachedSerialsResult(5043);
+    expect(readIf(join(home, 'answers', 'adb.cwd'))?.trim()).toBe(
+      realpathSync(state)
+    );
   });
 
   it('leaves the server alone when the pair names none', async () => {

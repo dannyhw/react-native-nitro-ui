@@ -549,6 +549,9 @@ node scripts/lease.mjs release <ID>                     # devices stay up, on pu
   `node scripts/real-input/*.mjs --control …` and `build-app.mjs`. Their protection is the
   lease, because a leased pair is never reaped. To run a device command, take a lease.
 - A claim is a pid. A reap treats the claim of a gate that was killed as no claim.
+- An emulator the pool boots, and an adb server one of its `adb` calls starts, run in the
+  lease state directory (`~/.nitro-ui`), never in the caller's worktree: they outlive the
+  command, and a process whose working directory is a removed worktree keeps its files on disk.
 - Nothing opens Simulator.app: a pooled simulator is booted with `simctl boot` and stays
   headless. On Xcode 27 the app boots a default device no lease handed out. Open it by hand to
   watch one.
