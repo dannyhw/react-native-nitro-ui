@@ -240,8 +240,8 @@ function colourDistance(a: string, b: string): number {
 
 /** How far a colour's widest channel sits above its narrowest: how coloured it is. */
 function chroma(colour: string): number {
-  const [lowest, highest] = channels(colour).sort((a, b) => a - b);
-  return (highest ?? 0) - (lowest ?? 0);
+  const sorted = channels(colour).sort((a, b) => a - b);
+  return (sorted[2] ?? 0) - (sorted[0] ?? 0);
 }
 
 /** The red, green and blue of a `#RRGGBB` colour. */
@@ -1303,12 +1303,13 @@ describe('Chip · the selected fill in every state (G12)', () => {
   /** One label for every chip, so only the paint can tell two of them apart. */
   const LABEL = 'Filters';
 
-  /** The smallest separation asked for, in channel sums. Well above what one label's ink
-   *  moves the mean by, and well below the gap between two of the chip's own fills. */
-  const SEPARATION = 60;
-
   /** What two chips of one drawing may sit apart - the noise floor of the read itself. */
-  const NOISE = 10;
+  const NOISE = 8;
+
+  /** How much of the enabled chip's own separation a disabled one has to keep. iOS draws
+   *  a bordered selection pale, so every claim here is measured against the enabled pair
+   *  in the same run rather than against a colour this file could not know in advance. */
+  const KEPT = 3;
 
   type Spec = { testId: string; selected: boolean; disabled?: boolean };
 
@@ -1394,48 +1395,56 @@ describe('Chip · the selected fill in every state (G12)', () => {
         `disabledOn=${dimOn} disabledOff=${dimOff}`;
       console.log(`chip iOS fill: ${seen}`);
 
+      const noise = colourDistance(on, twin);
       expect(
-        colourDistance(on, twin) < NOISE,
-        `two chips mounted the same way read ${on} and ${twin}, ` +
-          `${colourDistance(on, twin)} apart: the read is too unsteady to separate ` +
-          `anything. ${seen}`
+        noise <= NOISE,
+        `two chips mounted the same way read ${on} and ${twin}, ${noise} apart: ` +
+          `the read is too unsteady to separate anything. ${seen}`
       ).toBe(true);
 
-      // The control on the read: an enabled chip says "selected" with its fill.
+      // The yardstick: an enabled chip says "selected" with its fill, in pale colour.
+      const enabled = colourDistance(on, off);
       expect(
-        colourDistance(on, off) > SEPARATION,
-        `the read cannot tell an enabled selected chip (${
-          on
-        }) from an unselected one (${off}) - ${seen}`
+        enabled > KEPT * NOISE,
+        `the read cannot tell an enabled selected chip (${on}) from an unselected ` +
+          `one (${off}) - only ${enabled} apart. ${seen}`
       ).toBe(true);
+      const kept = Math.max(NOISE + 2, Math.round(enabled / KEPT));
+      const keptColour = Math.max(
+        3,
+        Math.round((chroma(on) - chroma(off)) / KEPT)
+      );
+      console.log(
+        `chip iOS yardstick: enabled=${enabled} colour=${chroma(on) - chroma(off)} ` +
+          `so a disabled chip must keep ${kept} and ${keptColour}`
+      );
 
       // The bug: once disabled, the same two chips drew one fill.
       expect(
-        colourDistance(dimOn, dimOff) > SEPARATION,
-        `a disabled chip paints ${dimOn} selected and ${
-          dimOff
-        } unselected, ${colourDistance(
-          dimOn,
-          dimOff
-        )} apart: the selection does not reach the screen once the chip is ` +
-          `disabled. ${seen}`
+        colourDistance(dimOn, dimOff) >= kept,
+        `a disabled chip paints ${dimOn} selected and ${dimOff} unselected, only ` +
+          `${colourDistance(dimOn, dimOff)} apart against an enabled pair ${enabled} ` +
+          `apart: the selection does not reach the screen once the chip is disabled. ` +
+          `${seen}`
       ).toBe(true);
 
       // Dimmed, not enabled: the selected container survives at reduced strength.
       expect(
-        colourDistance(dimOn, on) > SEPARATION / 2,
-        `a disabled selected chip paints ${dimOn}, the same as the enabled ` +
-          `${on}: a disabled chip now looks like an enabled one. ${seen}`
+        colourDistance(dimOn, on) >= kept,
+        `a disabled selected chip paints ${dimOn}, the enabled one ${on}: ${colourDistance(
+          dimOn,
+          on
+        )} apart, inside the ${kept} a dimmed chip has to stay within. ${seen}`
       ).toBe(true);
 
-      // And what separates them is the selected colour, not any difference at all.
+      // And what separates the disabled pair is the selected colour, dimmed.
       expect(
-        chroma(dimOn) - chroma(dimOff) > 30,
-        `the disabled pair differs, but not in the selected colour: ${
-          dimOn
-        } carries ${chroma(dimOn)} of colour and ${
-          dimOff
-        } carries ${chroma(dimOff)}. ${seen}`
+        chroma(dimOn) - chroma(dimOff) >= keptColour &&
+          chroma(dimOn) <= chroma(on),
+        `the disabled pair differs, but not in a dimmed selected colour: ${dimOn} ` +
+          `carries ${chroma(dimOn)} of colour against ${dimOff}'s ${chroma(
+            dimOff
+          )}, and the enabled selected chip carries ${chroma(on)}. ${seen}`
       ).toBe(true);
     }
   );
