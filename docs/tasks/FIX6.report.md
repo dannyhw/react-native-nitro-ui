@@ -11,6 +11,9 @@ touch whose point belongs to a hosted nitro-ui control: it hit-tests its own chi
 `ACTION_DOWN` and takes the tag every view manager puts on a hybrid view's root
 (`associated_hybrid_view_tag`) as the sign that the touch is a control's. A tap beside the
 control still presses the row, and the row answers again after its content has answered.
+That tag rule did not survive review: fix round 1 replaced it with the host a control draws
+itself in, and ran the iOS cases this round left unrun — **Fix round 1** says what the branch
+does now.
 
 Two decisions a reviewer needs. The rule is drawn around *hosted* controls, not around "a
 child consumed the touch": `ReactViewGroup.onTouchEvent` returns `true` for every React
@@ -36,7 +39,7 @@ press proof is owed and is not claimed here.
 ## Gates
 
 Round one's rows are not repeated here. The report prints one table, regenerated for this
-branch's final tree, under **Gates** in `## Fix round 1`: a second row for a gate would read
+branch's final tree, under **Gates** in `## Fix round 2`: a second row for a gate would read
 as a second run of it, and the ledger has one.
 
 `need --for review` on round one's tree: satisfied; it asks the same three gates as the final tree.
@@ -109,91 +112,50 @@ as a second run of it, and the ledger has one.
 
 ## Fix round 1
 
-Android draws the line where iOS draws it: `hostedControlAt` asks whether the view under the touch
-is a `NitroComposeHost` — the Compose host every control draws itself in — rather than trusting
-`associated_hybrid_view_tag`, which every view manager stamps on its root and a `ContextMenu`
-wrapper carries too. A `ContextMenu` around a `Text` in a pressing row is measured on both
-platforms: one press for the row, the menu shut. The Android opt-out case parks its field with
-`revealLowInPage` and asserts the keys cover where it was parked, so the offset half can fail; the
-field is read before its list is travelled, as its comment says. `form.md` says a `Progress` takes
-a row's tap as a `Switch` does, a wrapper of your children does not.
+Android draws the line where iOS draws it: `hostedControlAt` asks whether the view under the
+touch is a `NitroComposeHost` — the Compose host a control draws itself in — and not the
+`associated_hybrid_view_tag` every view manager stamps on its root, which a `ContextMenu`
+wrapper carries too. A `ContextMenu` around a `Text` was measured on both platforms: one
+press for the row, the menu shut.
 
-iOS had no working rule to review: measured with round one's check in place, a real tap on the
-switch still pressed the row. The row now declines a press in `gestureRecognizer(_:shouldReceive:)`,
-where UIKit names the touch. Two of the new XCUITest cases could not pass as written: the row's own
-tap landed on the pressable, and the opt-out field rests below the band a scroll-into-view aims at.
-Round one's owed iOS proofs are answered below.
+iOS had no working rule: with round one's check in place, a real tap on the switch still
+pressed the row. The row now declines the press in `gestureRecognizer(_:shouldReceive:)`,
+asked at the touch itself; at the recognizer's location it measured red. Three cases could
+not pass as written: the row's own tap landed on its pressable, and the opt-out field was
+parked where a wrong scroll would have left it (Android parks it with `revealLowInPage` now,
+iOS at its list's end). The Form's other keyboard, highlight, drag and a11y cases ran, and a
+`Pressable` inside a row moves both counters on iOS too.
 
 **Gates**
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2119 tests / 94 suites | `9de57f05a5ed` | 1 m 29 s | start 5.5 / med 5.5 / max 6.2 |
-| `harness:ios` | **PASS** | 601 tests / 30 suites + isolated 6 tests / 3 suites | `9de57f05a5ed` (harness:ios digest) | 14 m 16 s | start 7.1 / med 5.8 / max 28.1 |
-| `harness:android` | **PASS** | 659 tests / 31 suites + isolated 6 tests / 3 suites | `9de57f05a5ed` (harness:android digest) | 18 m 02 s | start 7.1 / med 4.3 / max 28.1 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
-| `real-input:android:--control:form` | **PASS** | — | `9de57f05a5ed` (real-input:android digest) | 13 m 54 s | start 1.9 / med 3.9 / max 9.2 |
-| `real-input:ios:--a11y:form` | **PASS** | — | `9de57f05a5ed` (real-input:ios digest) | 1 m 15 s | start 4.3 / med 4.2 / max 5.0 |
-| `real-input:ios:--control:form` | **PASS** | — | `9de57f05a5ed` (real-input:ios digest) | 6 m 37 s | start 4.3 / med 6.7 / max 36.8 |
+Round one's table is replaced by the one under **Gates** in `## Fix round 2`; the ledger
+keeps every run.
 
 **New red proofs**
 
-- `form.e2e.ts` "a tap on a nitro-ui wrapper of React Native content inside a pressing row
-  is the row’s" -> `HybridNitroUiFormRow.hostedControlAt` climbing the parents on
-  `associated_hybrid_view_tag` again (what the round-1 tree did) ->
+- `form.e2e.ts` "a tap on a nitro-ui wrapper of React Native content inside a pressing row is
+  the row's" -> `HybridNitroUiFormRow.hostedControlAt` climbing the parents on
+  `associated_hybrid_view_tag` again (what round one's tree did) ->
   `ASSERTION_FAILED: locator: getByTestId("form-row-context-presses") expected: text "1",
   observed: text "0" (match count 1)`.
-- the same run, "opting out of keyboard avoidance leaves the content and its offset alone"
-  -> `HybridNitroUiForm.revealFocusedRow` ignoring `avoidsKeyboardForIme`, so a Form that was
-  told to leave the keyboard alone still scrolled for it ->
-  `focusing the field left it 509 px from where it was parked (1954 px, now 1445 px) with
-  keyboard avoidance off: expected 509 to be less than or equal to 2` — the field's own
-  offset, the half round one's case could not fail on. Both mutations were in place for that
-  one run; the other six tests in it stayed green.
-- `RealInputTests.swift` "the row of a tap that belonged to its switch" -> the row's press given
-  every touch, `gestureRecognizerShouldBegin` answering `isPressable` with no
-  `gestureRecognizer(_:shouldReceive:)` to decline one (the body `main` has) ->
-  `the row of a tap that belonged to its switch: "form-row-switch-presses" should read "1"; it
-  reads "2"`.
+- the same run, "opting out of keyboard avoidance leaves the content and its offset alone" ->
+  `HybridNitroUiForm.revealFocusedRow` ignoring `avoidsKeyboardForIme`, so a Form told to
+  leave the keyboard alone still scrolled for it -> `focusing the field left it 509 px from
+  where it was parked […] expected 509 to be less than or equal to 2` — the field's own
+  offset, the half round one's case could not fail on. Both mutations stood for that one run;
+  its other six tests stayed green.
+- `RealInputTests.swift` "the row of a tap that belonged to its switch" -> the row's press
+  given every touch, with no `gestureRecognizer(_:shouldReceive:)` to decline one (the body
+  `main` has) -> `the row of a tap that belonged to its switch: "form-row-switch-presses"
+  should read "1"; it reads "2"`.
 - `RealInputTests.swift` "the note field with avoidance off" -> `HybridNitroUiForm.afterUpdate`
   adding its keyboard observers whatever `avoidsKeyboard` says ->
-  `XCTAssertLessThanOrEqual failed: ("287.33333333333337") is greater than ("2.0") — focusing the
-  field moved it from (52.0, 808.33, 316.0, 28.0) to (52.0, 521.00, 316.0, 28.0) with keyboard
-  avoidance off: the Form scrolled for a keyboard it was told to leave alone`. The case ran rather
-  than skipped: that run's own progress line read `keyboardWindow=true`, and the keyboard's top was
-  asked to stand over the parked field first.
-
-**What the iOS device round found (review items 1 to 6)**
-
-1. **Red proofs.** The old iOS code pressed the row: measured red at the line named above, both
-   with round one's check in `gestureRecognizerShouldBegin` and with the row answering every touch
-   as `main` does. iOS had no rule that worked before this round, and the case catches the
-   mutation.
-2. **Opt-out.** Measured on a host that shows a keyboard window, with the premise asserted, and
-   `avoidsKeyboard` ignored -> `287.3 pt` of scroll read against the field's own frame, so the case
-   measures the opt-out on iOS. It did not skip: a keyboard window was there
-   (`keyboardWindow=true`), and the case first asserts the keys stand over the spot it parked the
-   field in.
-3. **Element lookup inside a pressable row.** `form-row-switch-control` and
-   `form-row-inner-control` both resolved inside a pressable cell, and their taps moved their own
-   counters, so the inner elements are hittable and not swallowed by the row.
-4. **The hit walk.** Round one's walk, asked at `gestureRecognizerShouldBegin` from the
-   recognizer's own location, measured red; asked at the touch itself it is green, and red again
-   with the row answering every touch. So the point has to come from the touch, and the walk takes
-   any hosted control whose box holds it rather than only the topmost view under it.
-5. **The React Native `Pressable`.** Measured on iOS: one tap on the pressable moves both counters,
-   and the row's own tap, aimed 90% into the row, presses the row and leaves the pressable at one.
-   As written it tapped 5% in, where the pressable sits (its row has one child and
-   `space-between`), and read the pressable's press as the row's.
-6. **Neighbours.** The whole `testRealInputForm` is green with the taller echo bar and the two new
-   rows in the tree, as is `real-input:ios -- --a11y form`: the keyboard case, the row
-   highlight and drag cases and the Form's accessibility sweep all ran. Two things the round-one
-   cases had got wrong were found this way and fixed — the pressable's aim and the opt-out field's
-   park — and nothing else in the sweep moved.
+  `XCTAssertLessThanOrEqual failed: ("287.33333333333337") is greater than ("2.0") […] the
+  Form scrolled for a keyboard it was told to leave alone`. The case ran rather than skipped:
+  that run's own progress line read `keyboardWindow=true`.
 
 **Hygiene**
 
-This round ran on lease `FIX6-b3ym6` (`emulator-5570` + iPhone Air). One deviation was recorded: a
-filtered `real-input:android` run started while another lease showed `real-input:ios` in use; it
-used only this task's emulator and adb server port.
+Ran on lease `FIX6-b3ym6` (`emulator-5570` + iPhone Air). One deviation recorded: a filtered
+`real-input:android` run started while another lease showed `real-input:ios` in use; it used
+only this task's emulator and adb server port.

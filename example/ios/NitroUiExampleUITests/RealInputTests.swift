@@ -6054,9 +6054,9 @@ final class RealInputTests: XCTestCase {
       as: "the Form after a real tap turned its keyboard avoidance off"
     )
 
-    // The note field is the Form's last row on iOS, so its park is the list's end, which sits
-    // below the band `scrollIntoView` aims at. The list realises a row only while it draws it,
-    // so the field is not in the tree until the list has been scrolled to it.
+    // The field is the Form's last row, so the list's end is its park, and the end sits below
+    // the band `scrollIntoView` aims at: a Form that scrolled for the keyboard would move it
+    // from there. The list realises a row only while it draws it, so the list travels first.
     let identifier = "form-note-field"
     let field = app.descendants(matching: .any)[identifier].firstMatch
     var realised = false

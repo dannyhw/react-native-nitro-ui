@@ -300,8 +300,8 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     _ gestureRecognizer: UIGestureRecognizer,
     shouldReceive touch: UITouch
   ) -> Bool {
-    // Only the row's own press is the row's to give up. UIKit asks this of the cell as delegate
-    // of recognizers that are not this one, and they get the answer UIKit expects.
+    // UIKit asks this of the cell for the recognizers it owns as a cell, too. Declining one of
+    // those would take the cell's own behaviour, so only this row's press is the row's to give.
     guard gestureRecognizer === pressGesture else { return true }
     // A touch that lands on a hosted control inside the row is that control's, and the row
     // leaves it: the recognizer is never given the touch, so nothing is cancelled for the
@@ -314,8 +314,8 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     holdsHostedControl(container, at: point)
   }
 
-  /// Whether `view` is a hosted control, or holds one whose box covers `point`, given in `view`
-  ///'s coordinates.
+  /// Whether `view` holds a hosted control whose box covers `point`, given in the coordinates
+  /// of `view`.
   ///
   /// Geometric rather than `hitTest`: a React Native subtree reports no touch owner until the
   /// release, so a hosted view's box is the only sign available while the touch is still down.
