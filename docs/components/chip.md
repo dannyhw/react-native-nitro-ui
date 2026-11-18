@@ -79,7 +79,7 @@ app API.
 | Filter   | `Toggle(isOn:) { label }.toggleStyle(.button)`                                    | `androidx.compose.material3.FilterChip`                                                  |
 | Assist   | `Button(action:) { label }`                                                       | `androidx.compose.material3.AssistChip`                                                  |
 | Shape    | `.buttonStyle(.bordered)`, `.buttonBorderShape(.capsule)`, `.controlSize(.small)` | M3 chip shape, 32 dp tall in a 48 dp touch target                                        |
-| Selected | the bordered style's selected fill                                                | M3 selected container plus a leading check mark                                          |
+| Selected | the bordered style's selected fill, a fifth of it on a disabled chip               | M3 selected container plus a leading check mark                                          |
 | Icon     | `systemImage` as a leading SF Symbol                                              | `androidIcon` in `FilterChipDefaults.IconSize`, or the selected filter chip's check mark |
 | Value    | `NitroUiControlledValue<Bool>` on `ChipModel`                                     | `NitroUiControlledValue<Boolean>` on `ChipModel`                                         |
 | Label    | `.accessibilityLabel(_:)` on the control                                          | `Modifier.semantics { contentDescription }` on the chip                                  |
@@ -159,14 +159,16 @@ tested by real input (`RealInputTests.testRealInputChip`).
   reused instance resets its model, the handshake's counters included, and
   re-seeds `defaultSelected`.
 
+- **A disabled selected chip keeps its fill.** SwiftUI's disabled bordered style
+  drops a toggle's selected fill, so the chip lays that tint back over the
+  control at a fifth of its strength: dimmed, and still one of the chosen ones.
+  Android does this on its own.
+
 ## Limits
 
 - Two kinds only. Material's `input` and `suggestion` chips are not supported, and
   there is no trailing icon, avatar or close button.
 - No `tintColor`. Both platforms draw their own selected colours.
-- On iOS a disabled chip draws the same whether or not it is selected:
-  SwiftUI's disabled bordered style drops the selected fill (the "Disabled" row
-  of the README screenshot).
 - `systemImage` is iOS only, like Button's. Android does not draw it — and `androidIcon`
   is Android-only, so a chip that wants a leading glyph on both platforms names both.
 - **No check mark slide-in on Android.** Material 3 animates the check mark's
