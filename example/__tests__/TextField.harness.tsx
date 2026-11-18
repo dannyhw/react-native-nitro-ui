@@ -672,7 +672,9 @@ describe('TextField', () => {
   itComposes(
     'leaves the caret at the end when the cut is at the end',
     async () => {
-      render(<Controlled id="cut-tail" initial="abcd" maxLength={5} />);
+      const { rerender } = render(
+        <Controlled id="cut-tail" initial="abcd" maxLength={5} />
+      );
       await waitForTestId('cut-tail');
       await focusField('cut-tail');
       await compose('cut-tail', 'xyz');
@@ -684,6 +686,112 @@ describe('TextField', () => {
       );
       expect(cut.caret).toBe(cut.text.length);
       expect(jsValues.get('cut-tail')).toBe('abcdx');
+
+      /*
+       * Nothing is owed at the end of the text: there is no later offset for UIKit's own
+       * insertion point to arrive at, so a cut there never owns the caret. Raising
+       * `maxLength` and carrying on typing puts the keys after the `x`.
+       */
+      await rerender(
+        <Controlled id="cut-tail" initial="abcd" maxLength={10} />
+      );
+      await stateWhen(
+        'cut-tail',
+        (s) => s.maxLength === 10,
+        'the field to take the longer limit'
+      );
+      const tail = await handleOf('cut-tail');
+      await typeText('qr');
+      await waitFor(() => expect(tail.nuiTestState().text).toBe('abcdxqr'), {
+        timeout: 5000,
+      });
+      const typed = tail.nuiTestState();
+      expect(typed.caret).toBe(7);
+      expect(jsValues.get('cut-tail')).toBe('abcdxqr');
+    }
+  );
+
+  /*
+   * iOS only: a mid-field cut owns the caret only while UIKit ends the commit that cut was made
+   * in. Losing and regaining focus is not UIKit ending it, so the caret chosen after refocusing
+   * stays where it was put.
+   */
+  itComposes(
+    'ends a mid-field cut claim on the caret when the field loses focus',
+    async () => {
+      render(<Controlled id="cut-blur" initial="ab   cd" maxLength={8} />);
+      await waitForTestId('cut-blur');
+      await focusField('cut-blur');
+      (await handleOf('cut-blur')).nuiTestPaste('', 3);
+      await stateWhen(
+        'cut-blur',
+        (s) => s.caret === 3 && codeUnits(s.text) === codeUnits('ab   cd'),
+        'the caret in the middle of the field'
+      );
+
+      // One unit of a three-unit commit fits: the caret ends at 4, and the cut covers the
+      // offsets up to 6 - the ones UIKit's late insertion point can land on.
+      await compose('cut-blur', 'xyz');
+      await finishComposition('cut-blur');
+      const cut = await stateWhen(
+        'cut-blur',
+        (s) =>
+          codeUnits(s.text) === codeUnits('ab x  cd') &&
+          s.jsEvents === s.nativeEvents,
+        'the cut commit'
+      );
+      expect(cut.caret).toBe(4);
+
+      (await handleOf('cut-blur')).blur();
+      await stateWhen('cut-blur', (s) => !s.focused, 'the blur');
+      await focusField('cut-blur');
+      await sleep(200);
+      const refocused = (await handleOf('cut-blur')).nuiTestState();
+      console.log(`cut-blur: caret ${refocused.caret} after refocusing`);
+
+      // The person puts the caret between the two spaces and types. The field is at its
+      // limit, so the key is refused: what is read is the offset it was refused at.
+      (await handleOf('cut-blur')).nuiTestPaste('', 5);
+      await sleep(200);
+      await typeText('q');
+      await sleep(200);
+      const after = (await handleOf('cut-blur')).nuiTestState();
+      expect(after.caret).toBe(5);
+      expect(codeUnits(after.text)).toBe(codeUnits('ab x  cd'));
+    }
+  );
+
+  /*
+   * iOS only: text that repeats the committed characters says nothing about where the
+   * composition was - `aa` committed at offset 1 of `aaaa` compares like `aa` appended at the
+   * end. The caret comes from what UIKit reports, not from the difference between the texts.
+   */
+  itComposes(
+    'puts the caret after a composition that repeats the text around it',
+    async () => {
+      render(<Controlled id="cut-repeat" initial="aaaa" maxLength={5} />);
+      await waitForTestId('cut-repeat');
+      await focusField('cut-repeat');
+      (await handleOf('cut-repeat')).nuiTestPaste('', 1);
+      await stateWhen(
+        'cut-repeat',
+        (s) => s.caret === 1 && codeUnits(s.text) === codeUnits('aaaa'),
+        'the caret after the first `a`'
+      );
+
+      // Two units committed where one fits, in text that is all `a`: the kept text is
+      // `aaaaa` whichever way the edit is read, and the caret is 2 or the end.
+      await compose('cut-repeat', 'aa');
+      await finishComposition('cut-repeat');
+      const cut = await stateWhen(
+        'cut-repeat',
+        (s) =>
+          codeUnits(s.text) === codeUnits('aaaaa') &&
+          s.jsEvents === s.nativeEvents,
+        'the cut commit'
+      );
+      expect(cut.caret).toBe(2);
+      expect(jsValues.get('cut-repeat')).toBe('aaaaa');
     }
   );
 
