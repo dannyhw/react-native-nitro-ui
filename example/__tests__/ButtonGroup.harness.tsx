@@ -1138,25 +1138,41 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
             `${JSON.stringify(onIs)}. ${seen}`
         );
       }
+      // In the group's own colour as well: against a capsule the fill on its own is the drawing
+      // of any capsule, so a checked item that had lost the group's colour would still match the
+      // item it is measured against.
+      if (on.tint < TINT_SEEN) {
+        throw new Error(
+          `a checked "${variant}" toggle drew only ${on.tint}% of its box in the group's ` +
+            `tint, so a checked item of any colour would match ${JSON.stringify(onIs)}. ${seen}`
+        );
+      }
       if (sameDrawing(on, off)) {
         throw new Error(
           `a "${variant}" toggle draws the same thing checked (${JSON.stringify(on)}) ` +
             `and unchecked (${JSON.stringify(off)}). ${seen}`
         );
       }
-      // A disabled item is the grey an unchecked item is not: no tint in it, in either role, and
-      // the unchecked item is apart from it by more than the read's noise.
+      // A disabled item is the grey an unchecked item is not, and an unchecked item sits apart
+      // from either of them by more than the read's noise: a toggle drawn in a disabled item's
+      // colour is one no user can tell from a control that does nothing.
+      if (off.tint <= disabled.tint + TINT_SEEN) {
+        throw new Error(
+          `an unchecked "${variant}" toggle (${JSON.stringify(off)}) draws like the ` +
+            `disabled toggle beside it (${JSON.stringify(disabled)}). ${seen}`
+        );
+      }
+      if (off.tint <= disabledAction.tint + TINT_SEEN) {
+        throw new Error(
+          `an unchecked "${variant}" toggle (${JSON.stringify(off)}) draws like the disabled ` +
+            `action item beside it (${JSON.stringify(disabledAction)}). ${seen}`
+        );
+      }
       if (disabled.tint > SAME_DRAWING || disabledAction.tint > SAME_DRAWING) {
         throw new Error(
           `"${variant}" drew a disabled item in the group's tint (toggle ` +
             `${disabled.tint}%, action ${disabledAction.tint}%), so the read no longer ` +
             `tells a disabled item from an unchecked one. ${seen}`
-        );
-      }
-      if (off.tint <= disabled.tint + TINT_SEEN) {
-        throw new Error(
-          `an unchecked "${variant}" toggle (${JSON.stringify(off)}) draws like the ` +
-            `disabled item beside it (${JSON.stringify(disabled)}). ${seen}`
         );
       }
     }
