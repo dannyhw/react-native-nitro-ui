@@ -126,9 +126,9 @@ way.
 
 On iOS `variant` maps to the same `ButtonStyle` table as [Button](button.md): `filled` and
 `elevated` to `.borderedProminent`, `tonal` and `outlined` to `.bordered`, `text` to `.borderless`.
-Unlike `Button`, a group does not stroke a hairline for `outlined`. A toggle item starts from that
-same style and moves one step up in it while checked, always in `tintColor`: grey belongs to
-disabled items, and an unchecked toggle is not one.
+Unlike `Button`, a group does not stroke a hairline for `outlined`. A toggle item is drawn one
+step quieter while unchecked than while checked, always in `tintColor`: grey belongs to disabled
+items, and an unchecked toggle is not one.
 
 | `variant`       | iOS action item      | iOS toggle item, checked      | iOS toggle item, unchecked |
 | --------------- | -------------------- | ----------------------------- | -------------------------- |
@@ -211,7 +211,7 @@ Changing the label after mount updates the indicator on Android.
 | ----------------- | ------------------------------------------ | -------------------------------------------------------------- |
 | An action item    | "Copy, button"                             | "Copy, button"                                                 |
 | An icon-only item | still named by its `title`                 | `contentDescription` on the item, glyph itself silent          |
-| A toggle item     | `Toggle(…).toggleStyle(.button)`           | checkbox role with a checked state                             |
+| A toggle item     | a switch element with an on or off value   | checkbox role with a checked state                             |
 | The overflow      | `'More'` (or your label)                   | Material's own "More options", or your label, plus its tooltip |
 | The group         | one container holding one element per item | one traversal group, items still reachable inside it           |
 
