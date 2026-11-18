@@ -1,5 +1,5 @@
 **Branch:** `task/FIX8-text-field-caret-and-suggestions` (from `main` at `978ace33`) ·
-**Round:** 1 of up to 3 · **Lease:** `FIX8-94ulr` (iPhone Air sim + `emulator-5570` / Metro 8293, 9293)
+**Round:** 2 of up to 3 · **Lease:** `FIX8-jvjeb` (iPhone Air sim + `emulator-5570` / Metro 8293, 9293)
 
 ## Summary
 
@@ -11,7 +11,7 @@ middle of a full field therefore threw the caret to the end of the field. `Nitro
 now answers with the caret as well as the text: the offset just after the part of the edit that was
 kept. `userEdited` puts it there, an edit refused whole goes back where it was asked for, and an
 edit at the end still leaves the caret at the end. UIKit finishes a composition's own insertion
-after that and puts its own insertion point after the whole insertion, after the callback that
+after that and puts its own insertion point one past the part that was kept, after the callback that
 reported the edit, so a cut inside a commit owes its caret until `unmarkText()` has returned.
 The editing code is `TextField`'s and `SearchField`'s shared half, so a search field gets the
 caret too.
@@ -37,13 +37,13 @@ answered `autoCorrect: false` while the keyboard was sent nothing that closes it
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `0a836909f6d0` | 1 m 01 s | start 6.3 / med 6.7 / max 7.2 |
-| `harness:ios` | **PASS** | 605 tests / 30 suites + isolated 6 tests / 3 suites | `0a836909f6d0` (harness:ios digest) | 14 m 17 s | start 6.0 / med 4.8 / max 13.6 |
-| `harness:android` | **PASS** | 663 tests / 31 suites + isolated 6 tests / 3 suites | `0a836909f6d0` (harness:android digest) | 18 m 03 s | start 5.7 / med 4.8 / max 13.6 |
+| `check` | **PASS** | 2178 tests / 96 suites | `fc686ef2380c` | 1 m 04 s | start 4.8 / med 11.0 / max 13.0 |
+| `harness:ios` | **PASS** | 606 tests / 30 suites + isolated 6 tests / 3 suites | `fc686ef2380c` (harness:ios digest) | 14 m 26 s | start 13.9 / med 6.8 / max 58.3 |
+| `harness:android` | **PASS** | 664 tests / 31 suites + isolated 6 tests / 3 suites | `fc686ef2380c` (harness:android digest) | 18 m 03 s | start 35.4 / med 6.3 / max 58.3 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 | `harness:android:TextField.harness` | stale | 1 failed of 19 tests / 1 suites | 8b6089291151 (not this tree) | 30.3 s | start 8.2 / med 7.4 / max 8.2 |
-| `harness:ios:TextField.harness` | stale | 20 tests / 1 suites | 0e6fa83d373a (not this tree) | 28.1 s | start 3.8 / med 4.0 / max 4.5 |
+| `harness:ios:TextField.harness` | stale | 2 failed of 22 tests / 1 suites | 44ce8c873630 (not this tree) | 37.0 s | start 4.6 / med 4.8 / max 5.1 |
 
 ## Red proofs
 
@@ -115,3 +115,25 @@ the session restart is Android's, not a secure field's (N2); this file is rename
 the secure-field follow-up reads right (N6). N1, N3-N5 stay follow-ups.
 
 Gates: regenerated above.
+
+## Fix round 2
+
+**M3.** A cut claims only a caret inside the text: at the end of the kept text no later offset
+exists for UIKit's own insertion point, so nothing is owed there. An open claim now ends on a focus
+change, a `value` write, a `maxLength` change and the next edit, so it acts only on UIKit's late
+write of the commit it was opened for. The blur/refocus case was written and dropped: a late write,
+or a `-1` caret read at resign, already closes the claim there, so it cannot go red.
+
+- red proof, unfixed tree (`harness:ios`, filtered): `cut-tail` -> raise `maxLength`,
+  type `qr` -> `expected 'abcdxrq' to be 'abcdxqr'` (`TextField.harness.tsx:705`).
+
+**N1.** `NitroUiCommitDelta.edit` takes the marked range's start as the location, the shared prefix
+as a bound only, so a commit repeating the text around it puts the caret at the composition.
+`insertText` reports no location, so a cut there still reads the difference.
+
+- red proof: `puts the caret after a composition that repeats the text around it` ->
+  `expected 8 to be 6` (`TextField.harness.tsx:745`).
+
+**M4, N3.** "after the whole insertion" is now "one past the part that was kept" - changeset, docs,
+test comments, this report; the KDoc says a secure field's `autoCorrect` change restarts nothing.
+N2 stays a follow-up. Gates: the table above.
