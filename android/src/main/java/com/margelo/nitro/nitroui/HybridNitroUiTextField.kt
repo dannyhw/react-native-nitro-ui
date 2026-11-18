@@ -37,7 +37,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.PlatformTextInputInterceptor
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.ui.platform.PlatformTextInputSession
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -311,6 +315,23 @@ internal fun capitalizationOf(name: String): KeyboardCapitalization =
   }
 
 /**
+ * `autoCorrect={false}` as React Native sends it: `TYPE_TEXT_FLAG_NO_SUGGESTIONS`,
+ * which is the flag that stops a keyboard offering suggestions and corrections - leaving them out
+ * is not enough. The flag belongs to Android's text input class, where in another class it means
+ * something else, so a non-text `inputType` is returned as it came.
+ */
+internal fun nuiApplyAutoCorrect(inputType: Int, autoCorrect: Boolean): Int =
+  if (
+    autoCorrect ||
+      inputType and android.text.InputType.TYPE_MASK_CLASS !=
+        android.text.InputType.TYPE_CLASS_TEXT
+  ) {
+    inputType
+  } else {
+    inputType or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+  }
+
+/**
  * Decodes a configured keyboard back to React Native's names, for the test state. `numeric`
  * and `decimal-pad` both read back as `decimal-pad`: Compose has one keyboard for both.
  */
@@ -409,8 +430,32 @@ private class TextFieldHost(
 
   @Composable
   override fun Component(model: TextFieldModel) {
-    TextFieldContent(model)
+    InterceptPlatformTextInput(remember(model) { NitroUiAutoCorrectInterceptor(model) }) {
+      TextFieldContent(model)
+    }
   }
+}
+
+/**
+ * Compose reads `autoCorrectEnabled = false` as "send no `TYPE_TEXT_FLAG_AUTO_CORRECT`" and stops
+ * there, which leaves the keyboard offering suggestions. This decorates the request the field hands
+ * the IME, so the `EditorInfo` carries what [nuiApplyAutoCorrect] asks for as well.
+ *
+ * The flag is read from the model as the connection is built, so a change to `autoCorrect` needs no
+ * new interceptor - Compose restarts the input session on the changed options, and the same
+ * interceptor answers the new request.
+ */
+private class NitroUiAutoCorrectInterceptor(private val model: TextFieldModel) :
+  PlatformTextInputInterceptor {
+  override suspend fun interceptStartInputMethod(
+    request: PlatformTextInputMethodRequest,
+    nextHandler: PlatformTextInputSession,
+  ): Nothing =
+    nextHandler.startInputMethod { outAttributes ->
+      val connection = request.createInputConnection(outAttributes)
+      outAttributes.inputType = nuiApplyAutoCorrect(outAttributes.inputType, model.autoCorrect)
+      connection
+    }
 }
 
 @Composable
