@@ -2429,7 +2429,7 @@ final class RealInputTests: XCTestCase {
   /// arrive as. A container or a stray label that repeats the item's name is not one: a reader is
   /// not asked to do anything with it.
   private static let actionableItemTypes: Set<XCUIElement.ElementType> = [
-    .button, .imageButton, .cell, .link, .switch, .checkBox, .radioButton, .menuItem,
+    .button, .cell, .checkBox, .link, .menuItem, .radioButton, .switch, .toggle,
   ]
 
   /// The elements of one group that a reader can act on under one title. Two of them for one item
