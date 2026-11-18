@@ -1007,8 +1007,9 @@ describe('TextField', () => {
     console.log(`text field phone keyboard told: ${phone.suggestions}`);
     expect(phone.suggestions).toBe(iOS ? 'refused' : 'offered');
 
-    // A secure field with the default is told what it was told before this prop existed
-    // to be turned off: nothing about suggestions.
+    // A secure field with the default: iOS's own field takes corrections away whatever the prop
+    // says, Android's sends no suggestions flag of its own. Neither answer comes from
+    // `autoCorrect` - the flag this task adds is only sent when that prop is switched off.
     await rerender(<Keyboard secureTextEntry />);
     // A secure field is a different composable, so it may arrive without focus; asking
     // for it again is a no-op when it never went away.
@@ -1019,7 +1020,8 @@ describe('TextField', () => {
       'the secure field to be read back'
     );
     expect(secure.secure).toBe(true);
-    expect(secure.suggestions).toBe('offered');
+    console.log(`secure field told: ${secure.suggestions}`);
+    expect(secure.suggestions).toBe(iOS ? 'refused' : 'offered');
   });
 
   it('comes back from the pool with none of its previous owner', async () => {
