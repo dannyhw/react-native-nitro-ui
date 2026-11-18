@@ -150,6 +150,9 @@ struct ChipContent: NitroUIContent {
         label
       }
       .toggleStyle(.button)
+      .modifier(
+        ChipDisabledFill(selected: model.state.displayed, disabled: model.disabled)
+      )
     case .assist:
       Button(action: { model.press() }) { label }
     }
@@ -187,6 +190,29 @@ private struct ChipOptionalAccessibility: ViewModifier {
   }
 }
 
+/// SwiftUI's disabled bordered style drops a toggle's selected fill, so a disabled chip draws
+/// the same whether or not it is selected. A selected chip is a tinted container, so a dimmed
+/// one keeps that tint at a fraction of its strength, over the control and its label. The
+/// control itself is untouched: same size, same dimmed label, same accessibility.
+private struct ChipDisabledFill: ViewModifier {
+  let selected: Bool
+  let disabled: Bool
+
+  func body(content: Content) -> some View {
+    if selected && disabled {
+      // A fifth of the tint. `Color.accentColor.opacity(_:)` loses its colour in a UIKit
+      // host, so the shape carries the strength.
+      content.overlay {
+        Capsule()
+          .fill(Color.accentColor)
+          .opacity(0.2)
+          .allowsHitTesting(false)
+      }
+    } else {
+      content
+    }
+  }
+}
 
 final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
   private let host: NitroSwiftUIHost<ChipContent>
