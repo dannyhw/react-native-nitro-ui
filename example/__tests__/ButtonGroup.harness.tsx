@@ -894,7 +894,7 @@ describe('ButtonGroup · the overflow row glyphs (G21, Android)', () => {
   it('draws an overflowed item its glyph, and nothing for an item without one', async () => {
     if (Platform.OS === 'ios') return;
     poison([sizingKey('standard', 'filled', 'medium', 'automatic', ICONED)]);
-    const { rerender } = await render(
+    await render(
       <View style={WELL}>
         <ButtonGroup
           items={ICONED}
