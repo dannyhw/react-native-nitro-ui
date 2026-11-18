@@ -42,12 +42,15 @@ worktree and the two full harness gates.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `42beba59414a` | 1 m 11 s | start 6.3 / med 12.1 / max 15.5 |
-| `harness:ios` | **PASS** | 603 tests / 30 suites + isolated 6 tests / 3 suites | `42beba59414a` (harness:ios digest) | 14 m 26 s | start 9.4 / med 6.4 / max 15.3 |
-| `harness:android` | **PASS** | 661 tests / 31 suites + isolated 6 tests / 3 suites | `42beba59414a` (harness:android digest) | 18 m 21 s | start 6.1 / med 5.6 / max 14.6 |
+| `check` | **PASS** | 2178 tests / 96 suites | `788f1c731e92` | 1 m 10 s | start 5.3 / med 6.8 / max 7.9 |
+| `harness:ios` | **PASS** | 603 tests / 30 suites + isolated 6 tests / 3 suites | `788f1c731e92` (harness:ios digest) | 14 m 21 s | start 5.1 / med 5.1 / max 19.3 |
+| `harness:android` | **PASS** | 661 tests / 31 suites + isolated 6 tests / 3 suites | `788f1c731e92` (harness:android digest) | 18 m 01 s | start 5.4 / med 5.3 / max 20.2 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:ios:Chip` | **PASS** | 19 tests / 1 suites | `42beba59414a` (harness:ios digest) | 22.9 s | start 10.0 / med 8.8 / max 10.0 |
+| `harness:ios:--json:Chip` | **PASS** | 19 tests / 1 suites | `788f1c731e92` (harness:ios digest) | 21.8 s | start 4.5 / med 5.2 / max 5.4 |
+| `harness:ios:--silent%3Dfalse:Chip` | **PASS** | 19 tests / 1 suites | `788f1c731e92` (harness:ios digest) | 22.1 s | start 5.4 / med 5.4 / max 5.8 |
+| `harness:ios:--verbose:Chip` | **PASS** | 19 tests / 1 suites | `788f1c731e92` (harness:ios digest) | 21.9 s | start 4.8 / med 4.7 / max 4.8 |
+| `harness:ios:Chip` | **PASS** | 19 tests / 1 suites | `788f1c731e92` (harness:ios digest) | 23.4 s | start 4.0 / med 4.0 / max 5.0 |
 
 `need --for review`: need: review is satisfied on this code tree. The two `real-input` gates are
 left for merge, where `RealInputTests.testRealInputChip` re-checks the disabled chip's iOS role and
@@ -75,8 +78,25 @@ state.
 
 - ios: the sampler `nitroUiSampleChipDrawing` is now in `Chip` and `SegmentedControl`; it belongs in
   `ios/core` beside `NitroUiPixelProbe.kt`.
-- example: the iOS README Chip screenshot needs its documented retake — the "Disabled" row of
-  `docs/images/components/chip-ios.png` is stale as of this change.
 - example: `ListItem.harness.tsx` > `a fast press reverts: the row settles back, reports the new
   press count` went red once in an iOS run at load1 5.04 on a tree that touches no ListItem file;
-  the 14 m 26 s run above has it green.
+  the harness:ios run above has it green.
+
+## Fix round 1
+
+M1/M3: no accent over the disabled container. `ChipDisabledFill` lays the page's own fade
+(`systemBackground` 0.45) plus a little of the bordered style's tint (`.tint` 0.09) over the chip —
+lighter and paler than the enabled chip, never its disabled grey. N1: both capsules stay mounted and
+only opacity moves, so a chip that turns disabled keeps its view identity and VoiceOver focus. N2:
+`.tint`, not `Color.accentColor`. M2: `docs/components/chip.md`, the changeset and the Swift comment
+quote no strength the code lacks. M4: the README iOS image is retaken — Chip States story, light,
+804 px; its "Disabled" row fills `#dde9f5` against `#e9e9eb`. Four-state pair (light, dark) taken,
+uncommitted.
+
+The suite logs its colours; a green run prints none, so from a filtered run:
+`on=#C5E3FF twin=#C5E3FF off=#D9E3ED disabledOn=#DEE9F4 disabledOff=#E8E8E9` — 20 lighter, 36 paler,
+22 clear of `disabledOff`, bounds 13. Gate table: regenerated above.
+
+Red proof: `Chip.harness.tsx` > `paints a disabled selected chip apart from an unselected one, and
+dimmer than an enabled one` -> round one's Swift restored -> `the dimmed chip is -38 lighter and has to
+be at least 13 lighter` (`#BED6ED` vs `#C5E3FF`); also 11 paler where 13 is asked. N3-N6 stay follow-ups.
