@@ -44,7 +44,7 @@ import { ButtonGroup } from 'react-native-nitro-ui';
 | `items`                      | `ButtonGroupItem[]`                                          | —             | The row, in render order. `[]` draws nothing.                                                  |
 | `appearance`                 | `'standard' \| 'connected'`                                  | `'standard'`  | Connected corners, or a gap between each item.                                                 |
 | `variant`                    | `ButtonVariant`                                              | `'filled'`    | `Button`'s five variants. Ignored by iOS `connected`.                                          |
-| `size`                       | `'small' \| 'medium' \| 'large' \| …`                        | `'medium'`    | `Button`'s sizes. Ignored by iOS `connected`.                                                  |
+| `size`                       | `'small' \| 'medium' \| 'large' \| …`                        | `'medium'`    | `Button`'s sizes. Ignored by iOS `connected` (a group with a toggle: applied).                  |
 | `labelStyle`                 | `'automatic' \| 'titleOnly' \| 'iconOnly' \| 'titleAndIcon'` | `'automatic'` | What each item draws. See [the table](#what-each-platform-draws).                              |
 | `disabled`                   | `boolean`                                                    | `false`       | No item is reachable and no event fires.                                                       |
 | `tintColor`                  | `ColorValue`                                                 | platform      | The variant's container / SwiftUI `.tint()`. Ignored by iOS `connected`.                       |
@@ -108,7 +108,7 @@ tap.
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------- | ------------------------------ |
 | `appearance`  | 12 dp apart, each item its own corners · 2 dp joined         | an 8 pt row of bordered controls · `ControlGroup` |                                |
 | `variant`     | `NitroUiM3Button` / `NitroUiM3ToggleButton`, one per variant | `ButtonStyle` per variant, toggle or action item  | ignored (a group with a toggle: as `standard`) |
-| `size`        | `Button`'s sizes, floored at Material's 48 dp target         | `.controlSize`                                    | ignored (31 pt at every size)  |
+| `size`        | `Button`'s sizes, floored at Material's 48 dp target         | `.controlSize`                                    | ignored with no toggle (31 pt at every size); applied to a group with a toggle |
 | `tintColor`   | the variant's container, and the checked container           | `.tint()`, on every item, checked or not          | ignored (a group with a toggle: as `standard`) |
 | `labelStyle`  | icon and title; `automatic` = both                           | `automatic` = icon and title                      | `automatic` = icons only       |
 | `systemImage` | ignored                                                      | `Label`'s glyph                                   | `Label`'s glyph, usually alone |
