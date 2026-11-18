@@ -188,8 +188,8 @@ An overflowed item is drawn as one row of the same menu [Menu](menu.md) uses, by
 
 - Android draws the item's title and, when it has an `androidIcon`, that glyph in the row's leading
   slot: Material's leading-icon size, in the colour Material gives a row's glyph. An item with no
-  `androidIcon` draws no glyph and keeps no space for one, so its title starts where every other
-  row's title starts.
+  `androidIcon` draws no glyph and keeps no space for one, so its title starts at the plain leading
+  edge; a row with a glyph indents its title by the slot, exactly as a `Menu` row with an icon does.
 - `labelStyle="titleOnly"` costs the rows their glyphs, as it costs the items in the row theirs.
 - On a toggle item the row is checked or unchecked, and while it is checked Material's check takes
   the leading slot in place of the glyph.
