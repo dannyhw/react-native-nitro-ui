@@ -95,10 +95,12 @@ export interface NitroUiTextFieldTestState {
    */
   caret: number;
   /**
-   * What the keyboard in use is told about suggestions and autocorrections: `'offered'` or
-   * `'refused'`. iOS reads the field's own autocorrection trait. Android reads the
-   * `EditorInfo` a focused field hands the IME, answers `'pending'` until that has been read,
-   * and reports what the props ask for while no keyboard is up.
+   * What the keyboard in use is told about suggestions and autocorrections: `'offered'`,
+   * `'refused'`, or `'unknown'` before anything has been read. iOS reads the field's own
+   * autocorrection trait, so it answers whether or not a keyboard is up, and `'offered'` where
+   * there is no control at all. Android reads the `EditorInfo` a focused field hands the IME,
+   * once per keyboard configuration, and answers `'unknown'` while the field is not focused or
+   * that read-back is still to come.
    */
   suggestions: string;
 }
