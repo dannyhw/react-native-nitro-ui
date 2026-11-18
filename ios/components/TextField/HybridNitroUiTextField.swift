@@ -34,9 +34,12 @@ final class TextFieldModel: NitroUiModel {
   /// Whether the control held marked text the last time it reported an edit, so the
   /// edit that ends a composition is known as one (see `userEdited`).
   var wasComposing = false
-  /// The caret a `maxLength` cut asked for while a composition was committing, which the control
-  /// writes again once UIKit has finished that commit. `nil` when no cut is in flight.
-  var owedCaret: Int?
+  /// What a `maxLength` cut owes the caret while UIKit ends the composition's commit that cut was
+  /// made in. `nil` when no cut is waiting on one.
+  var owedCaret: NitroUiOwedCaret?
+  /// A `maxLength` cut is being written into the control: the selection changes those writes make
+  /// say nothing about where the caret the field ends up with belongs.
+  var applyingCut = false
 
   var onChange: ((_ value: String, _ eventCount: Double) -> Void)?
   var onFocusChange: ((_ focused: Bool) -> Void)?
@@ -107,9 +110,9 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
     model.owner?.userEdited(self)
   }
 
-  /// UIKit's own end of a composition: it commits the marked text - reporting the edit from
-  /// inside that call - and then puts the insertion point at the end of the whole insertion.
-  /// A caret asked for by that report belongs to the field again once UIKit has had its say.
+  /// UIKit's own end of a composition: it commits the marked text, reporting the edit from inside
+  /// that call, and its insertion point settles after that report - sometimes before this returns,
+  /// more often a pass later, where the selection callback takes it from here.
   override func unmarkText() {
     super.unmarkText()
     nuiSettleCaret()
@@ -262,8 +265,8 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
     model.owner?.userEdited(self)
   }
 
-  /// UIKit's own end of a composition, where it sets the insertion point to the end of the whole
-  /// insertion after reporting the edit (see `NitroUiSingleLineField`).
+  /// UIKit's own end of a composition, and the insertion point it settles after reporting the edit
+  /// (see `NitroUiSingleLineField`).
   override func unmarkText() {
     super.unmarkText()
     nuiSettleCaret()

@@ -93,6 +93,14 @@ enum NitroUiTextTraits {
   }
 }
 
+/// The caret a `maxLength` cut asked for while a composition was committing, and how far ahead of
+/// it UIKit's own end-of-commit insertion point can land - the edit it trimmed was that much longer
+/// than the part it kept. Further ahead, the caret is somebody else's choice.
+struct NitroUiOwedCaret {
+  let caret: Int
+  let upTo: Int
+}
+
 // MARK: - The control
 
 /// What the Hybrid View needs from either control.
@@ -136,17 +144,24 @@ extension NitroUiTextControl {
 
   /// The body of both controls' "selection changed" delegate methods.
   func nuiSelectionChanged() {
-    // A cut in flight moves the selection on its way to the caret the field keeps, so the caret
-    // read while one is owed is a value the field is about to replace.
-    guard nuiModel.owedCaret == nil else { return }
-    nuiModel.owner?.publishState()
+    // The cut's own writes move the selection on their way to the caret the cut asked for; where
+    // they leave it says nothing about the caret the field ends up with.
+    guard !nuiModel.applyingCut else { return }
+    nuiSettleCaret()
   }
 
-  /// Write the caret a cut asked for once UIKit has finished the edit that cut was made in.
+  /// Write back the caret a `maxLength` cut asked for, once UIKit has moved the selection off it.
+  /// UIKit ends a composition's commit by writing its own insertion point, a few milliseconds
+  /// after the callback that reported the edit and after `unmarkText()` has returned. A selection
+  /// change further ahead of the cut than its trimmed edit can account for is not UIKit finishing
+  /// that commit, and ends the cut's claim on the caret instead.
   func nuiSettleCaret() {
-    guard let caret = nuiModel.owedCaret else { return }
-    nuiModel.owedCaret = nil
-    nuiSetCaret(at: caret)
+    if let owed = nuiModel.owedCaret, nuiCaret != owed.caret {
+      nuiModel.owedCaret = nil
+      if nuiCaret > owed.caret && nuiCaret <= owed.upTo {
+        nuiSetCaret(at: owed.caret)
+      }
+    }
     nuiModel.owner?.publishState()
   }
 
@@ -273,7 +288,8 @@ extension NitroUiTextOwner {
       return
     }
     var text = control.nuiText
-    if let limit = model.maxLength, (text as NSString).length > limit {
+    let committedUnits = (text as NSString).length
+    if let limit = model.maxLength, committedUnits > limit {
       // A backstop for text that got past the delegate's cut (a composition's commit, or
       // `insertText`). It cuts the edit, not the tail of the field, so the text around a
       // mid-field insertion keeps its place.
@@ -284,17 +300,18 @@ extension NitroUiTextOwner {
       )
       if kept.text != text {
         text = kept.text
-        if compositionEnded {
-          // UIKit moves the insertion point to the end of its insertion after this callback, so
-          // the caret survives only if it is written again once `unmarkText()` has returned.
-          model.owedCaret = kept.caret
+        if compositionEnded, let caret = kept.caret {
+          model.owedCaret = NitroUiOwedCaret(
+            caret: caret, upTo: caret + committedUnits - (kept.text as NSString).length)
         }
+        model.applyingCut = true
         control.nuiSetText(text)
         // Writing the text moves the caret to the end; a cut made in the middle belongs where
         // the person was typing.
         if let caret = kept.caret {
           control.nuiSetCaret(at: caret)
         }
+        model.applyingCut = false
       }
     }
     let next = NitroUiText(text)

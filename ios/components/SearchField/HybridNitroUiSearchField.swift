@@ -60,8 +60,8 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
     model.owner?.userEdited(self)
   }
 
-  /// UIKit's own end of a composition, where it sets the insertion point to the end of the whole
-  /// insertion after reporting the edit (see `NitroUiSingleLineField`).
+  /// UIKit's own end of a composition, and the insertion point it settles after reporting the edit
+  /// (see `NitroUiSingleLineField`).
   override func unmarkText() {
     super.unmarkText()
     nuiSettleCaret()
