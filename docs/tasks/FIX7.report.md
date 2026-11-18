@@ -35,7 +35,7 @@ are about.
 
 ## Gates
 
-The generated table is the one under "Fix round 1" below. A report carries one table, with the
+The generated table is the one under "Fix round 2" below. A report carries one table, with the
 ledger's current numbers, so round 1's own runs are not repeated here.
 
 One incident: two harness gates were started at 11:19 while `TRAIN` held `real-input:ios`, and
@@ -107,20 +107,8 @@ table and the changeset say what each state draws.
 
 ### Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `aa7fe1899806` | 1 m 02 s | start 8.8 / med 12.8 / max 15.7 |
-| `harness:ios` | **PASS** | 604 tests / 30 suites + isolated 6 tests / 3 suites | `aa7fe1899806` (harness:ios digest) | 14 m 19 s | start 8.2 / med 6.9 / max 45.2 |
-| `harness:android` | **PASS** | 662 tests / 31 suites + isolated 6 tests / 3 suites | `aa7fe1899806` (harness:android digest) | 18 m 05 s | start 13.3 / med 6.4 / max 20.8 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
-| `harness:android:ButtonGroup` | stale | 2 failed of 11 tests / 1 suites | b22f756d6414 (not this tree) | 19.3 s | start 16.2 / med 15.9 / max 16.2 |
-| `harness:android:Scratchphoto` | stale | 2 tests / 1 suites | b05c5a6b47e4 (not this tree) | 30.9 s | start 7.0 / med 12.6 / max 15.1 |
-| `harness:ios:ButtonGroup` | stale | 1 failed of 11 tests / 1 suites | 50454797e404 (not this tree) | 20.2 s | start 3.8 / med 8.6 / max 8.6 |
-| `harness:ios:ButtonGroupPhoto` | stale | 1 tests / 1 suites | c67f7c955d2e (not this tree) | 34.6 s | start 13.4 / med 10.7 / max 13.4 |
-| `harness:ios:Scratchphoto` | stale | 2 tests / 1 suites | 57c01335fa3a (not this tree) | 31.7 s | start 58.0 / med 56.1 / max 58.0 |
-| `real-input:ios:--a11y:button-group` | **PASS** | — | `aa7fe1899806` (real-input:ios digest) | 1 m 13 s | start 7.2 / med 10.0 / max 11.5 |
-| `real-input:ios:--control:button-group` | **PASS** | — | `aa7fe1899806` (real-input:ios digest) | 2 m 59 s | start 24.9 / med 11.2 / max 24.9 |
+The generated table is the one under "Fix round 2": a report carries one table, with the
+ledger's current numbers, so round one's own rows are not repeated here.
 
 `need --for review`: need: review is satisfied on this code tree.
 
@@ -146,3 +134,82 @@ mount open to be photographed; no such file is in the tree, so those rows stay s
   reports itself selected, so a reader hears its state twice: "Bold" type=40 value=Optional(1)
   selected=true`. The same run passes with the trait gone, on the element's own
   `"Bold" type=40 value=Optional(1) selected=false`.
+
+## Fix round 2
+
+A `text` group that holds a toggle is measured at the height of a capsule in both states: an
+unchecked toggle keeps the footprint of its own label in `.bordered` — the style it takes once
+checked — and draws that label centred in it (`CheckedFootprint`), so checking a toggle, which
+re-measures nothing, can no longer draw a capsule outside a box measured while every item was
+unchecked. A `text` group with no toggle keeps the height of a label. The doc, the changeset and the
+new iOS read say so.
+
+The other four: the `buttonGroupItem` comment no longer calls a toggle item a `Toggle(.button)`;
+both `size` cells limit "ignored" to a connected iOS group with no toggle; the toggle read now also
+requires a checked item to carry the group's tint, and an unchecked one to sit apart from the
+*disabled action* item by the margin it already kept from a disabled toggle; and
+`assertToggleElement` reads type, value and selected from the one actionable element carrying the
+item's title, and fails the group that offers two.
+
+### Gates
+
+No device was free for this round. `FIX6` held pair-a throughout it, first for
+`real-input:android` with `real-input:ios` next and then with `real-input:ios` running; `FIX8` held
+pair-b; and `lease.mjs` refuses a third lease at the limit of two. `FIX7`'s acquire stayed queued for
+the whole round, and no gate, test run or app build was started while another lease named
+`real-input:ios`. Nothing in this round is therefore green on this tree, no red proof below was
+observed, and the local screenshot of a `text` group with an action item and two toggles is not
+taken.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | stale | 2178 tests / 96 suites | aa7fe1899806 (not this tree) | 59.3 s | start 6.7 / med 7.5 / max 8.1 |
+| `harness:ios` | stale | 604 tests / 30 suites + isolated 6 tests / 3 suites | aa7fe1899806 (not this tree) | 14 m 19 s | start 8.2 / med 6.9 / max 45.2 |
+| `harness:android` | stale | 662 tests / 31 suites + isolated 6 tests / 3 suites | aa7fe1899806 (not this tree) | 18 m 05 s | start 13.3 / med 6.4 / max 20.8 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:android:ButtonGroup` | stale | 2 failed of 11 tests / 1 suites | b22f756d6414 (not this tree) | 19.3 s | start 16.2 / med 15.9 / max 16.2 |
+| `harness:android:Scratchphoto` | stale | 2 tests / 1 suites | b05c5a6b47e4 (not this tree) | 30.9 s | start 7.0 / med 12.6 / max 15.1 |
+| `harness:ios:ButtonGroup` | stale | 1 failed of 11 tests / 1 suites | 50454797e404 (not this tree) | 20.2 s | start 3.8 / med 8.6 / max 8.6 |
+| `harness:ios:ButtonGroupPhoto` | stale | 1 tests / 1 suites | c67f7c955d2e (not this tree) | 34.6 s | start 13.4 / med 10.7 / max 13.4 |
+| `harness:ios:Scratchphoto` | stale | 2 tests / 1 suites | 57c01335fa3a (not this tree) | 31.7 s | start 58.0 / med 56.1 / max 58.0 |
+| `real-input:ios:--a11y:button-group` | stale | — | aa7fe1899806 (not this tree) | 1 m 13 s | start 7.2 / med 10.0 / max 11.5 |
+| `real-input:ios:--control:button-group` | stale | — | aa7fe1899806 (not this tree) | 2 m 59 s | start 24.9 / med 11.2 / max 24.9 |
+
+`need --for review`: need: 3 gate(s) missing for review: check, harness:ios, harness:android.
+
+### Red proofs
+
+None observed. Each is the one line its mutation would print, so each is one run away:
+
+- the new box test -> `CheckedFootprint` removed (that file at `eaefa0da`) -> `a "text" group holding
+  a toggle measured <off> pt high with its toggle unchecked against the <quiet> pt the same label
+  measures inside a capsule, so the taller state has nowhere to be drawn.`
+- the toggle read -> `OptionalItemTint` skipped for a checked `text` toggle -> `a checked "text"
+  toggle drew only <n>% of its box in the group's tint, so a checked item of any colour would match
+  …`.
+- the same test -> `.disabled` dropped from a disabled action item -> `an unchecked "filled" toggle
+  (…) draws like the disabled action item beside it (…).`
+- `real-input:ios -- --control button-group` -> a second `Button` overlaid on a toggle item -> `the
+  group "real-input-button-group-toggles" offers 2 elements to a reader for the toggle item "Bold"…`.
+
+### Follow-ups
+
+- The `.bordered` label that reserves the footprint is `.hidden()` and `.accessibilityHidden(true)`;
+  no gate reads the accessibility tree of a `text` toggle item, so that attribute is unproven — the
+  new real-input check covers the real-input screen's own (default) variant.
+- Reserving the footprint also widens a `text` group's toggle slot to the capsule's width in both
+  states, which is what makes the flip size-neutral; at a width the row was already tight at it can
+  move an item into the overflow earlier than before.
+- Round one's N2 to N5 and CodeRabbit's two Android test-seam notes stay follow-ups.
+
+### Questions for orchestrator
+
+- This round needs one thing: about 40 minutes of a pair to run `harness:ios`, `harness:android`,
+  `check`, the filtered `real-input:ios -- --control button-group`, the four red proofs above and a
+  screenshot. Recommendation: grant `FIX7` a lease and keep `FIX6`'s `real-input:ios` off the same
+  window; the tree needs no further code work to run them.
+- If the taller box also moves the round-one read's `off.tint >= TINT_SEEN` for the `text` row — that
+  share is measured over the control's box, and the box is now a capsule taller — the fix is a
+  box-invariant read (the share of the ink that is the group's colour), not a lower threshold. It is
+  not changed here; say if you want it changed.
