@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterAll, describe, expect, it } from '@jest/globals';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import {
   LEDGER_VERSION,
@@ -12,7 +12,9 @@ import {
   decideNeed,
   deviceFromEnv,
   digestKeyFor,
+  combineSummaries,
   countsForDisplay,
+  formatCounts,
   changedPathsGitArgs,
   gatesSeen,
   gateRowFor,
@@ -629,6 +631,45 @@ describe('parseTestCounts', () => {
   it('pairs a `Test Suites` line with the `Tests` line that follows it', () => {
     const [only] = parseTestSummaries('Test Suites: 11 passed, 11 total');
     expect(only).toEqual({ suites: { passed: 11, total: 11 }, tests: null });
+  });
+
+  it("reads Vitest's summary, with its failures and skips", () => {
+    const log =
+      ' Test Files  1 failed | 63 passed | 1 skipped (65)\n' +
+      '      Tests  2 failed | 1820 passed | 7 skipped (1829)\n' +
+      '   Start at  16:48:48\n' +
+      '   Duration  57.31s (transform 1%, tests 99%)\n';
+    expect(parseTestSummaries(log)).toEqual([
+      {
+        suites: { failed: 1, passed: 63, skipped: 1, total: 65 },
+        tests: { failed: 2, passed: 1820, skipped: 7, total: 1829 },
+      },
+    ]);
+  });
+
+  it("sums each runner's first summary, which in `check` are the two unit steps", () => {
+    // `test:library` (Jest), `test:tooling` (Vitest), then reassure's Jest run.
+    const log =
+      'Test Suites: 28 passed, 28 total\n' +
+      'Tests:       270 passed, 270 total\n' +
+      ' Test Files  66 passed (66)\n' +
+      '      Tests  1912 passed (1912)\n' +
+      'Test Suites: 8 passed, 8 total\n' +
+      'Tests:       8 passed, 8 total\n';
+    expect(parseTestSummaries(log)).toHaveLength(3);
+    expect(parseTestCounts(log)).toEqual({
+      suites: { passed: 94, total: 94 },
+      tests: { passed: 2182, total: 2182 },
+    });
+    expect(formatCounts(parseTestCounts(log))).toBe('2182 tests / 94 suites');
+  });
+
+  it("never pairs one runner's `Tests` line with the other's suites", () => {
+    const log = 'Test Suites: 3 passed, 3 total\n      Tests  5 passed (5)\n';
+    expect(parseTestSummaries(log)).toEqual([
+      { suites: { passed: 3, total: 3 }, tests: null },
+      { suites: null, tests: { passed: 5, total: 5 } },
+    ]);
   });
 
   it('returns null rather than inventing counts', () => {
@@ -1474,6 +1515,21 @@ describe('countsForDisplay (M3)', () => {
     expect(countsForDisplay(entry)).toEqual(JEST);
     expect(renderGateTable({ entries: [entry], tree: TREE_A })).toContain(
       '391 tests / 23 suites'
+    );
+  });
+
+  it("reports both runners' unit steps when every step passed", () => {
+    const VITEST = {
+      suites: { passed: 66, total: 66 },
+      tests: { passed: 1912, total: 1912 },
+    };
+    const entry = line({
+      gate: 'check',
+      counts: combineSummaries([JEST, VITEST]),
+      summaries: [JEST, VITEST, PERF],
+    });
+    expect(renderGateTable({ entries: [entry], tree: TREE_A })).toContain(
+      '2303 tests / 89 suites'
     );
   });
 
@@ -2747,11 +2803,13 @@ describeCli('gate.mjs prints its whole usage (X30 fix 1)', () => {
     expect(run.stderr).toContain('--all shows every branch)');
   });
 
-  it('and eslint is set to catch the shape of the bug itself', () => {
-    const config = fs.readFileSync(
-      path.join(process.cwd(), 'eslint.config.mjs'),
-      'utf8'
+  it('and the linter is set to catch the shape of the bug itself', () => {
+    const config = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), '.oxlintrc.json'), 'utf8')
     );
-    expect(config).toContain("'no-unused-expressions': [");
+    const scripts = config.overrides.find((override) =>
+      override.files.includes('scripts/**/*.mjs')
+    );
+    expect(scripts.rules['no-unused-expressions'][0]).toBe('error');
   });
 });

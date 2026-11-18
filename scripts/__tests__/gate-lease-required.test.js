@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it, afterAll } from '@jest/globals';
+import { describe, expect, it, afterAll } from 'vitest';
 
 import {
   deviceGateLeaseRefusal,
@@ -621,6 +621,11 @@ describe('a device gate on a full disk', () => {
     expect(
       freeDiskGbFrom({ ...jest, NITRO_UI_GATE_FREE_DISK_GB: 'full' }, 3)
     ).toBeNull();
+    const vitest = { VITEST_WORKER_ID: '1' };
+    expect(
+      freeDiskGbFrom({ ...vitest, NITRO_UI_GATE_FREE_DISK_GB: '4' }, 123)
+    ).toBe(4);
+    expect(freeDiskGbFrom(vitest, 3)).toBeNull();
   });
 
   it('only a real CI runner is exempt', () => {
@@ -685,7 +690,7 @@ describe('a device gate on a full disk', () => {
   });
 
   it('with no test seam at all, agrees with the disk it is really on', () => {
-    // Without jest's marker the child measures the disk for itself, so the
+    // Without a runner's marker the child measures the disk for itself, so the
     // expectation is computed from the same volume here.
     const dir = makeCheckout();
     const live = leaseRecord();
@@ -698,6 +703,7 @@ describe('a device gate on a full disk', () => {
       // Would refuse if it were read; outside a test it is ignored.
       NITRO_UI_GATE_FREE_DISK_GB: '0',
       JEST_WORKER_ID: undefined,
+      VITEST_WORKER_ID: undefined,
       CI: '',
     });
     expect({ realGb, ran: run.ran }).toEqual({ realGb, ran: realGb >= floor });

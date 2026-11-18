@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   resetScrollCount,
@@ -6,7 +6,7 @@ import {
   reveal,
 } from '../../example/e2e/real-input/support';
 
-jest.mock('e2e', () => ({ expect: {} }));
+vi.mock('e2e', () => ({ expect: {} }));
 
 // A page in device pixels, laid out like the example app on a Pixel profile: the tab
 // strip ends at 260, the content view at 2400, and the screen's ScrollView shows page

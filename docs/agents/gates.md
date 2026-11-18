@@ -113,7 +113,7 @@ missing.
   claim: unknown is expensive, never free.
 - `status` and `need` print the platform halves and the four gate digests.
 - Paths on the check-only tooling list in `scripts/gate-core.mjs` (`scripts/gate*.mjs`,
-  `scripts/__tests__`, `eslint-rules/` and its `eslint.config.mjs`, `etc/`, `.changeset/`) touch
+  `scripts/__tests__`, `eslint-rules/`, `.oxlintrc.json`, `.oxfmtrc.jsonc`, `etc/`, `.changeset/`) touch
   no platform half. `check` proves them, and a tooling-only commit on `main` re-owns `check`
   only.
 - Editing that list is the exception. A path that moves on or off it can change which half owns

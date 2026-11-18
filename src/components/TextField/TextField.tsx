@@ -27,7 +27,12 @@ export type {
 
 /** The label of the Return key on a single-line field. */
 export type TextFieldReturnKeyType =
-  'default' | 'done' | 'go' | 'next' | 'search' | 'send';
+  | 'default'
+  | 'done'
+  | 'go'
+  | 'next'
+  | 'search'
+  | 'send';
 
 /** What a `ref` to a {@link TextField} can do. */
 export interface TextFieldHandle {

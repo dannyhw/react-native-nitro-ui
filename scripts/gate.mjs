@@ -1825,8 +1825,8 @@ async function runGateUnclaimed(name, resolved, options = {}) {
     load: summarizeLoad({ start: startedLoad, samples }),
     durationMs,
     result,
-    // `counts` is the first summary (for `check`, the unit-test step), not
-    // whichever step printed last; `summaries` holds all of them.
+    // `counts` is the unit-test summary (for `check`, Jest's and Vitest's unit steps
+    // summed), not whichever step printed last; `summaries` holds all of them.
     counts: parseTestCounts(logText) ?? summaries[0] ?? null,
     summaries,
     stepTimings,

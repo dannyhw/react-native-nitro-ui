@@ -129,7 +129,9 @@ export interface BenchListProps {
  *   message.
  */
 export type MissingSampleReason =
-  'probe-timeout' | 'not-awaited' | 'probe-error';
+  | 'probe-timeout'
+  | 'not-awaited'
+  | 'probe-error';
 
 /** One iteration's reason for one missing signal. */
 export interface MissingSample {

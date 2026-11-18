@@ -5,7 +5,7 @@
 
 /**
  * The regions steps declare in `writes`/`reads`. `prepare` (bob) deletes and
- * regenerates `nitrogen/` before it writes `lib/`, and `test` and `perf:renders`
+ * regenerates `nitrogen/` before it writes `lib/`, and `test:library` and `perf:renders`
  * share one Jest haste-map cache file that is written without a lock.
  */
 export const FINDINGS = Object.freeze({
@@ -29,7 +29,7 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [],
-    note: 'tsc --noEmit over src, example/src, example/__tests__, scripts/smoke',
+    note: 'bun check (tsconfig.json, noEmit) over src, example/src, example/__tests__, example/e2e, scripts/smoke',
   },
   {
     name: 'lock:check',
@@ -45,7 +45,7 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [],
-    note: 'two tsc --noEmit passes over bench/ (its own tsconfigs, paths point at ../src)',
+    note: 'two bun check passes over bench/ (its own tsconfigs, paths point at ../src)',
   },
   {
     name: 'lint',
@@ -53,7 +53,7 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [FINDINGS.nitrogenDir],
-    note: 'eslint over **/*.{js,mjs,ts,tsx}; ignores lib/ and nitrogen/generated/ but not the rest of nitrogen/',
+    note: 'oxlint over the tree (.oxlintrc.json); ignores lib/ and nitrogen/generated/ but not the rest of nitrogen/',
   },
   {
     name: 'format',
@@ -61,15 +61,15 @@ export const CHECK_STEPS = Object.freeze([
     group: null,
     writes: [],
     reads: [FINDINGS.nitrogenDir],
-    note: 'prettier --check .; .prettierignore covers lib, nitrogen/generated, .turbo, and prettier 3 also reads .gitignore - but not nitrogen/ as a whole',
+    note: 'oxfmt --check; .prettierignore covers lib, nitrogen/generated, .turbo, and oxfmt also reads .gitignore - but not nitrogen/ as a whole',
   },
   {
-    name: 'test',
+    name: 'test:library',
     needs: [],
     group: 'jest',
     writes: [FINDINGS.jestCache],
     reads: [FINDINGS.generatedDir],
-    note: 'jest; reads nitrogen/generated/shared/json via src/__tests__/viewConfigs.test.ts, ignores lib/',
+    note: 'jest over src/__tests__; reads nitrogen/generated/shared/json via src/__tests__/viewConfigs.test.ts, ignores lib/',
   },
   {
     name: 'test:native',
@@ -78,6 +78,14 @@ export const CHECK_STEPS = Object.freeze([
     writes: ['tmp:nitro-ui-native-tests'],
     reads: [],
     note: 'clang/swiftc into $TMPDIR/nitro-ui-native-tests-$$ - the $$ makes it per-process',
+  },
+  {
+    name: 'test:tooling',
+    needs: [],
+    group: null,
+    writes: ['node_modules/.vite'],
+    reads: [],
+    note: 'vitest over scripts/__tests__ and eslint-rules/__tests__ (vitest.config.mjs); its results cache is node_modules/.vite/vitest',
   },
   {
     name: 'test:native:android',
@@ -124,7 +132,7 @@ export const CHECK_STEPS = Object.freeze([
     needs: [
       'lock:check',
       'nitrogen:check',
-      'test',
+      'test:library',
       'perf:renders',
       'test:native:android',
       // These two ignore only `nitrogen/generated`, so they read the rest of
@@ -177,7 +185,7 @@ export function commandForStep(step) {
 
 /**
  * How many steps may run at once: half the cores, capped at `MAX_DEFAULT_JOBS`,
- * because the heavy steps (Jest, tsc, ESLint) already fan out across cores.
+ * because the heavy steps (Jest, the type checker, oxlint) already fan out across cores.
  *
  * @param {number} parallelism `os.availableParallelism()` or `os.cpus().length`
  * @returns {number}

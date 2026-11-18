@@ -13,7 +13,10 @@ export type TextFieldKeyboardType =
 
 /** What the keyboard capitalises on its own. */
 export type TextFieldAutoCapitalize =
-  'none' | 'sentences' | 'words' | 'characters';
+  | 'none'
+  | 'sentences'
+  | 'words'
+  | 'characters';
 
 export const KEYBOARD_TYPES: ReadonlyArray<TextFieldKeyboardType> = [
   'default',

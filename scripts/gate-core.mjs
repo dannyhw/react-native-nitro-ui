@@ -236,7 +236,13 @@ export const TOOLING_FILES = [
   // rule would call both platforms, but no app code imports it.
   'example/src/readme-examples.tsx',
   // Wires `eslint-rules/` to the files it checks; no build reads it.
-  'eslint.config.mjs',
+  '.oxlintrc.json',
+  // The formatter's options; no build reads it.
+  '.oxfmtrc.jsonc',
+  // The tooling suites' runner options; `check` runs them.
+  'vitest.config.mjs',
+  // The opt-in git hooks; no build or device run reads them.
+  'lefthook.yml',
   '.gitignore',
   '.prettierignore',
 ];
@@ -1231,9 +1237,10 @@ export function formatCounts(counts) {
 }
 
 /**
- * The counts a row reports. A gate that prints several summaries shows its first
- * (for `check`, the unit-test run); when anything failed, it shows the total
- * across steps instead, so a red row never sits beside a passing-looking count.
+ * The counts a row reports. A gate that prints several summaries shows its unit-test
+ * counts (`parseTestCounts`, for `check` both runners'); when anything failed, it
+ * shows the total across steps instead, so a red row never sits beside a
+ * passing-looking count.
  *
  * @param {object | undefined} entry a ledger line
  * @returns {object | null}
@@ -1252,7 +1259,9 @@ export function countsForDisplay(entry) {
       total + (summary?.tests?.failed ?? 0) + (summary?.suites?.failed ?? 0),
     0
   );
-  return failed > 0 ? combineSummaries(summaries) : summaries[0];
+  return failed > 0
+    ? combineSummaries(summaries)
+    : (entry?.counts ?? summaries[0]);
 }
 
 /**
@@ -1439,50 +1448,78 @@ export function summarizeLoad({ start = null, samples = [] }) {
 }
 
 /**
- * The jest-style summaries a gate printed, from its log, in document order.
- * `bun run check` prints several.
+ * Jest's summary lines (`Tests: 1 failed, 18 passed, 19 total`) and Vitest's
+ * (`      Tests  1 failed | 18 passed (19)`), each with its runner, in document order.
  *
  * @param {string} text
- * @returns {{suites: object | null, tests: object | null}[]}
+ * @returns {{runner: 'jest' | 'vitest', summary: {suites: object | null, tests: object | null}}[]}
  */
-export function parseTestSummaries(text) {
-  const summaries = [];
-  const pattern = /^(Test Suites|Tests):\s+(.+)$/gm;
+function readRunnerSummaries(text) {
+  const found = [];
+  const pattern =
+    /^(?:(Test Suites|Tests):\s+(.+)|[ \t]*(Test Files|Tests) {2,}(.+?)[ \t]*\((\d+)\)[ \t]*)$/gm;
   let match;
   while ((match = pattern.exec(String(text ?? ''))) != null) {
-    const key = match[1] === 'Tests' ? 'tests' : 'suites';
+    const runner = match[1] != null ? 'jest' : 'vitest';
+    const label = match[1] ?? match[3];
+    const key = label === 'Tests' ? 'tests' : 'suites';
     const counts = {};
-    for (const segment of match[2].split(',')) {
+    for (const segment of (match[2] ?? match[4]).split(
+      runner === 'jest' ? ',' : '|'
+    )) {
       const item = /^\s*(\d+)\s+(passed|failed|skipped|pending|total)\b/.exec(
         segment
       );
       if (item != null) counts[item[2]] = Number(item[1]);
     }
+    if (runner === 'vitest') counts.total = Number(match[5]);
     if (Object.keys(counts).length === 0) continue;
-    const previous = summaries[summaries.length - 1];
-    if (previous != null && previous[key] == null) {
-      previous[key] = counts;
+    const previous = found[found.length - 1];
+    if (
+      previous != null &&
+      previous.runner === runner &&
+      previous.summary[key] == null
+    ) {
+      previous.summary[key] = counts;
     } else {
-      summaries.push({
-        suites: key === 'suites' ? counts : null,
-        tests: key === 'tests' ? counts : null,
+      found.push({
+        runner,
+        summary: {
+          suites: key === 'suites' ? counts : null,
+          tests: key === 'tests' ? counts : null,
+        },
       });
     }
   }
-  return summaries.filter(
-    (summary) => summary.suites != null || summary.tests != null
-  );
+  return found;
 }
 
 /**
- * The first summary a gate printed - the unit-test step, which is the one a
- * report quotes. `null` rather than invented counts.
+ * The test summaries a gate printed, Jest's and Vitest's, from its log, in document
+ * order. `bun run check` prints several.
+ *
+ * @param {string} text
+ * @returns {{suites: object | null, tests: object | null}[]}
+ */
+export function parseTestSummaries(text) {
+  return readRunnerSummaries(text).map(({ summary }) => summary);
+}
+
+/**
+ * The unit-test counts a report quotes: each runner's first summary, summed. In
+ * `check` that is Jest's `test:library` and Vitest's `test:tooling`, and not the
+ * Jest run `perf:renders` prints after `test:library`. `null` rather than invented
+ * counts.
  *
  * @param {string} text
  * @returns {{suites: object | null, tests: object | null} | null}
  */
 export function parseTestCounts(text) {
-  return parseTestSummaries(text)[0] ?? null;
+  const found = readRunnerSummaries(text);
+  const firsts = ['jest', 'vitest']
+    .map((runner) => found.find((entry) => entry.runner === runner)?.summary)
+    .filter((summary) => summary != null);
+  return firsts.length > 1 ? combineSummaries(firsts) : (firsts[0] ?? null);
 }
 
 /**

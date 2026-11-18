@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -149,9 +149,9 @@ describe('changesets configuration', () => {
   it('versions from main and publishes publicly', () => {
     expect(config.baseBranch).toBe('main');
     expect(config.access).toBe('public');
-    // `prettier` makes Changesets format what it writes with this repo's
-    // prettier and config instead of its own defaults.
-    expect(config.format).toBe('prettier');
+    // `oxfmt` makes Changesets format what it writes with this repo's
+    // formatter and config instead of its own defaults.
+    expect(config.format).toBe('oxfmt');
   });
 
   it('writes the changelog without needing a GitHub token', () => {

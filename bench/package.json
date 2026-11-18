@@ -4,11 +4,11 @@
   "private": true,
   "main": "index.ts",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "bun check --all -p tsconfig.json",
     "prebuild": "expo prebuild --clean",
     "android:release": "expo run:android --variant release --no-bundle",
     "ios:release": "expo run:ios --configuration Release --no-bundle",
-    "typecheck:android": "tsc -p tsconfig.android.json"
+    "typecheck:android": "bun check --all -p tsconfig.android.json"
   },
   "dependencies": {
     "@expo/ui": "58.0.22",

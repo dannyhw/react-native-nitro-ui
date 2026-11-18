@@ -12,8 +12,9 @@ locally, so `bun run check` on your machine is the first gate a change is judged
 
 ## Prerequisites
 
-- [bun](https://bun.sh) 1.4, the package manager for this repo (`packageManager` in
-  `package.json`). Do not add `yarn` or `npm` lockfiles.
+- [bun](https://bun.sh) 1.4.4 or newer, the package manager for this repo (`packageManager` in
+  `package.json`). `bun check` and the Android e2e runner need it; `node scripts/doctor.mjs`
+  refuses an older bun. Do not add `yarn` or `npm` lockfiles.
 - Xcode 27 with the iOS 27 simulator runtime, and CocoaPods.
 - JDK 17 and the Android SDK (`ANDROID_HOME`) with an emulator image for API 35.
 - [ccache](https://ccache.dev), optional, for the example and bench apps: `brew install ccache`.
@@ -63,7 +64,7 @@ src/                 Nitro IDL specs (*.nitro.ts) + JS wrappers
 cpp/ ios/ android/   C++ core, SwiftUI hosting, Compose hosting
 nitrogen/generated/  nitrogen output — committed, patched, drift-checked
 scripts/             patch-nitrogen.mjs, nitrogen-check.mjs, package-files.mjs
-eslint-rules/        local ESLint plugin enforcing the perf contract
+eslint-rules/        lint rules enforcing the perf contract (an oxlint JS plugin)
 etc/                 package-files.txt (the published tarball manifest)
 example/             bare RN app + react-native-harness tests
 bench/               release-build benchmark app + private BenchProbe Nitro module
@@ -82,11 +83,13 @@ Run from the repo root.
 | Command                         | What it does                                                                   |
 | ------------------------------- | ------------------------------------------------------------------------------ |
 | `bun run check`                 | **All static gates.** Run this before pushing.                                 |
-| `bun run typecheck`             | `tsc` over the library and example                                             |
-| `bun run bench:typecheck`       | `tsc` over `bench/` for each platform                                          |
-| `bun run lint`                  | ESLint, including the local perf-contract rules                                |
-| `bun run format`                | Prettier check (`format:write` to fix)                                         |
-| `bun run test`                  | Jest unit tests (JS wrappers, lint rules, patch script)                        |
+| `bun run typecheck`             | `bun check` over the library and example                                       |
+| `bun run bench:typecheck`       | `bun check` over `bench/` for each platform                                    |
+| `bun run lint`                  | oxlint, including the local perf-contract rules                                |
+| `bun run format`                | oxfmt check (`format:write` to fix)                                            |
+| `bun run test`                  | Runs `test:library` then `test:tooling`; fails if either fails                 |
+| `bun run test:library`          | Jest over `src/__tests__` (the library's JS wrappers and hooks)                |
+| `bun run test:tooling`          | Vitest over `scripts/__tests__` and `eslint-rules/__tests__`                   |
 | `bun run test:native`           | Host-side C++ and Swift unit tests of the core (macOS only)                    |
 | `bun run test:native:android`   | JVM unit tests of the Kotlin core (needs the Android SDK; in `check`)          |
 | `bun run nitrogen`              | Regenerate Nitro code, then apply `scripts/patch-nitrogen.mjs`                 |
@@ -127,13 +130,15 @@ Run from the repo root.
 | `bun run hooks:uninstall`       | Remove them again                                                              |
 | `bun run clean`                 | Delete build outputs (`lib/`, native build dirs)                               |
 
-`bun run check` is seventeen steps: typecheck, lock:check, bench:typecheck, lint, format, test,
-test:native, test:native:android, perf:renders, nitrogen:check, registry:check,
-autolinking:check, prepare, api-extractor:check, publint, manifest:check and readme:check. A
-scheduler runs them (`scripts/check.mjs`, with the step graph in `scripts/check-steps.mjs`), so
-independent steps overlap: up to half the machine's cores at once, capped at 4. `--jobs N`
-overrides that. `perf:renders` is in `check` because render counts are deterministic, so they
-can block.
+`bun run check` is eighteen steps: typecheck, lock:check, bench:typecheck, lint, format,
+test:library, test:native, test:tooling, test:native:android, perf:renders, nitrogen:check,
+registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check and
+readme:check. A scheduler runs them (`scripts/check.mjs`, with the step graph in
+`scripts/check-steps.mjs`), so independent steps overlap: up to half the machine's cores at
+once, capped at 4. `--jobs N` overrides that. The two unit-test runners are separate steps, so
+Jest (`test:library`) and Vitest (`test:tooling`) overlap; Jest also runs reassure's
+`*.perf-test.*` files in `perf:renders`. `perf:renders` is in `check` because render counts are
+deterministic, so they can block.
 
 ### Changing a README example
 
@@ -1021,7 +1026,9 @@ is the Reassure render count, because it is deterministic.
 
 ## Perf contract
 
-The local ESLint plugin in `eslint-rules/` (see `eslint.config.mjs`) enforces these rules:
+The local lint plugin in `eslint-rules/` enforces these rules. oxlint loads it as a JS plugin
+(`.oxlintrc.json` says which files each rule covers), and its unit test runs on ESLint's
+`RuleTester` under Vitest (`bun run test:tooling`):
 
 | Rule                                 | Enforces                                                                                                                   |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
@@ -1036,6 +1043,9 @@ not track a callback hoisted into a variable in a render body
 (`const onChange = callback(fn); <Switch onChange={onChange} />`): keep such values at module
 scope or inside a stable hook.
 
+`eslint-rules/core.js` holds three ESLint core rules oxlint does not implement (`dot-notation`,
+`consistent-this`, `no-undef-init`), loaded the same way.
+
 The rest of the contract is checked in review. It is listed in `AGENTS.md` and explained in
 `docs/architecture/core.md` and `docs/DESIGN.md` 3.3.
 
@@ -1049,13 +1059,13 @@ directory that every worktree of this repo shares. Enable them in a checkout who
 are installed:
 
 ```sh
-bun run hooks:install      # commit-msg runs commitlint; pre-commit runs ESLint, Prettier + tsc
+bun run hooks:install      # commit-msg runs commitlint; pre-commit runs oxlint, oxfmt + bun check
 bun run hooks:uninstall    # remove them again
 ```
 
-The hooks call `bunx --no-install`, so they use that checkout's local binaries and fail instead
-of downloading a package. `pre-commit` typechecks the whole program, which is slow; the gate
-that has to pass is `bun run check`.
+The lint, format and commit-message hooks call `bunx --no-install`, so they use that checkout's
+local binaries and fail instead of downloading a package. The type-check hook runs
+`bun run typecheck` over the whole program. The gate that has to pass is `bun run check`.
 
 ## Releasing
 

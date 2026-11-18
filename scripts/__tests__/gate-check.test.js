@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterAll, describe, expect, it } from '@jest/globals';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import {
   TOOLING_FILES,
@@ -193,7 +193,10 @@ describe('TOOLING_FILES (X10, X26 additions)', () => {
     'scripts/lease-core.mjs',
     'scripts/task-ready.mjs',
     'scripts/task-ready-core.mjs',
-    'eslint.config.mjs',
+    '.oxlintrc.json',
+    '.oxfmtrc.jsonc',
+    'vitest.config.mjs',
+    'lefthook.yml',
     'scripts/worktrees.mjs',
     'scripts/worktrees-core.mjs',
     'scripts/watchdog.mjs',

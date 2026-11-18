@@ -64,16 +64,17 @@ export function isCiRunner(env) {
 
 /**
  * Free space as the gate reads it: the measured value, which no variable can
- * raise. Under jest (`JEST_WORKER_ID`, inherited by a spawned CLI) the measurement
- * is ignored so a nearly-full disk cannot fail a suite; a test names a value in
- * `NITRO_UI_GATE_FREE_DISK_GB` or gets `null`.
+ * raise. Under a test runner (`JEST_WORKER_ID` or `VITEST_WORKER_ID`, inherited by a
+ * spawned CLI) the measurement is ignored so a nearly-full disk cannot fail a suite;
+ * a test names a value in `NITRO_UI_GATE_FREE_DISK_GB` or gets `null`.
  *
  * @param {NodeJS.ProcessEnv} env
  * @param {number | null} measuredGb
  * @returns {number | null}
  */
 export function freeDiskGbFrom(env, measuredGb) {
-  if (env.JEST_WORKER_ID == null) return measuredGb;
+  if (env.JEST_WORKER_ID == null && env.VITEST_WORKER_ID == null)
+    return measuredGb;
   const forced = String(env.NITRO_UI_GATE_FREE_DISK_GB ?? '').trim();
   if (forced !== '' && Number.isFinite(Number(forced))) return Number(forced);
   return null;
@@ -157,16 +158,18 @@ export function cocoapodsProblem(text) {
 }
 
 /**
- * @param {string | null} wanted `packageManager`'s version, e.g. `1.4.0`.
+ * @param {string | null} wanted `packageManager`'s version, e.g. `1.4.4`.
  * @param {string | null} actual `bun --version` output.
- * @returns {'ok' | 'warn' | 'fail'} A different patch is fine; a different minor
- *   warns (the lockfile format can change); none at all fails.
+ * @returns {'ok' | 'warn' | 'fail'} A newer patch is fine; a newer minor warns
+ *   (the lockfile format can change); an older version or none at all fails,
+ *   because `bun check` and the e2e runner need the pinned release.
  */
 export function bunStatus(wanted, actual) {
   const have = parseVersion(actual);
   if (have == null) return 'fail';
   const want = parseVersion(wanted);
   if (want == null) return 'ok';
+  if (compareVersions(have, want) < 0) return 'fail';
   return have[0] === want[0] && have[1] === want[1] ? 'ok' : 'warn';
 }
 

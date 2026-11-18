@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import picomatch from 'picomatch';
 
 import {
@@ -497,7 +497,7 @@ describe('a path leaves a gate digest only when that gate never reads it', () =>
     }
   });
 
-  it('the digests keep exactly the files the harness testMatch selects', () => {
+  it('the digests keep exactly the files the harness testMatch selects', async () => {
     const exampleDir = path.join(REPO, 'example');
     const selects = (patterns) => {
       const globs = patterns.map((glob) =>
@@ -517,19 +517,18 @@ describe('a path leaves a gate digest only when that gate never reads it', () =>
       return (file) =>
         any(path.join(REPO, file)) && !none(path.join(REPO, file));
     };
-    const testMatch = (isolated) => {
+    const testMatch = async (isolated) => {
       const before = process.env.NITRO_UI_HARNESS_ISOLATED;
       process.env.NITRO_UI_HARNESS_ISOLATED = isolated ? '1' : '0';
-      let config;
-      jest.isolateModules(() => {
-        config = require('../../example/jest.harness.config.mjs').default;
-      });
+      vi.resetModules();
+      const config = (await import('../../example/jest.harness.config.mjs'))
+        .default;
       if (before === undefined) delete process.env.NITRO_UI_HARNESS_ISOLATED;
       else process.env.NITRO_UI_HARNESS_ISOLATED = before;
       return config.testMatch;
     };
-    const plain = selects(testMatch(false));
-    const isolated = selects(testMatch(true));
+    const plain = selects(await testMatch(false));
+    const isolated = selects(await testMatch(true));
     const candidates = [
       ...tracked('example'),
       'example/src/pickers/__tests__/Picker.harness.tsx',

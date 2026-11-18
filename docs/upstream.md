@@ -421,14 +421,14 @@ Exception in HostFunction: NitroUi.label: Value is null, expected a String
 **Today.** Hybrid View props are never optional.
 
 - Lint: `nitro-ui/no-optional-view-props` (`eslint-rules/index.js`, enabled in
-  `eslint.config.mjs`) rejects a `?:` member in a Hybrid View props interface.
+  `.oxlintrc.json`) rejects a `?:` member in a Hybrid View props interface.
 - Specs declare "unset" as `T | null`, which nitrogen maps to `Variant_NullType_T`
   (`src/components/Switch/Switch.nitro.ts`).
 - Wrappers send every native prop on every render, with `?? null` for an unset one
   (`src/components/Switch/Switch.tsx`).
 
 **Removal.** When a released converter accepts `null` as `std::nullopt`, optional props become
-legal: delete the rule from `eslint-rules/index.js` and `eslint.config.mjs`, the matching rule in
+legal: delete the rule from `eslint-rules/index.js` and `.oxlintrc.json`, the matching rule in
 `docs/DESIGN.md`, and this entry. Specs and wrappers stay correct as written.
 
 ### N3 — callback props must be optional; `fn | null` throws at mount
