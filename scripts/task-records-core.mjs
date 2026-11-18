@@ -99,6 +99,7 @@ export function arrivalByReflog(line, reflog) {
  * @param {{branch: string, tipDays: number}[]} facts.openBranches its `task/<ID>-...`
  *   branches, local or remote-tracking, that HEAD does not contain, each with the age
  *   of its tip commit; the branch HEAD is on counts as one
+ * @param {string | null} [facts.head] the branch HEAD is on, `null` when detached
  * @param {number | null} facts.ageDays since its records reached HEAD's own line;
  *   `null` when no commit holds them
  * @param {string | null} facts.since that date and what it was read from
@@ -115,12 +116,21 @@ export function classifyTask(facts) {
     const where = `the worktree on ${branch ?? 'a detached head'}`;
     if (count > 0) return keep(`${count} uncommitted path(s) in ${where}`);
   }
+  const head = facts.head ?? null;
   const isOpen = (branch) =>
-    openBranches.some((open) => open.branch === branch);
+    branch !== head && openBranches.some((open) => open.branch === branch);
   const on = worktrees.find(({ branch }) => isOpen(branch));
   if (on != null) return keep(`a worktree is on ${on.branch}`);
-  const live = openBranches.find((open) => open.tipDays < BRANCH_LIVE_DAYS);
+  const live = openBranches.find(
+    (open) => open.branch !== head && open.tipDays < BRANCH_LIVE_DAYS
+  );
   if (live != null) return keep(`${live.branch} is not merged into HEAD`);
+  if (head != null && taskOfBranch(head) === task) {
+    return keep(
+      `HEAD is on ${head}, a branch of this task, which keeps its records: ` +
+        'merge on a `merge/<name>` branch to let them go'
+    );
+  }
   if (isUnfinished(facts.files)) return keep('a brief and no report: not done');
   if (ageDays == null) return keep('its records are not committed');
   const stale = openBranches[0];

@@ -169,6 +169,55 @@ function upsertDevice(state, key, fields) {
   return entry;
 }
 
+/** When the pool last recorded this device: its boot or its last use, whichever is later. */
+function lastSeenMs(entry) {
+  return Math.max(
+    Number(entry?.bootedAtMs) || 0,
+    Number(entry?.lastUsedMs) || 0
+  );
+}
+
+/**
+ * The other pool row that holds this row's emulator serial, or null. A console port runs one
+ * emulator, so when two rows name one serial, only one of them describes the device on it: the
+ * one a live lease holds, the one a run or a boot is using, or else the one the pool recorded
+ * there last. The other row is stale, and nothing acts on a device through it.
+ *
+ * @param {object} entry
+ * @param {object[]} rows every row of `pool.json`
+ * @param {{nowMs: number, leases: object[], isPidAlive?: (pid: number) => boolean}} context
+ * @returns {{key: string, serial: string, why: string} | null}
+ */
+export function serialHolder(
+  entry,
+  rows,
+  { nowMs, leases, isPidAlive = pidIsAlive }
+) {
+  const serial = entry?.serial;
+  if (serial == null) return null;
+  // Why a row holds its serial however old its record is: a live lease, or a run or boot.
+  const hold = (row) => {
+    const lease = (leases ?? []).find((x) => x.id === row?.leaseId);
+    if (lease != null && leaseIsLive(lease, nowMs))
+      return `lease ${lease.task ?? lease.id} holds it`;
+    if (deviceIsBusy(row, nowMs, isPidAlive))
+      return row.phase === 'booting' ? 'it is booting' : 'a run is using it';
+    return null;
+  };
+  const others = (rows ?? []).filter(
+    (other) => other?.key !== entry.key && other?.serial === serial
+  );
+  for (const other of others) {
+    const why = hold(other);
+    if (why != null) return { key: other.key, serial, why };
+  }
+  if (hold(entry) != null) return null;
+  const newer = others.find((other) => lastSeenMs(other) > lastSeenMs(entry));
+  return newer == null
+    ? null
+    : { key: newer.key, serial, why: 'the pool recorded it there later' };
+}
+
 /**
  * Device operations. The defaults are the real binaries; `NITRO_UI_ADB_BIN` and
  * `NITRO_UI_SIMCTL_BIN` point them at a stub.
@@ -183,6 +232,16 @@ export function deviceOperations({
   const simctlBin = env.NITRO_UI_SIMCTL_BIN || 'xcrun';
 
   /**
+   * The working directory of every emulator and adb call. An emulator, and an adb server an
+   * adb call forks, outlive the command and keep their working directory for days: started
+   * from a worktree, they keep its files on disk after the worktree is removed.
+   */
+  function workDir() {
+    mkdirSync(home, { recursive: true });
+    return home;
+  }
+
+  /**
    * Runs `adb` on the adb server that owns the device. Each pair has a private server, and a
    * server only lists the devices registered with it, so the port comes from the pair's
    * `adbPort`, not from the caller's shell.
@@ -195,7 +254,7 @@ export function deviceOperations({
     return spawnSync(
       adbBin,
       serverPort ? ['-P', String(serverPort), ...args] : args,
-      { encoding: 'utf8', timeout: 120_000 }
+      { encoding: 'utf8', timeout: 120_000, cwd: workDir() }
     );
   }
 
@@ -382,6 +441,7 @@ export function deviceOperations({
           detached: true,
           stdio: ['ignore', fd, fd],
           env: launchEnv,
+          cwd: workDir(),
         });
         child.unref();
         closeSync(fd);
@@ -853,8 +913,17 @@ export class DevicePool {
   deviceState(key, { exceptLeaseId = null } = {}) {
     return this.withPool((state) => {
       const leasesNow = this.leases();
+      const entry = state.devices.find((x) => x.key === key) ?? null;
       return {
-        entry: state.devices.find((x) => x.key === key) ?? null,
+        entry,
+        holder:
+          entry == null
+            ? null
+            : serialHolder(entry, state.devices, {
+                nowMs: this.now(),
+                leases: leasesNow,
+                isPidAlive: this.isPidAlive,
+              }),
         held: this.heldIdentifiers({ leases: leasesNow }),
         heldForced: this.heldIdentifiers({
           leases: leasesNow,
@@ -871,11 +940,14 @@ export class DevicePool {
    */
   canActOnKey(key, { forced = false, exceptLeaseId = null } = {}) {
     const nowMs = this.now();
-    const { entry, held, heldForced } = this.deviceState(key, {
+    const { entry, holder, held, heldForced } = this.deviceState(key, {
       exceptLeaseId,
     });
     const heldSet = forced ? heldForced : held;
     if (entry == null) return { allowed: true, held: heldSet, entry: null };
+    if (holder != null) {
+      return { allowed: false, held: heldSet, entry, why: staleWhy(holder) };
+    }
     if (deviceIsBusy(entry, nowMs, this.isPidAlive)) {
       const live = (entry.claims ?? []).find((c) => this.isPidAlive(c?.pid));
       return {
@@ -979,6 +1051,15 @@ export class DevicePool {
             serial: entry.serial,
             why: 'reserved serial',
           });
+          continue;
+        }
+        const holder = serialHolder(entry, state.devices, {
+          nowMs,
+          leases: leasesNow,
+          isPidAlive: this.isPidAlive,
+        });
+        if (holder != null) {
+          decided.refused.push({ key: entry.key, why: staleWhy(holder) });
           continue;
         }
         if (!this.isPoolDevice(entry)) {
@@ -1291,6 +1372,11 @@ export class DevicePool {
     const leases = this.leases();
     const nowMs = this.now();
     return state.devices.map((x) => {
+      const holder = serialHolder(x, state.devices, {
+        nowMs,
+        leases,
+        isPidAlive: this.isPidAlive,
+      });
       const lease = leases.find((l) => l.id === x.leaseId);
       const live = (x.claims ?? []).filter((c) => this.isPidAlive(c?.pid));
       return {
@@ -1301,9 +1387,15 @@ export class DevicePool {
         leaseTask: lease?.task ?? null,
         busy: live.length > 0,
         claims: live,
+        stale: holder,
       };
     });
   }
+}
+
+/** Why a stale row is not acted on, in words. */
+export function staleWhy(holder) {
+  return `stale: ${holder.serial} is ${holder.key}'s (${holder.why})`;
 }
 
 function claimId(pid = process.pid) {

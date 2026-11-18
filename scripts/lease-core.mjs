@@ -1419,6 +1419,43 @@ export function sleepMs(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+/** The longest note a lease carries, in characters. */
+export const NOTE_MAX_CHARS = 200;
+
+/**
+ * A lease note as it is stored: one line of at most `NOTE_MAX_CHARS`, or `null` for an
+ * empty one, which clears the note. Throws on a note that breaks either rule.
+ *
+ * @param {unknown} raw
+ * @returns {string | null}
+ */
+export function normalizeNote(raw) {
+  const note = String(raw ?? '').trim();
+  if (note === '') return null;
+  if (/[\r\n]/.test(note)) {
+    throw new Error('a lease note is one line: it holds a line break');
+  }
+  if ([...note].length > NOTE_MAX_CHARS) {
+    throw new Error(
+      `a lease note is at most ${NOTE_MAX_CHARS} characters, this one has ${[...note].length}`
+    );
+  }
+  return note;
+}
+
+/**
+ * The lease with its note set, or without one for a `null` note.
+ *
+ * @param {object} lease
+ * @param {string | null} note
+ */
+export function withNote(lease, note) {
+  const next = { ...lease };
+  if (note == null) delete next.note;
+  else next.note = note;
+  return next;
+}
+
 /** @returns {string} a lease id a human can read in `list` */
 export function newLeaseId(task, now) {
   const slug = task.replace(/[^A-Za-z0-9._-]+/g, '-');

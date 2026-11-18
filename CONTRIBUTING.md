@@ -394,6 +394,19 @@ the real-input scripts read. It also exports `METRO_PORT_IOS` and `METRO_PORT_AN
 platforms the lease covers; `gate.mjs` runs each device gate on its own platform's port, so an
 iOS and an Android gate on one lease never share a Metro.
 
+A lease carries an optional note that says what it will run next, so whoever shares the machine
+can plan around it. `list` prints it at the end of the lease's row, and `list --json` as the
+lease's `note`.
+
+```sh
+node scripts/lease.mjs acquire --task <ID> --note "check, harness:ios; then real-input:ios, quiet machine"
+node scripts/lease.mjs note <lease-id or ID> "real-input:ios now, needs a quiet machine"
+node scripts/lease.mjs note <lease-id or ID> ""                  # clears it
+```
+
+A note is one line of at most 200 characters. `acquire --note` on a task that already holds a
+lease changes that lease's note; an `acquire` without `--note` leaves it as it is.
+
 The rules the script enforces:
 
 - At most `maxDeviceLeases` device leases at a time (default 2). The next one is refused.
@@ -523,6 +536,10 @@ node scripts/lease.mjs release <ID>                     # devices stay up, on pu
   address is derived from the pair, and the emulator is asked (`adb -s <serial> emu avd name`)
   which AVD is behind that serial before anything is powered off. A device that cannot identify
   itself stays up.
+- A console port runs one emulator, so when two rows of `pool.json` name one serial, only one
+  describes the device on it: the one a live lease holds or a run is using, or else the one the
+  pool recorded there last. The other row is stale. `list` marks it `stale:` and names the row
+  that holds the serial, and a reap, an exclusive acquire's included, does nothing through it.
 - A run in flight is never interrupted. A gate claims the devices of its lease for the duration
   of the run (`scripts/gate.mjs`), so a reap cannot power off an emulator mid-suite, and a
   second gate aimed at the same device is refused before it starts.
@@ -536,6 +553,9 @@ node scripts/lease.mjs release <ID>                     # devices stay up, on pu
   `node scripts/real-input/*.mjs --control …` and `build-app.mjs`. Their protection is the
   lease, because a leased pair is never reaped. To run a device command, take a lease.
 - A claim is a pid. A reap treats the claim of a gate that was killed as no claim.
+- An emulator the pool boots, and an adb server one of its `adb` calls starts, run in the
+  lease state directory (`~/.nitro-ui`), never in the caller's worktree: they outlive the
+  command, and a process whose working directory is a removed worktree keeps its files on disk.
 - Nothing opens Simulator.app: a pooled simulator is booted with `simctl boot` and stays
   headless. On Xcode 27 the app boots a default device no lease handed out. Open it by hand to
   watch one.

@@ -7,6 +7,8 @@
  *   node scripts/watchdog.mjs --fact 'orchestrator=alert:hung:no turn started for 3 h'
  *                                             add a fact the caller observed (repeatable)
  *
+ * It warns when the checkout it runs from is behind `origin/main` as last fetched.
+ *
  * It writes only `~/.nitro-ui/watchdog.json`, its record of what it said last time. A check
  * it cannot make (no network, no `gh`) is skipped: neither an alert nor a recovery.
  */
@@ -19,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 import { stateHome } from './lease-core.mjs';
 import {
+  checkoutFact,
   ciFact,
   diffSnapshot,
   diskFact,
@@ -52,6 +55,18 @@ function json(command, args) {
   } catch {
     return null;
   }
+}
+
+/** Commits on `origin/main`, as last fetched, that this checkout's HEAD lacks. */
+function behindOriginMain() {
+  const result = spawnSync(
+    'git',
+    ['rev-list', '--count', 'HEAD..refs/remotes/origin/main'],
+    { cwd: REPO_ROOT, encoding: 'utf8', timeout: 10_000 }
+  );
+  if (result.status !== 0) return null;
+  const count = Number(result.stdout.trim());
+  return Number.isInteger(count) ? count : null;
 }
 
 function freeGb() {
@@ -137,6 +152,7 @@ function gatherFacts(nowMs) {
     'number,statusCheckRollup',
   ]);
   return [
+    checkoutFact(behindOriginMain()),
     diskFact(freeGb()),
     worktreesFact(
       json(process.execPath, [path.join(HERE, 'worktrees.mjs'), '--json'])

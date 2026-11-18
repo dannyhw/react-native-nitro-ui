@@ -15,6 +15,10 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-18 Nothing user-visible: a lease carries a note that `lease.mjs list` prints, merge
+  branches are named `merge/<name>`, pool emulators and adb servers start outside every
+  worktree, a reap never acts through a stale pool row, and the watchdog warns when its
+  checkout is behind `origin/main` (X55, #96).
 - 11-17 Nothing user-visible: the tooling unit tests run on Vitest, which takes `check` from
   about 89 s to about 60 s; the library tests stay on Jest (X53, #94).
 - 11-17 Nothing user-visible: lint runs on oxlint, format on oxfmt and type checks on
@@ -94,10 +98,6 @@ pull request number is left out where the records do not carry one.
 - 11-05 React Native 0.88 is the floor; Material 3 Expressive is the default Android theme
   (X18, #34).
 - 11-05 Example app only: a scrolling tab bar with full-size touch targets (X19, #35).
-- 11-03 0.6.0 released (#30). ContextMenu, new (G16, #33). Checkbox, new (G15, #31).
-- 11-03 BottomSheet, new (G14, #28). Chip, new (G12, #27). TextField, new (G13, #26).
-- 11-03 README rewritten for people who use the library (D5); every component has iOS and
-  Android screenshots, checked (D4, #29).
 - Research and spikes in the window, nothing user-visible: Q5 to Q9, S2, S3, S5, S6, S6b, T19.
 
 ## Blocked or waiting

@@ -336,3 +336,11 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - oxlint raises 13 `no-path-concat` warnings and a few others (empty `if` blocks, a bare `eslint-enable`) that ESLint did not; none fails lint.
   - A few unchanged code comments still describe Prettier, `.prettierignore` lines 37 and 40 carry task ids, and `create-react-native-library.tools` in `package.json` still lists `eslint`.
   - Only Switch, ContextMenu and TextField had run on bun before the full Android run; the e2e docs call the mobile driver package unverified on bun.
+- Device pool and leases, open after lease notes and stale-row detection:
+  - Nothing removes a stale pool row; `avd:x16_avd` on emulator-5574 stays marked stale until it is removed.
+  - `devices.json` validation accepts two pairs on one emulator port.
+  - `scripts/device-pool.mjs` is not on the gate tool's tooling list, so any change to it owes both harness gates.
+  - No test shows an idle live device is still reaped when an older stale row shares its serial.
+  - Two rows holding the same live lease are both marked stale by `list`, each naming the other; reaping is unaffected.
+  - The watchdog's suggested `git merge --ff-only` fails when the checkout has commits of its own, and "behind" is as of the last fetch.
+  - An adb server started by anything other than the pool still runs in its caller's working directory.

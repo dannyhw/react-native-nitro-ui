@@ -96,6 +96,39 @@ describe('classifyTask', () => {
     expect(result.reason).toContain(reason);
   });
 
+  it('says when HEAD is on a branch of the task, and names the merge branch form', () => {
+    const onMerge = {
+      ...ARCHIVABLE,
+      worktrees: [
+        { branch: 'main', dirty: [] },
+        { branch: 'task/G24-merge', dirty: [] },
+      ],
+      openBranches: [{ branch: 'task/G24-merge', tipDays: 0 }],
+      head: 'task/G24-merge',
+    };
+    expect(classifyTask(onMerge)).toEqual({
+      verdict: 'keep',
+      reason:
+        'HEAD is on task/G24-merge, a branch of this task, which keeps its records: ' +
+        'merge on a `merge/<name>` branch to let them go',
+    });
+    // Another branch of the task that is still open is the reason, not HEAD's.
+    const alsoOpen = {
+      ...onMerge,
+      openBranches: [
+        ...onMerge.openBranches,
+        { branch: 'task/G24-fix2', tipDays: 3 },
+      ],
+    };
+    expect(classifyTask(alsoOpen).reason).toBe(
+      'task/G24-fix2 is not merged into HEAD'
+    );
+    // HEAD on another task's branch says nothing about this one.
+    expect(
+      classifyTask({ ...ARCHIVABLE, head: 'task/X31-flakes' }).verdict
+    ).toBe('archive');
+  });
+
   it('lets a stale branch go, and says that is why', () => {
     const openBranches = [{ branch: 'task/G24-proto', tipDays: 40 }];
     expect(classifyTask({ ...ARCHIVABLE, openBranches })).toEqual({
@@ -759,7 +792,11 @@ describe('task-records.mjs, end to end', () => {
     repo.git(['checkout', '-q', '-b', 'task/H5-here']);
 
     const { rows } = repo.run(['--archive']);
-    expect(rows.H5).toMatchObject(kept('a worktree is on task/H5-here'));
+    expect(rows.H5).toMatchObject({ verdict: 'keep' });
+    expect(rows.H5.reason).toContain(
+      'HEAD is on task/H5-here, a branch of this task'
+    );
+    expect(rows.H5.reason).toContain('`merge/<name>`');
     expect(repo.git(['status', '--porcelain'])).toBe('');
   });
 

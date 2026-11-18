@@ -723,6 +723,29 @@ describe('the lease owns the device lifecycle', () => {
     expect(listed.stdout).toContain(SERIAL_A);
   });
 
+  it('marks a row stale in `list` when another row holds its serial, and reaps nothing through it', () => {
+    tools({ androidUp: true });
+    // An AVD no longer in devices.json, recorded on the serial pair-a's emulator now uses.
+    warmDevice({
+      ...idleEntry({ key: 'avd:x16_avd', idleMinutes: 2000 }),
+      adbPort: 5037,
+    });
+    warmDeviceSecond(idleEntry({ idleMinutes: 4 }));
+    const rows = cli(['list']).stdout.split('\n');
+    const row = (key) =>
+      rows.find((line) => line.split(/\s+/)[1] === key) ?? '';
+    expect(row('avd:x16_avd')).toContain(
+      `stale: ${SERIAL_A} is avd:nitro-ui-a's (the pool recorded it there later)`
+    );
+    expect(row('avd:nitro-ui-a')).toContain('idle 4m of 30m');
+    expect(row('avd:nitro-ui-a')).not.toContain('stale');
+
+    const reaped = cli(['reap']);
+    expect(reaped.stderr).toContain('not touching avd:x16_avd (stale: ');
+    expect(log()).not.toContain('emu');
+    expect(poolDevices()).toHaveLength(2);
+  });
+
   it('will not power off a device a live process has claimed', () => {
     // The pid is this test process's, so every reap must treat the device as busy.
     warmDevice({
