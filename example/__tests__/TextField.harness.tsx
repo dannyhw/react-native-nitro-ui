@@ -753,15 +753,15 @@ describe('TextField', () => {
         'the field to take the longer limit'
       );
 
-      // There is room now: the caret goes between the two spaces and the key lands there.
-      (await handleOf('cut-limit')).nuiTestPaste('', 6);
+      // There is room now: the caret goes back into the run of spaces and the key lands there.
+      (await handleOf('cut-limit')).nuiTestPaste('', 5);
       await sleep(200);
       await typeText('q');
       await sleep(300);
       const typed = (await handleOf('cut-limit')).nuiTestState();
-      expect(codeUnits(typed.text)).toBe(codeUnits('ab w  qcd'));
-      expect(typed.caret).toBe(7);
-      expect(jsValues.get('cut-limit')).toBe('ab w  qcd');
+      expect(codeUnits(typed.text)).toBe(codeUnits('ab w q cd'));
+      expect(typed.caret).toBe(6);
+      expect(jsValues.get('cut-limit')).toBe('ab w q cd');
     }
   );
 
