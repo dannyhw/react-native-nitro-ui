@@ -107,9 +107,9 @@ tap.
 | Prop          | Android                                                      | iOS `standard`                                    | iOS `connected`                |
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------- | ------------------------------ |
 | `appearance`  | 12 dp apart, each item its own corners · 2 dp joined         | an 8 pt row of bordered controls · `ControlGroup` |                                |
-| `variant`     | `NitroUiM3Button` / `NitroUiM3ToggleButton`, one per variant | `ButtonStyle` per variant, toggle or action item  | ignored                        |
+| `variant`     | `NitroUiM3Button` / `NitroUiM3ToggleButton`, one per variant | `ButtonStyle` per variant, toggle or action item  | ignored (a group with a toggle: as `standard`) |
 | `size`        | `Button`'s sizes, floored at Material's 48 dp target         | `.controlSize`                                    | ignored (31 pt at every size)  |
-| `tintColor`   | the variant's container, and the checked container           | `.tint()`, on a toggle item only while checked    | ignored                        |
+| `tintColor`   | the variant's container, and the checked container           | `.tint()`, on every item, checked or not          | ignored (a group with a toggle: as `standard`) |
 | `labelStyle`  | icon and title; `automatic` = both                           | `automatic` = icon and title                      | `automatic` = icons only       |
 | `systemImage` | ignored                                                      | `Label`'s glyph                                   | `Label`'s glyph, usually alone |
 | `androidIcon` | `Icon` at the size's icon size, and again in the overflow row | ignored                                           | ignored                        |
@@ -124,24 +124,24 @@ On Android a `text` toggle is drawn as the outlined toggle, because Material has
 button; every other variant has its own toggle button, and each shows its checked state in its own
 way.
 
-On iOS `variant` maps to the same `ButtonStyle` table as [Button](button.md), for a toggle item as
-for an action item: `filled` and `elevated` to `.borderedProminent`, `tonal` and `outlined` to
-`.bordered`, `text` to `.borderless`. Unlike `Button`, a group does not stroke a hairline for
-`outlined`. A toggle keeps that style in both of its states, so it sits with the action item beside
-it; what changes with the state is the colour, not the shape.
+On iOS `variant` maps to the same `ButtonStyle` table as [Button](button.md): `filled` and
+`elevated` to `.borderedProminent`, `tonal` and `outlined` to `.bordered`, `text` to `.borderless`.
+Unlike `Button`, a group does not stroke a hairline for `outlined`. A toggle item starts from that
+same style and moves one step up in it while checked, always in `tintColor`: grey belongs to
+disabled items, and an unchecked toggle is not one.
 
-| `variant`       | iOS action item        | iOS toggle item, checked | iOS toggle item, unchecked |
-| --------------- | ---------------------- | ------------------------ | -------------------------- |
-| `filled`        | `.borderedProminent`   | the same, in `tintColor` | a grey capsule             |
-| `elevated`      | the same               | the same                 | a grey capsule             |
-| `tonal`         | `.bordered`            | the same, tinted label   | the same, grey label       |
-| `outlined`      | the same               | the same                 | the same                   |
-| `text`          | `.borderless`          | the same, tinted label   | the same, grey label       |
+| `variant`       | iOS action item      | iOS toggle item, checked      | iOS toggle item, unchecked |
+| --------------- | -------------------- | ----------------------------- | -------------------------- |
+| `filled`        | `.borderedProminent` | the same                      | `.bordered`                |
+| `elevated`      | the same             | the same                      | `.bordered`                |
+| `tonal`         | `.bordered`          | `.borderedProminent`          | the same as the action item |
+| `outlined`      | the same             | the same                      | the same                   |
+| `text`          | `.borderless`        | `.bordered`                   | the same as the action item |
 
-The unchecked item is drawn with the system's own neutral colours — a grey capsule where the style
-is a filled one, the secondary label colour where the style colours its label — so an unchecked
-item is the same shape as a checked one without its colour. A `text` toggle shows its state that
-way too: a tinted label against a grey one, with nothing drawn behind either.
+So an unchecked toggle is the quiet item of the row — the action item's own look, except in a
+`filled` or `elevated` group, where it drops the prominent fill — and a checked one is the loudest.
+A `text` toggle has no louder label to move to, so its checked state takes the quiet capsule and
+keeps the tinted label.
 
 ### A connected iOS group with toggles
 
