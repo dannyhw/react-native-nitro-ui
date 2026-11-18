@@ -20,6 +20,7 @@ import { screen, userEvent } from '@react-native-harness/ui';
 import {
   TextField,
   nitroUiCore,
+  type TextFieldKeyboardType,
   type TextFieldHandle,
 } from 'react-native-nitro-ui';
 import { waitForHandle } from './handles';
@@ -63,6 +64,10 @@ type FieldState = {
   maxLength: number;
   placeholder: string;
   accessibilityLabel: string;
+  /** The caret's UTF-16 offset in `text`, or `-1`. */
+  caret: number;
+  /** `'offered' | 'refused' | 'unknown'`: what the keyboard in use was told. */
+  suggestions: string;
 };
 
 /** The `hybridRef` handle; the library exports no Hybrid View types. */
@@ -288,10 +293,41 @@ function LatencyArm({ arm }: { arm: 'nitro' | 'rn' }) {
 }
 const rnFocus: { current: (() => void) | null } = { current: null };
 
+/** UTF-16 code units, so a space UIKit substituted for another space still compares. */
+const codeUnits = (text: string) =>
+  Array.from(text, (c) => c.charCodeAt(0)).join(',');
+
 function percentile(values: number[], p: number): number {
   const sorted = [...values].sort((a, b) => a - b);
   return (
     sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? NaN
+  );
+}
+
+/** A field whose keyboard props a test moves one at a time. */
+function Keyboard({
+  autoCorrect = true,
+  keyboardType = 'default',
+  secureTextEntry = false,
+  testID = 'keyboard',
+}: {
+  autoCorrect?: boolean;
+  keyboardType?: TextFieldKeyboardType;
+  secureTextEntry?: boolean;
+  testID?: string;
+}) {
+  const [value, setValue] = useState('');
+  return (
+    <TextField
+      testID={testID}
+      value={value}
+      onChangeText={setValue}
+      autoCorrect={autoCorrect}
+      keyboardType={keyboardType}
+      secureTextEntry={secureTextEntry}
+      autoCapitalize="none"
+      hybridRef={capture(testID)}
+    />
   );
 }
 
@@ -549,6 +585,165 @@ describe('TextField', () => {
         Array.from('ab xy cd', (c) => c.charCodeAt(0)).join(',')
       );
       expect(jsValues.get('paste-mid')).toBe('ab xy cd');
+    }
+  );
+
+  /*
+   * iOS only: a composition opened by `setMarkedText` commits without the delegate's
+   * `shouldChangeCharactersIn`, which is the edit native's backstop cuts. The caret the
+   * backstop leaves behind is the half of that cut a text message cannot show.
+   */
+  itComposes(
+    'keeps the caret after the part of a mid-field edit the backstop keeps',
+    async () => {
+      render(<Controlled id="cut-caret" initial="ab  cd" maxLength={8} />);
+      await waitForTestId('cut-caret');
+      await focusField('cut-caret');
+      // The paste hook doubles as the seam that moves the caret: asked to paste nothing it
+      // only puts the caret between the two spaces, so UIKit's smart insert of a real paste
+      // gets no say about the text the cut is then made in.
+      (await handleOf('cut-caret')).nuiTestPaste('', 3);
+      const positioned = await stateWhen(
+        'cut-caret',
+        (s) => s.caret === 3 && codeUnits(s.text) === codeUnits('ab  cd'),
+        'the caret between the two spaces'
+      );
+      expect(positioned.nativeEvents).toBe(0);
+
+      // Three code units committed where one fits. The backstop keeps `xy`, and the caret
+      // stays behind what it kept rather than going to the end of the field.
+      await compose('cut-caret', 'xyz');
+      await finishComposition('cut-caret');
+      const cut = await stateWhen(
+        'cut-caret',
+        (s) =>
+          codeUnits(s.text) === codeUnits('ab xy cd') &&
+          s.jsEvents === s.nativeEvents,
+        'the cut commit'
+      );
+      expect(cut.caret).toBe(5);
+      expect(cut.caret).toBeLessThan(cut.text.length);
+      expect(codeUnits(jsValues.get('cut-caret') ?? '')).toBe(
+        codeUnits('ab xy cd')
+      );
+    }
+  );
+
+  /*
+   * iOS only, and the same commit with room for one unit of a four-unit edit: here "just after
+   * what was kept" and "one past that" - where UIKit's own insertion point lands - are two
+   * different offsets, which a cut that drops a single unit cannot tell apart.
+   */
+  itComposes(
+    'puts the caret after the kept unit when a cut drops most of the edit',
+    async () => {
+      render(<Controlled id="cut-long" initial="ab  cdef" maxLength={9} />);
+      await waitForTestId('cut-long');
+      await focusField('cut-long');
+      (await handleOf('cut-long')).nuiTestPaste('', 3);
+      await stateWhen(
+        'cut-long',
+        (s) => s.caret === 3 && codeUnits(s.text) === codeUnits('ab  cdef'),
+        'the caret between the two spaces'
+      );
+
+      // `w` is kept, so the caret belongs at 4 - not at 5, where UIKit's own insertion point
+      // lands, or 9, the end of the field.
+      await compose('cut-long', 'wxyz');
+      await finishComposition('cut-long');
+      const cut = await stateWhen(
+        'cut-long',
+        (s) =>
+          codeUnits(s.text) === codeUnits('ab w cdef') &&
+          s.jsEvents === s.nativeEvents,
+        'the cut commit'
+      );
+      expect(cut.caret).toBe(4);
+      expect(codeUnits(jsValues.get('cut-long') ?? '')).toBe(
+        codeUnits('ab w cdef')
+      );
+    }
+  );
+
+  /*
+   * iOS only, and the same commit at the end of the field: the caret there is the end
+   * either way, which is what makes the case above the one that says something.
+   */
+  itComposes(
+    'leaves the caret at the end when the cut is at the end',
+    async () => {
+      const { rerender } = await render(
+        <Controlled id="cut-tail" initial="abcd" maxLength={5} />
+      );
+      await waitForTestId('cut-tail');
+      await focusField('cut-tail');
+      await compose('cut-tail', 'xyz');
+      await finishComposition('cut-tail');
+      const cut = await stateWhen(
+        'cut-tail',
+        (s) => s.text === 'abcdx' && s.jsEvents === s.nativeEvents,
+        'the cut at the tail'
+      );
+      expect(cut.caret).toBe(cut.text.length);
+      expect(jsValues.get('cut-tail')).toBe('abcdx');
+
+      /*
+       * Nothing is owed at the end of the text: there is no later offset for UIKit's own
+       * insertion point to arrive at, so a cut there never owns the caret. Raising
+       * `maxLength` and carrying on typing puts the keys after the `x`.
+       */
+      await rerender(
+        <Controlled id="cut-tail" initial="abcd" maxLength={10} />
+      );
+      await stateWhen(
+        'cut-tail',
+        (s) => s.maxLength === 10,
+        'the field to take the longer limit'
+      );
+      const tail = await handleOf('cut-tail');
+      await typeText('qr');
+      await waitFor(() => expect(tail.nuiTestState().text).toBe('abcdxqr'), {
+        timeout: 5000,
+      });
+      const typed = tail.nuiTestState();
+      expect(typed.caret).toBe(7);
+      expect(jsValues.get('cut-tail')).toBe('abcdxqr');
+    }
+  );
+
+  /*
+   * iOS only: text that repeats the committed units says nothing about where the composition
+   * was - two spaces committed inside a run of spaces compare like two appended at the end of
+   * the run. The caret comes from what UIKit reports, not from the difference between the
+   * texts. The run is also the caret's seat: UIKit's paste hook pads a seat next to a letter
+   * with a space of its own.
+   */
+  itComposes(
+    'puts the caret after a composition that repeats the text around it',
+    async () => {
+      render(
+        <Controlled id="cut-repeat" initial="aaa    aaa" maxLength={11} />
+      );
+      await waitForTestId('cut-repeat');
+      await focusField('cut-repeat');
+      (await handleOf('cut-repeat')).nuiTestPaste('', 5);
+      await stateWhen(
+        'cut-repeat',
+        (s) => s.caret === 5 && s.text.length === 10,
+        'the caret inside the run of spaces'
+      );
+
+      // One unit of a two-unit commit fits, and the run is five spaces long either way: the
+      // text says nothing, and the caret is 6, where the composition was, or 8.
+      await compose('cut-repeat', '  ');
+      await finishComposition('cut-repeat');
+      const cut = await stateWhen(
+        'cut-repeat',
+        (s) => s.text.length === 11 && s.jsEvents === s.nativeEvents,
+        'the cut commit'
+      );
+      expect(cut.caret).toBe(6);
+      expect(jsValues.get('cut-repeat')?.length).toBe(11);
     }
   );
 
@@ -859,6 +1054,84 @@ describe('TextField', () => {
         `${summary.nitro.p95.toFixed(1)}, rn p50 ${summary.rn.p50.toFixed(1)} / p95 ` +
         `${summary.rn.p95.toFixed(1)}`
     );
+  });
+
+  /*
+   * What the keyboard was told, read from it rather than from the props that asked for
+   * it: on Android the `EditorInfo` the focused field hands the IME, on iOS the trait it
+   * attaches with. `'unknown'` means the field has not been asked yet, so every wait
+   * below goes past it and never reads a wish as an answer.
+   */
+  it('tells the keyboard what autoCorrect asked for', async () => {
+    const { rerender, unmount } = await render(<Keyboard />);
+    await waitForTestId('keyboard');
+    await focusField('keyboard');
+
+    const asFound = await stateWhen(
+      'keyboard',
+      (s) => s.suggestions !== 'unknown',
+      'the focused field to read its keyboard back'
+    );
+    expect(asFound.focused).toBe(true);
+    expect(asFound.suggestions).toBe('offered');
+
+    // `autoCorrect={false}` has to send Android's `TYPE_TEXT_FLAG_NO_SUGGESTIONS`: a
+    // keyboard left without the autocorrect flag alone still draws its suggestion strip.
+    await rerender(<Keyboard autoCorrect={false} />);
+    const refused = await stateWhen(
+      'keyboard',
+      (s) => s.suggestions === 'refused',
+      'the keyboard to be told no suggestions'
+    );
+    expect(refused.focused).toBe(true);
+    expect(refused.autoCorrect).toBe(false);
+
+    // Back on a field that never lost focus: the change reaches the keyboard that is up.
+    await rerender(<Keyboard autoCorrect />);
+    await stateWhen(
+      'keyboard',
+      (s) => s.suggestions === 'offered',
+      'the keyboard to be told suggestions are back'
+    );
+
+    // A phone keyboard, mounted rather than reloaded: what it is told is what its props say at
+    // mount, with no keyboard restart in between to read half-applied. The refused flag belongs
+    // to Android's text class, where in another class the same bit means something else; iOS
+    // hands every keyboard the one corrections trait, so it reads refused whatever the keyboard.
+    unmount();
+    render(
+      <Keyboard testID="phone" autoCorrect={false} keyboardType="phone-pad" />
+    );
+    await waitForTestId('phone');
+    await focusField('phone');
+    const phone = await stateWhen(
+      'phone',
+      (s) => s.suggestions !== 'unknown',
+      'the phone keyboard to be read back'
+    );
+    expect(phone.keyboardType).toBe('phone-pad');
+    expect(phone.autoCorrect).toBe(false);
+    console.log(`phone keyboard told: ${phone.suggestions}`);
+    expect(phone.suggestions).toBe(iOS ? 'refused' : 'offered');
+
+    // A secure field with the default, mounted fresh too. Android's field sends no suggestions
+    // flag of its own, so it reads as offered. iOS decides for itself that a secure field has
+    // no corrections, whatever the prop says, so the answer there is only logged: the point is
+    // that this prop being on adds nothing to what the field was already told.
+    unmount();
+    render(<Keyboard testID="secure" secureTextEntry />);
+    await waitForTestId('secure');
+    await focusField('secure');
+    const secure = await stateWhen(
+      'secure',
+      (s) => s.suggestions !== 'unknown',
+      'the secure field to be read back'
+    );
+    expect(secure.secure).toBe(true);
+    console.log(`secure field told: ${secure.suggestions}`);
+    if (!iOS) {
+      expect(secure.suggestions).toBe('offered');
+    }
   });
 
   it('comes back from the pool with none of its previous owner', async () => {

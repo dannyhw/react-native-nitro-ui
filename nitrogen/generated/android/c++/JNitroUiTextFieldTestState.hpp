@@ -63,6 +63,10 @@ namespace margelo::nitro::nitroui {
       jni::local_ref<jni::JString> placeholder = this->getFieldValue(fieldPlaceholder);
       static const auto fieldAccessibilityLabel = clazz->getField<jni::JString>("accessibilityLabel");
       jni::local_ref<jni::JString> accessibilityLabel = this->getFieldValue(fieldAccessibilityLabel);
+      static const auto fieldCaret = clazz->getField<double>("caret");
+      double caret = this->getFieldValue(fieldCaret);
+      static const auto fieldSuggestions = clazz->getField<jni::JString>("suggestions");
+      jni::local_ref<jni::JString> suggestions = this->getFieldValue(fieldSuggestions);
       return NitroUiTextFieldTestState(
         text->toStdString(),
         static_cast<bool>(focused),
@@ -79,7 +83,9 @@ namespace margelo::nitro::nitroui {
         static_cast<bool>(autoCorrect),
         maxLength,
         placeholder->toStdString(),
-        accessibilityLabel->toStdString()
+        accessibilityLabel->toStdString(),
+        caret,
+        suggestions->toStdString()
       );
     }
 
@@ -89,7 +95,7 @@ namespace margelo::nitro::nitroui {
      */
     [[maybe_unused]]
     static jni::local_ref<JNitroUiTextFieldTestState::javaobject> fromCpp(const NitroUiTextFieldTestState& value) {
-      using JSignature = JNitroUiTextFieldTestState(jni::alias_ref<jni::JString>, jboolean, jboolean, double, double, jni::alias_ref<jni::JString>, jboolean, jboolean, jboolean, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jboolean, double, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>);
+      using JSignature = JNitroUiTextFieldTestState(jni::alias_ref<jni::JString>, jboolean, jboolean, double, double, jni::alias_ref<jni::JString>, jboolean, jboolean, jboolean, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jboolean, double, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, double, jni::alias_ref<jni::JString>);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
@@ -109,7 +115,9 @@ namespace margelo::nitro::nitroui {
         value.autoCorrect,
         value.maxLength,
         jni::make_jstring(value.placeholder),
-        jni::make_jstring(value.accessibilityLabel)
+        jni::make_jstring(value.accessibilityLabel),
+        value.caret,
+        jni::make_jstring(value.suggestions)
       );
     }
   };

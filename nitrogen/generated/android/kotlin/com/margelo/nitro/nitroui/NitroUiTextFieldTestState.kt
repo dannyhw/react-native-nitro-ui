@@ -65,7 +65,13 @@ data class NitroUiTextFieldTestState(
   val placeholder: String,
   @DoNotStrip
   @Keep
-  val accessibilityLabel: String
+  val accessibilityLabel: String,
+  @DoNotStrip
+  @Keep
+  val caret: Double,
+  @DoNotStrip
+  @Keep
+  val suggestions: String
 ) {
   /* primary constructor */
 
@@ -88,6 +94,8 @@ data class NitroUiTextFieldTestState(
       && Objects.deepEquals(this.maxLength, other.maxLength)
       && Objects.deepEquals(this.placeholder, other.placeholder)
       && Objects.deepEquals(this.accessibilityLabel, other.accessibilityLabel)
+      && Objects.deepEquals(this.caret, other.caret)
+      && Objects.deepEquals(this.suggestions, other.suggestions)
   }
 
   override fun hashCode(): Int {
@@ -107,7 +115,9 @@ data class NitroUiTextFieldTestState(
       autoCorrect,
       maxLength,
       placeholder,
-      accessibilityLabel
+      accessibilityLabel,
+      caret,
+      suggestions
     ).contentDeepHashCode()
   }
 
@@ -119,8 +129,8 @@ data class NitroUiTextFieldTestState(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(text: String, focused: Boolean, composing: Boolean, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Boolean, multiline: Boolean, secure: Boolean, keyboardType: String, returnKeyType: String, autoCapitalize: String, autoCorrect: Boolean, maxLength: Double, placeholder: String, accessibilityLabel: String): NitroUiTextFieldTestState {
-      return NitroUiTextFieldTestState(text, focused, composing, nativeEvents, jsEvents, lastWrite, editable, multiline, secure, keyboardType, returnKeyType, autoCapitalize, autoCorrect, maxLength, placeholder, accessibilityLabel)
+    private fun fromCpp(text: String, focused: Boolean, composing: Boolean, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Boolean, multiline: Boolean, secure: Boolean, keyboardType: String, returnKeyType: String, autoCapitalize: String, autoCorrect: Boolean, maxLength: Double, placeholder: String, accessibilityLabel: String, caret: Double, suggestions: String): NitroUiTextFieldTestState {
+      return NitroUiTextFieldTestState(text, focused, composing, nativeEvents, jsEvents, lastWrite, editable, multiline, secure, keyboardType, returnKeyType, autoCapitalize, autoCorrect, maxLength, placeholder, accessibilityLabel, caret, suggestions)
     }
   }
 }

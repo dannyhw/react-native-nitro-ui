@@ -55,10 +55,12 @@ namespace margelo::nitro::nitroui {
     double maxLength     SWIFT_PRIVATE;
     std::string placeholder     SWIFT_PRIVATE;
     std::string accessibilityLabel     SWIFT_PRIVATE;
+    double caret     SWIFT_PRIVATE;
+    std::string suggestions     SWIFT_PRIVATE;
 
   public:
     NitroUiTextFieldTestState() = default;
-    explicit NitroUiTextFieldTestState(std::string text, bool focused, bool composing, double nativeEvents, double jsEvents, std::string lastWrite, bool editable, bool multiline, bool secure, std::string keyboardType, std::string returnKeyType, std::string autoCapitalize, bool autoCorrect, double maxLength, std::string placeholder, std::string accessibilityLabel): text(text), focused(focused), composing(composing), nativeEvents(nativeEvents), jsEvents(jsEvents), lastWrite(lastWrite), editable(editable), multiline(multiline), secure(secure), keyboardType(keyboardType), returnKeyType(returnKeyType), autoCapitalize(autoCapitalize), autoCorrect(autoCorrect), maxLength(maxLength), placeholder(placeholder), accessibilityLabel(accessibilityLabel) {}
+    explicit NitroUiTextFieldTestState(std::string text, bool focused, bool composing, double nativeEvents, double jsEvents, std::string lastWrite, bool editable, bool multiline, bool secure, std::string keyboardType, std::string returnKeyType, std::string autoCapitalize, bool autoCorrect, double maxLength, std::string placeholder, std::string accessibilityLabel, double caret, std::string suggestions): text(text), focused(focused), composing(composing), nativeEvents(nativeEvents), jsEvents(jsEvents), lastWrite(lastWrite), editable(editable), multiline(multiline), secure(secure), keyboardType(keyboardType), returnKeyType(returnKeyType), autoCapitalize(autoCapitalize), autoCorrect(autoCorrect), maxLength(maxLength), placeholder(placeholder), accessibilityLabel(accessibilityLabel), caret(caret), suggestions(suggestions) {}
 
   public:
     friend bool operator==(const NitroUiTextFieldTestState& lhs, const NitroUiTextFieldTestState& rhs) = default;
@@ -89,7 +91,9 @@ namespace margelo::nitro {
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "autoCorrect"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "maxLength"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "placeholder"))),
-        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "accessibilityLabel")))
+        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "accessibilityLabel"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "caret"))),
+        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "suggestions")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::nitroui::NitroUiTextFieldTestState& arg) {
@@ -110,6 +114,8 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "maxLength"), JSIConverter<double>::toJSI(runtime, arg.maxLength));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "placeholder"), JSIConverter<std::string>::toJSI(runtime, arg.placeholder));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "accessibilityLabel"), JSIConverter<std::string>::toJSI(runtime, arg.accessibilityLabel));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "caret"), JSIConverter<double>::toJSI(runtime, arg.caret));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "suggestions"), JSIConverter<std::string>::toJSI(runtime, arg.suggestions));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -136,6 +142,8 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "maxLength")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "placeholder")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "accessibilityLabel")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "caret")))) return false;
+      if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "suggestions")))) return false;
       return true;
     }
   };

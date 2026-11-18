@@ -34,6 +34,16 @@ final class TextFieldModel: NitroUiModel {
   /// Whether the control held marked text the last time it reported an edit, so the
   /// edit that ends a composition is known as one (see `userEdited`).
   var wasComposing = false
+  /// What a `maxLength` cut owes the caret while UIKit ends the composition's commit that cut was
+  /// made in. `nil` when no cut is waiting on one.
+  var owedCaret: NitroUiOwedCaret?
+  /// Where the open composition began, as the control reports it: text that repeats the composed
+  /// characters hides the location when a cut compares the text before and after. `nil` with no
+  /// composition open.
+  var markedStart: Int?
+  /// A `maxLength` cut is being written into the control: the selection changes those writes make
+  /// say nothing about where the caret the field ends up with belongs.
+  var applyingCut = false
 
   var onChange: ((_ value: String, _ eventCount: Double) -> Void)?
   var onFocusChange: ((_ focused: Bool) -> Void)?
@@ -102,6 +112,14 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
   func nuiReportEdit() {
     guard !applying else { return }
     model.owner?.userEdited(self)
+  }
+
+  /// UIKit's own end of a composition: it commits the marked text, reporting the edit from inside
+  /// that call, and its insertion point settles after that report - sometimes before this returns,
+  /// more often a pass later, where the selection callback takes it from here.
+  override func unmarkText() {
+    super.unmarkText()
+    nuiSettleCaret()
   }
 
   func nuiApply() {
@@ -191,7 +209,7 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
   }
 
   func textFieldDidChangeSelection(_ textField: UITextField) {
-    model.owner?.publishState()
+    nuiSelectionChanged()
   }
 }
 
@@ -249,6 +267,13 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
     updatePlaceholder()
     invalidateIntrinsicContentSize()
     model.owner?.userEdited(self)
+  }
+
+  /// UIKit's own end of a composition, and the insertion point it settles after reporting the edit
+  /// (see `NitroUiSingleLineField`).
+  override func unmarkText() {
+    super.unmarkText()
+    nuiSettleCaret()
   }
 
   func nuiApply() {
@@ -329,7 +354,7 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
   }
 
   func textViewDidChangeSelection(_ textView: UITextView) {
-    model.owner?.publishState()
+    nuiSelectionChanged()
   }
 }
 
@@ -439,7 +464,8 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
   private var stateSnapshot = NitroUiTextFieldTestState(
     text: "", focused: false, composing: false, nativeEvents: 0, jsEvents: 0, lastWrite: "none",
     editable: true, multiline: false, secure: false, keyboardType: "default", returnKeyType: "default",
-    autoCapitalize: "sentences", autoCorrect: true, maxLength: -1, placeholder: "", accessibilityLabel: "")
+    autoCapitalize: "sentences", autoCorrect: true, maxLength: -1, placeholder: "",
+    accessibilityLabel: "", caret: -1, suggestions: "unknown")
 
   override init() {
     host = NitroSwiftUIHost(model: TextFieldModel())
@@ -555,6 +581,8 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
     set {
       // Read only by the control's edit callbacks; nothing to render.
       model.maxLength = newValue.asType(Double.self).flatMap { $0.isFinite ? Int($0) : nil }
+      // A different limit says the last cut should have kept something else.
+      discardOwedCaret()
     }
   }
 
@@ -685,6 +713,8 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
     model.focused = false
     model.focusWhenReady = false
     model.wasComposing = false
+    model.owedCaret = nil
+    model.markedStart = nil
     // The control outlives the mount, so its text is reset with the model's.
     syncText()
     host.prepareForRecycle()
@@ -705,6 +735,7 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
     nitroUiAssertMainThread()
     guard model.focused != focused else { return }
     model.focused = focused
+    discardOwedCaret()
     publishState()
     model.onFocusChange?(focused)
   }
@@ -733,7 +764,9 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, 
       autoCorrect: model.autoCorrect,
       maxLength: Double(model.maxLength ?? -1),
       placeholder: model.placeholder ?? "",
-      accessibilityLabel: control?.accessibilityLabel ?? "")
+      accessibilityLabel: control?.accessibilityLabel ?? "",
+      caret: Double(control?.nuiCaret ?? -1),
+      suggestions: (control?.nuiSuggestionsOffered ?? true) ? "offered" : "refused")
     stateLock.lock()
     stateSnapshot = snapshot
     stateLock.unlock()

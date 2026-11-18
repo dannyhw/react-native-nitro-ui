@@ -16,7 +16,14 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   2026-11-16, `harness:android` started 21:46 UTC while an iOS test build loaded the machine,
   seen before at a load peak.
 - `bottom-sheet.e2e.ts` "a drag up on the two-detent header expands the sheet", the header did
-  not move, 2026-11-16, `real-input:android` started 18:45 UTC beside an iOS gate, seen once.
+  not move, 2026-11-16, `real-input:android` started 18:45 UTC beside an iOS gate; again
+  2026-11-18 on the TextField merge run started 22:18 UTC (the first test of the run, the header's
+  top 1391 before and after the drag), green on `--rerun-failed`. Seen twice. Not quarantined: no
+  log shows the driver at fault, so a drag the sheet ignored is treated as a bug with a low hit
+  rate and gets a bugfix task.
+- `BottomSheet.harness.tsx` (iOS), a chunk lost to "the native app crashed during test execution"
+  with no crash log, 2026-11-18, `harness:ios` on a task branch while another task's run loaded the
+  machine, seen once.
 - `a11y:hosted-date-picker`, the one node named "Hosted date picker" read with a zero-sized box,
   2026-11-17, `real-input:android` started 16:41 UTC at a load peak of 43 beside another merge
   run's app builds, seen twice (first on 2026-11-13 in a filtered `--control hosted-picker` run).
@@ -137,9 +144,8 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G14 (Q2, follow-up task): reproduce react-native-screens 4.30.1's Android `ScreenStack` mount crash (`addViewAt … child already has a parent`) in a fresh app instance without nitro-ui, and report it upstream; then measure BottomSheet in a native-stack screen and a `formSheet` on Android.
 - G14 (re-review): `BottomSheet.harness`'s "dropped 0 ms after presenting" is vacuous - the `isPresented` write and the unmount batch into one commit, so no sheet is ever asked for; drop between the commit and the present instead (a main-turn wait), or remove the case.
 - G14 (re-review): `NitroUiPresentation.controller` keeps a dialog's last `UIAlertController` alive in a pooled `NitroUiDialog` until it presents again; BottomSheet now calls `forgetController()` after its teardown and its sheet's exit, and the dialogs could do the same.
-- TextField (G13 merge review): iOS `nuiSetText` after the backstop cuts text in the middle of the field moves the caret to the end (`HybridNitroUiTextField.swift` ~874); keep the caret after the kept part of the edit.
-- TextField Android parity: Compose 1.12 maps `autoCorrect=false` to "no autocorrect" only, while RN also sets `TYPE_TEXT_FLAG_NO_SUGGESTIONS`, so the keyboard still shows suggestions (and may open a composing region over the word at the caret) on our field.
 - TextField Android: `observe` pays an owed `maxLength` cut before `settle`, so the cut's event makes a write held through the composition stale. Unreachable today (the input transformation already cuts composing text), but the order should be settle first.
+- SearchField Android: `autoCorrect={false}` still sends no `TYPE_TEXT_FLAG_NO_SUGGESTIONS`, so its keyboard keeps drawing a suggestion strip; TextField's `NitroUiAutoCorrectInterceptor` (`HybridNitroUiTextField.kt`) wraps the request and could be shared, and the field then wants the same read-back in its test state.
 - TextField Android harness: `commits a keystroke about as fast as RN TextInput` failed twice at load1 3-5 with `nitro: "ab" never committed` (G13 fix round 2). The merge makes the probe's `commit` finish any composing region first and prints the field's state on failure; if it recurs, the state says whether the key landed on a keyboard-opened composition (`b`) or never arrived (`a`).
 - `lease.mjs list` pairs the stale `x16_avd` record with `emulator-5574`, the serial pair-a's `nitroui_a` boots on, so one console reads as both an unowned pool device and a leased one (D4).
 - G14 (merge re-review): `BottomSheet.harness.tsx`'s comment at the 50-cycle block (~881-883) says the probe is never the cycling view handed back by the recycle pool; a probe mounted at the start of a round can still be a pooled view from an earlier round - say "never the view dropped in this round".
@@ -356,3 +362,7 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - A `Progress` (or any passive nitro-ui view) inside a pressing row takes the tap and answers nothing, on both platforms (documented); it could answer `pressOwnedByRow` as `ListItem` does.
   - No device test covers a `Form.Row onPress` around a `ListItem` without `onPress`, and Android checks the in-form item's ink but not its press count.
   - `src/components/Form/component.json`'s `form` title does not list the press rule or the keyboard opt-out; `FormScreen.tsx`'s `echoGrid` comment still says two lines of counters (now 18), and on iOS the taller bar shortens the Form's viewport.
+- TextField, open after the caret-after-a-cut and `autoCorrect` fixes:
+  - iOS multi-line field: `UITextView` reports a keystroke's caret move before the edit, so if an owed-caret claim ever outlives UIKit's late write there, the next-edit closer comes too late. No test has observed whether the multi-line field gets a late write. A guard of about five lines (store the kept text's length in the claim; restore only with no composition open and the length unchanged) closes it either way.
+  - No cut-caret test covers the multi-line field or SearchField, and the `insertText` path has no caret test.
+  - Android: the `suggestions` read-back runs through the same interceptor, so it cannot show that a prop change reaches the keyboard (Compose 1.12.1 restarts the session, read from its bytecode). Every edit builds a small string production never needs.
