@@ -53,6 +53,14 @@ abstract class NitroComposeHost<M : NitroUiModel>(
   protected val model: M,
 ) : FrameLayout(context) {
 
+  /**
+   * Whether a `Form.Row`'s cell owns this view's press, which makes the view that row's content
+   * and its box the row's. Only an item drawn inside a row hands its `onPress` up to the cell; a
+   * control that answers its own taps leaves this `false`.
+   */
+  open val pressOwnedByRow: Boolean
+    get() = false
+
   var perfInstanceId: Int = NitroUiPerf.NO_INSTANCE
 
   var sizingInstanceId: Long = NitroUiSizing.NO_INSTANCE

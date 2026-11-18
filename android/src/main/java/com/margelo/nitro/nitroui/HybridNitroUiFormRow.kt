@@ -286,12 +286,14 @@ internal class NitroUiFormRowView(
   }
 
   /**
-   * Whether a hosted nitro-ui control owns this point of the row.
+   * Whether a hosted nitro-ui control that answers its own taps owns this point of the row.
    *
    * A control draws itself in the Compose host that is its own view. The tag every Nitro view
    * manager puts on its root is not the sign: it also lands on a wrapper that only holds React
    * Native children, and those children are the row's own content. React Native's views claim a
    * touch the same way plain content does, so nothing tells a `Pressable` from a `Text` here.
+   * A hosted item that hands its press up to the cell, a `ListItem` inside the row, is content
+   * too: the row presses for it.
    */
   private fun hostedControlAt(
     x: Float,
@@ -299,7 +301,7 @@ internal class NitroUiFormRowView(
   ): Boolean {
     var target = deepestChildAt(this, x, y)
     while (target != null && target !== this) {
-      if (target is NitroComposeHost<*>) return true
+      if (target is NitroComposeHost<*>) return !target.pressOwnedByRow
       target = target.parent as? View
     }
     return false

@@ -322,7 +322,10 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
   /// Every branch whose box holds the point is asked, not only the topmost: a control can sit
   /// behind plain content the row draws over it.
   private func holdsHostedControl(_ view: UIView, at point: CGPoint) -> Bool {
-    if view is NitroUiHostedControl { return true }
+    if let control = view as? NitroUiHostedControl {
+      // An item that hands its press to the cell is the row's own content, box included.
+      return !control.pressOwnedByRow
+    }
     for subview in view.subviews {
       guard !subview.isHidden, subview.alpha > 0.01, !subview.frame.isEmpty else { continue }
       guard subview.frame.contains(point) else { continue }
