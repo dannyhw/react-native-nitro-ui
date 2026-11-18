@@ -1,7 +1,8 @@
 # FIX6 — A Form row's press is the row's alone, and opting out of keyboard avoidance changes nothing
 
-**Branch:** `task/FIX6-form-row-press` (from `main` at `1b8d01e6`) · **Round:** 1 of up to 3 ·
-**Lease:** `FIX6-4xsn7` (`emulator-5570` + iPhone Air / Metro android `9293`, ios `8293`)
+**Branch:** `task/FIX6-form-row-press` (from `main` at `1b8d01e6`) · **Round:** 2 of up to 3 ·
+**Lease:** `FIX6-4xsn7` for round 1 (`emulator-5570` + iPhone Air / Metro android `9293`, ios
+`8293`); round 2 took none, as **Fix round 2** says.
 
 ## Summary
 
@@ -159,3 +160,41 @@ keeps every run.
 Ran on lease `FIX6-b3ym6` (`emulator-5570` + iPhone Air). One deviation recorded: a filtered
 `real-input:android` run started while another lease showed `real-input:ios` in use; it used
 only this task's emulator and adb server port.
+
+## Fix round 2
+
+A `ListItem` inside a `Form.Row` hands its `onPress` up to the cell and installs no press of its
+own, so round one's rule — any hosted view under the touch takes the tap — left the README's own
+example pressing nothing: the row declined the tap and the item never answered it. The rule now
+asks the hosted view under the touch whether its press is its own. `pressOwnedByRow` answers:
+`insideRow` for an item, `false` for every control that answers its own taps, so a `Switch` still
+takes a tap and a disabled one still keeps it from the row. Both platforms ask that question of
+the same view — `NitroComposeHost.pressOwnedByRow` on Android, the same member on
+`NitroUiHostedControl` on iOS — and `form.md` says an item in a row is row content while a
+disabled control still swallows the tap.
+
+**Gates**
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2154 tests / 94 suites | `96d31891d82c` | 1 m 06 s | start 7.6 / med 17.4 / max 22.5 |
+| `harness:ios` | stale | 601 tests / 30 suites + isolated 6 tests / 3 suites | 9de57f05a5ed (not this tree) | 14 m 16 s | start 7.1 / med 5.8 / max 28.1 |
+| `harness:android` | stale | 659 tests / 31 suites + isolated 6 tests / 3 suites | 9de57f05a5ed (not this tree) | 18 m 02 s | start 7.1 / med 4.3 / max 28.1 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `real-input:android:--control:form` | stale | — | 9de57f05a5ed (not this tree) | 13 m 54 s | start 1.9 / med 3.9 / max 9.2 |
+| `real-input:ios:--a11y:form` | stale | — | 9de57f05a5ed (not this tree) | 1 m 15 s | start 4.3 / med 4.2 / max 5.0 |
+| `real-input:ios:--control:form` | stale | — | 9c81ab43412c (not this tree) | 6 m 29 s | start 4.3 / med 5.2 / max 14.8 |
+
+The device pool never came free: another task's lease held a pair from before this round started
+to its end, and no lease was taken while one stood against `FIX7`. Only the non-device gate ran,
+so this table is the state of the round, not a ready branch.
+
+**Owed, in the order that matters**
+
+- `real-input:android -- --control list-item`, red first with `return !target.pressOwnedByRow`
+  back to `return true` in `hostedControlAt`: the case is "a held press on an item inside a Form
+  row draws the Form ink", and under the old rule it presses in silence.
+- the same command green, then `real-input:ios -- --control list-item`, alone.
+- `-- --control form` on both platforms, which item 4 asks for with the fix in.
+- `harness:android` and `harness:ios`, which `need --for review` and `task-ready` both name.
