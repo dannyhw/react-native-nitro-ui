@@ -2337,8 +2337,8 @@ final class RealInputTests: XCTestCase {
 
   /// One item of a ButtonGroup, found by title inside that group's own container, because
   /// several groups on this screen draw an item with the same title. `.any` rather than
-  /// `.button`: an action item is a `Button` and a toggle item is a `Toggle(.button)`, which
-  /// XCUITest reports as a switch.
+  /// `.button`: an action item is a `Button` and a toggle item is a `Toggle` drawn in the
+  /// library's own style, which XCUITest reports as a switch.
   private func buttonGroupItem(_ identifier: String, titled title: String) -> XCUIElement {
     app
       .descendants(matching: .any)[identifier].firstMatch
