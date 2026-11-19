@@ -323,3 +323,185 @@ test('a drag that starts while the two-detent sheet is rising expands it', async
       `came to rest at ${String(expanded.y)}`
   ).toBeLessThan(rising.y / 2);
 });
+
+/** The box of a node that is still coming on screen, read as soon as it has one. */
+async function boxOnceVisible(locator: Locator): Promise<Box | null> {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const box = await boxOf(locator);
+    if (box != null) return box;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return null;
+}
+
+/**
+ * The detent a drag asked for while the sheet was still rising is a change, so it is reported even
+ * when that settle is the presentation's first. The sheet opened again afterwards was never
+ * dragged and reports nothing: the whole log says what it said before any drag was followed.
+ */
+test('a detent dragged to during the rise is reported once, and the next open reports nothing', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'sheet');
+  const log = screen.getByTestId('sheet-log');
+  const window = await windowBox(screen);
+  const header = screen.getByText(TWO);
+  await expect(log).toHaveText('none');
+
+  await reveal(screen, screen.getByTestId('sheet-open-two'));
+  await screen.getByTestId('sheet-open-two').tap();
+  await header.waitFor({ state: 'visible' });
+  const rising = await boxOf(header);
+  if (rising == null) {
+    throw new Error(
+      'real-input: the rising two-detent sheet has no header box to drag from.'
+    );
+  }
+  const from = {
+    x: Math.round(rising.x + rising.width / 2),
+    y: Math.round(rising.y + Math.min(rising.height / 2, 40)),
+  };
+  await screen.swipe({
+    from,
+    to: { x: from.x, y: window.y + 2 },
+    duration: 260,
+  });
+  await restingBox(header);
+  await expect(log).toHaveText('detent:1');
+
+  await app.back();
+  await staysUp(screen, TWO, 'Back from the detent the drag asked for');
+  await app.back();
+  await screen.getByText(TWO).waitFor({ state: 'detached' });
+
+  // Opened again with no drag at all: the sheet rises to the detent it opened at and says nothing.
+  await screen.getByTestId('sheet-open-two').tap();
+  const reopened = await restingBox(screen.getByText(TWO));
+  expect(
+    reopened.y,
+    `the sheet reopened above a third of the ` +
+      `${String(window.y + window.height)} window: ${JSON.stringify(reopened)}`
+  ).toBeGreaterThan(window.y + window.height / 3);
+  await expect(log).toHaveText(
+    'detent:1 > detent:0 > presented:false > dismiss'
+  );
+});
+
+/**
+ * The boxes a sheet is read through on its way out. None at all is a sheet that left the tree
+ * before it was ever read: one frame, scrim included, rather than the slide down a person sees.
+ */
+async function boxesOnTheWayOut(locator: Locator): Promise<Box[]> {
+  const boxes: Box[] = [];
+  const deadline = Date.now() + 4_000;
+  while (Date.now() < deadline) {
+    const box = await boxOf(locator);
+    if (box == null) return boxes;
+    boxes.push(box);
+  }
+  throw new Error(
+    `real-input: the sheet never left the tree; its box last read ` +
+      `${JSON.stringify(boxes[boxes.length - 1])}.`
+  );
+}
+
+/**
+ * A drag down that started while the sheet was rising dismisses it, and the sheet leaves the way a
+ * settled drag down leaves it: down the screen, with the scrim fading behind it. The same drag on a
+ * sheet that cannot be dismissed leaves it up.
+ */
+test('a drag down during the rise slides the sheet out and reports the dismissal, and a sticky sheet stays up', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'sheet');
+  const log = screen.getByTestId('sheet-log');
+  const window = await windowBox(screen);
+  const title = screen.getByText('As tall as this');
+  await expect(log).toHaveText('none');
+
+  await reveal(screen, screen.getByTestId('sheet-open-fit'));
+  await screen.getByTestId('sheet-open-fit').tap();
+  await title.waitFor({ state: 'visible' });
+  const rising = await boxOnceVisible(title);
+  if (rising == null) {
+    throw new Error('real-input: the rising fit sheet has no box to drag from.');
+  }
+  await dragDown(screen, rising, window);
+  const sliding = await boxesOnTheWayOut(title);
+  expect(
+    sliding.length,
+    'the sheet was gone before it could be read once after the drag ended: ' +
+      `it vanished instead of sliding down (ys ${JSON.stringify(
+        sliding.map((box) => box.y)
+      )})`
+  ).toBeGreaterThan(1);
+  expect(
+    sliding[sliding.length - 1].y,
+    `the sheet did not slide down on its way out (ys ` +
+      `${JSON.stringify(sliding.map((box) => box.y))})`
+  ).toBeGreaterThan(sliding[0].y);
+  await title.waitFor({ state: 'detached' });
+  await expect(log).toHaveText('presented:false > dismiss');
+
+  await screen.getByTestId('sheet-open-sticky').tap();
+  const sticky = screen.getByText('Swipe, back and outside do nothing');
+  await sticky.waitFor({ state: 'visible' });
+  const stickyRising = await boxOnceVisible(sticky);
+  if (stickyRising == null) {
+    throw new Error('real-input: the rising sticky sheet has no box to drag from.');
+  }
+  await dragDown(screen, stickyRising, window);
+  await staysUp(screen, STICKY, 'a drag down during the rise');
+  await expect(log).toHaveText('presented:false > dismiss');
+
+  await screen.getByText(STICKY).tap();
+  await screen.getByText(STICKY).waitFor({ state: 'detached' });
+  await expect(log).toHaveText('presented:false > dismiss > close > dismiss');
+});
+
+/**
+ * A fling along the sheet's own horizontal list belongs to that list, even one that starts while
+ * the sheet is still rising and drifts down as a fast sideways throw does. It neither adds a
+ * detent nor closes the sheet: the sheet was rising to its one detent and stays open.
+ */
+test('a sideways fling on the sheet list during the rise neither expands the sheet nor closes it', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'sheet');
+  const log = screen.getByTestId('sheet-log');
+  const window = await windowBox(screen);
+  await expect(log).toHaveText('none');
+
+  await reveal(screen, screen.getByTestId('sheet-open-fit'));
+  await screen.getByTestId('sheet-open-fit').tap();
+  const chip = screen.getByText('Chip 1');
+  const held = await boxOnceVisible(chip);
+  if (held == null) {
+    throw new Error('real-input: the rising sheet has no list to fling along.');
+  }
+  const from = {
+    x: Math.round(held.x + held.width / 2),
+    y: Math.round(held.y + held.height / 2),
+  };
+  await screen.swipe({
+    from,
+    to: {
+      x: Math.max(from.x - Math.round(650 * displayDensity()), window.x + 2),
+      y: Math.min(from.y + Math.round(70 * displayDensity()), window.y + window.height - 2),
+    },
+    duration: 250,
+  });
+
+  await restingBox(screen.getByText('Chip 1'));
+  expect(
+    await screen.getByText(FIT).count(),
+    'the sideways fling closed the sheet'
+  ).toBe(1);
+  await expect(log).toHaveText('none');
+});
