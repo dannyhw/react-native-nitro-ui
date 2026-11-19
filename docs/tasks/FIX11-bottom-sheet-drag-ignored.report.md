@@ -33,7 +33,6 @@ reproduces every time is the same drop, aimed at the moment its window is open: 
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
-| Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
 | `check` | **PASS** | 2178 tests / 96 suites | `64861b7585e4` | 1 m 03 s | start 9.0 / med 11.8 / max 12.8 |
 | `harness:ios` | **PASS** (from `task/FIX6-form-row-press`) | 601 tests / 30 suites + isolated 6 tests / 3 suites | `647545962a59` (harness:ios digest) | 14 m 23 s | start 14.8 / med 7.4 / max 19.1 |
@@ -66,10 +65,14 @@ the brief asks for the filtered one here.
 
 ## Follow-ups
 
-- A drag started on the sheet's own `ScrollView` while the sheet is still rising is dropped as
-  before: that view holds the gesture, so its deltas reach the sheet only as raw deltas, which the
-  opening animation overwrites.
+- A drag that starts on the sheet's scrolling content while it is rising is left to that content,
+  by rule: the list holds the gesture and its deltas reach the sheet only as raw deltas, which the
+  opening animation overwrites anyway.
 - The followed drag has no JVM test: `BottomSheet.harness.tsx` can move the sheet through the state
   calls but cannot inject a real drag, so only the real-input case covers it.
 - `PositionalThreshold` and `VelocityThreshold` are internal to Material3, so 56.dp and 125.dp are
   copied here; if upstream moves them, the two ways into a detent will disagree.
+- A rising-drag case reads a box to aim at and cannot prove the drag began before the sheet
+  settled: on a slow read Material's own drag answers it, and the case passes either way.
+- A two-detent sheet no taller than half the screen has nothing to rise to, so a drag up during its
+  rise reports the expanded index as a change although its height does not move.
