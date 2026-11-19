@@ -158,6 +158,14 @@ struct ChipContent: NitroUIContent {
   /// One line, tail-truncated: in a box narrower than the label, the text truncates instead
   /// of painting outside it.
   @ViewBuilder private var label: some View {
+    labelContent.background {
+      if model.variant == .filter && model.state.displayed && model.disabled {
+        ChipDisabledFill()
+      }
+    }
+  }
+
+  @ViewBuilder private var labelContent: some View {
     if let systemImage = model.systemImage {
       Label {
         Text(model.label).lineLimit(1)
@@ -171,6 +179,36 @@ struct ChipContent: NitroUIContent {
     }
   }
 }
+
+/// The selected fill SwiftUI's disabled bordered style drops, laid between that style's opaque
+/// container and the label, so the label stays the chip's own and keeps an unselected dimmed
+/// chip's strength. It is a background on the label pushed out to the chip's box, which is the
+/// only place between the two: behind the control the container hides it, over it the fill fades
+/// the text it paints.
+private struct ChipDisabledFill: View {
+  var body: some View {
+    // The strength sits on the shapes: `Color.opacity(_:)` reaches a UIKit host without its hue.
+    ZStack {
+      Capsule()
+        .fill(Color(uiColor: .systemBackground))
+        .opacity(nitroUiChipDisabledFade)
+      Capsule()
+        .fill(.tint)
+        .opacity(nitroUiChipDisabledTint)
+    }
+    .padding(nitroUiChipContentInset)
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+  }
+}
+
+/// The bordered `.small` capsule's content inset, negated: the label plus this is the chip's box.
+private let nitroUiChipContentInset = EdgeInsets(top: -6, leading: -12, bottom: -6, trailing: -12)
+
+/// How far a dimmed selected chip fades toward the system background colour, and how much of the
+/// bordered style's tint survives that fade. More tint reads as the enabled chip's own fill.
+private let nitroUiChipDisabledFade = 0.45
+private let nitroUiChipDisabledTint = 0.09
 
 /// An empty `accessibilityLabel(_:)` would silence the control's own label (its text), so it
 /// is applied only when set. `testID` is not applied here: React Native already puts it on
@@ -452,9 +490,9 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
 }
 
 /// How far a drawn pixel may sit from the colour a probe asked for and still count as that
-/// colour. A chip's fill is translucent and its label is anti-aliased, so a drawn pixel is close
-/// to a colour, rarely exactly it.
-private let nitroUiChipPixelBudget = 30
+/// colour. A chip's fill is translucent and a dimmed chip's label is painted over it, so the same
+/// glyph reads a little differently on two chips that differ only in that fill.
+private let nitroUiChipPixelBudget = 48
 
 /// What the pixels `view` is drawing say about `color`, as one line: how many are painted in it,
 /// the mean colour of the box, and the pixel nearest the colour asked for. `afterScreenUpdates:
