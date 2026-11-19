@@ -688,8 +688,12 @@ test('a drag that starts under the sheet list while the sheet rises expands it',
     duration: 400,
   });
 
+  // The detent is a report of a settle, so the sheet is asked for rest first: the drag only says
+  // what the sheet was asked to do.
+  await restingBox(detent);
   await expect(detent).toHaveText('Rising detent 1');
   await app.back();
+  await restingBox(detent);
   await expect(detent).toHaveText('Rising detent 0');
   await app.back();
   await detent.waitFor({ state: 'detached' });
