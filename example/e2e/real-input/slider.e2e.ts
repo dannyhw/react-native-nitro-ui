@@ -1,10 +1,42 @@
 import { test } from '@e2e-dev/mobile';
-import { expect } from 'e2e';
+import { expect, type Locator } from 'e2e';
 
-import { drag, isInBand, openScreen, reveal } from './support';
+import { drag, isInBand, openScreen, reveal, textOf } from './support';
 import { actsOnOneNamedNode } from './reader';
 
 const NAME = 'Controlled slider';
+
+/** How long an echo is given to catch up with a drag: CI has taken seconds for a swipe. */
+const ECHO_SETTLES_MS = 20_000;
+
+/** Reads this far apart that agree are an echo that has stopped moving. */
+const AT_REST_MS = 250;
+
+/**
+ * The echoed value once it has settled: it has moved off `before`, and two reads
+ * `AT_REST_MS` apart agree. A swipe returns when the finger lifts while the samples it
+ * gathered are still on their way to JS, so one read taken then says what the screen
+ * held when the drag started.
+ */
+async function settledValue(
+  value: Locator,
+  before: string,
+  why: string
+): Promise<string> {
+  const deadline = Date.now() + ECHO_SETTLES_MS;
+  let previous = before;
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, AT_REST_MS));
+    const now = await value.textContent();
+    if (now != null && now === previous && now !== before) return now;
+    if (now != null) previous = now;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `real-input: ${why} - the echo never settled away from "${before}", it reads "${previous}".`
+      );
+    }
+  }
+}
 
 test('a real drag moves the Slider and the value JS echoes follows it', async ({
   app,
@@ -21,6 +53,7 @@ test('a real drag moves the Slider and the value JS echoes follows it', async ({
   // report of what JS was told. The starting value is 0.250.
   await actsOnOneNamedNode(screen, { name: NAME, state: 'enabled' });
   await expect(value).toHaveText('0.250');
+  const start = await textOf(screen, 'slider-controlled-value');
 
   const box = await track.boundingBox();
   if (box == null || !(await isInBand(screen, box))) {
@@ -34,7 +67,11 @@ test('a real drag moves the Slider and the value JS echoes follows it', async ({
     { x: box.x + box.width * 0.25, y },
     { x: box.x + box.width * 0.8, y }
   );
-  const moved = await value.textContent();
+  const moved = await settledValue(
+    value,
+    start,
+    'the drag from a quarter to four fifths of the track never moved the echo'
+  );
   expect(
     Number(moved),
     `the dragged Slider echoed "${moved}" — a drag from 25% to 80% of the track ` +
@@ -48,7 +85,11 @@ test('a real drag moves the Slider and the value JS echoes follows it', async ({
     { x: box.x + box.width * 0.8, y },
     { x: box.x + box.width * 0.2, y }
   );
-  const back = await value.textContent();
+  const back = await settledValue(
+    value,
+    moved,
+    'the drag back down the track never moved the echo'
+  );
   expect(
     Number(back),
     `the drag back echoed "${back}" after the first drag left "${moved}" — the same ` +
