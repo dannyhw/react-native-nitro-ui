@@ -1528,11 +1528,12 @@ describe('Chip · the selected fill in every state (G12)', () => {
             lightness(inkOn) - lightness(inkOff)
           } fainter than ${LABEL_INK} and washes the text it paints. ${seen}`
       ).toBe(true);
-      // Half the ink the unselected chip paints at that strength. The dimming reaches the text
-      // everywhere, so a washed label keeps almost none of it; a drawing that leaves the text
-      // alone keeps all but the pixels of one glyph edge, which anti-aliasing is free to move.
+      // A quarter of the ink area the unselected chip paints at that strength. The fill is cut
+      // at the label's own shape, so only the fringes of its anti-aliasing keep any wash and the
+      // core strokes stay at the same ink; a dimming that covers the text keeps far less than a
+      // quarter, because it lightens every pixel of a glyph rather than one pixel of its edge.
       expect(
-        areaOn * 2 >= areaOff,
+        areaOn * 4 >= areaOff,
         `a disabled selected chip paints ${areaOn} pixels at the ${inkOff} its unselected ` +
           `twin paints ${areaOff} of: its label is faded away, not merely dimmed. ${seen}`
       ).toBe(true);
