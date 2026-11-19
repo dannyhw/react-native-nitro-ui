@@ -248,5 +248,9 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(double /* index */)>("nuiTestSelectDetent");
     method(_javaPart, index);
   }
+  void JHybridNitroUiBottomSheetSpec::nuiTestRefuseNextPresent() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void()>("nuiTestRefuseNextPresent");
+    method(_javaPart);
+  }
 
 } // namespace margelo::nitro::nitroui

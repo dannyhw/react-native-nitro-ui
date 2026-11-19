@@ -45,6 +45,11 @@ export interface NitroUiBottomSheetHandle {
    * @internal
    */
   nuiTestSelectDetent(index: number): void;
+  /**
+   * Test-only refused-present seam (iOS).
+   * @internal
+   */
+  nuiTestRefuseNextPresent(): void;
 }
 
 /**

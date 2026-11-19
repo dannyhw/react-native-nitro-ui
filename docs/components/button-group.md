@@ -194,6 +194,9 @@ menu at a wider box than the labels it draws.
   never opens.
 - A tap on an overflow row is the same event as a tap on the row: `onPress(id)`, or the toggle's
   change. `disabled` arriving while the menu is open closes it, and so does a recycle.
+- `disabled` changes what the control does, not where it is: a disabled group keeps the items of
+  the row it had enabled and draws the control in the same place, dimmed; it opens nothing and
+  nothing in the row answers.
 - On iOS 15 there is no `ViewThatFits`, so every item is drawn and the row clips to its box.
   Nothing moves into a menu there.
 

@@ -186,6 +186,12 @@ namespace margelo::nitro::nitroui {
         std::rethrow_exception(__result.error());
       }
     }
+    inline void nuiTestRefuseNextPresent() override {
+      auto __result = _swiftPart.nuiTestRefuseNextPresent();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
 
   private:
     NitroUi::HybridNitroUiBottomSheetSpec_cxx _swiftPart;
