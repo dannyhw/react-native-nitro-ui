@@ -410,25 +410,22 @@ test('a detent dragged to during the rise is reported once, and the next open re
 });
 
 /**
- * The top of a sheet's title, read across a drag rather than after it: the exit of a dismissed
- * rise is one Material spring, and by the time a drag is acknowledged the sheet is below the
- * window already, so reads that wait for the gesture can only ever find nothing. The reads stop
- * once the title has been gone twice in a row.
+ * The sheet read after a drag ended, until it leaves the tree. Reads go through the session that
+ * injected the drag, so they cannot be taken across it and expect to land where the drag was:
+ * they answer after the gesture, at the pace of the tree. The sheet's own root outlives the title
+ * it carries by the length of Material's exit spring, which is the moment this asks about: a rise
+ * that was dismissed is still composed while that spring runs, and a sheet dropped in one frame
+ * is not composed at all.
  */
-async function topsAcrossDrag(title: Locator): Promise<number[]> {
-  const ys: number[] = [];
-  let absent = 0;
+async function readsBeforeItLeaves(sheet: Locator): Promise<Box[]> {
+  const boxes: Box[] = [];
   const until = Date.now() + 6_000;
-  while (absent < 2 && Date.now() < until) {
-    const box = (await title.count()) === 0 ? null : await boxOf(title);
-    if (box == null) {
-      absent += 1;
-    } else {
-      absent = 0;
-      ys.push(box.y);
-    }
+  while (Date.now() < until && (await sheet.count()) > 0) {
+    const box = await boxOf(sheet);
+    if (box == null) break;
+    boxes.push(box);
   }
-  return ys;
+  return boxes;
 }
 
 /**
@@ -456,15 +453,12 @@ test('a drag down during the rise slides the sheet out and reports the dismissal
       'real-input: the rising fit sheet has no box to drag from.'
     );
   }
-  const watching = topsAcrossDrag(title);
   await dragDown(screen, rising, window);
-  const ys = await watching;
-  const slid = ys.filter((y) => y > rising.y + 40);
+  const wayOut = await readsBeforeItLeaves(screen.getByTestId('sheet-fit-sheet'));
   expect(
-    slid.length,
-    'the sheet was never read lower than where the drag left it, so it left the tree in one ' +
-      `frame instead of sliding down (title ys ${JSON.stringify(ys)}, read at ` +
-      `${String(rising.y)} of the ${String(window.y + window.height)} window as it rose)`
+    wayOut.length,
+    'the sheet was gone before it could be read once after the drag ended, so it left the tree ' +
+      'in one frame instead of sliding down on its way out'
   ).toBeGreaterThan(0);
   await title.waitFor({ state: 'detached' });
   await expect(log).toHaveText('presented:false > dismiss');
