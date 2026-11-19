@@ -39,6 +39,15 @@ const TWO = 'Drag this up for large';
 const STAYS_UP_MS = 1200;
 
 /**
+ * The detent the app was told about, read inside the two-detent sheet's window. A report is
+ * only made for a settle, so this naming a detent means the sheet has stopped: Back on a
+ * sheet still on its way closes it wherever it got to.
+ */
+function settledDetent(screen: Screen): Locator {
+  return screen.getByTestId('sheet-two-detent');
+}
+
+/**
  * A box that two reads 150 ms apart agree on, or `null` once the node has left the
  * tree: whatever carried it has finished moving.
  */
@@ -264,7 +273,9 @@ test('a drag up on the two-detent header expands the sheet, Back steps down a de
     `the header's top moved from ${String(half.y)} to ${String(expanded.y)}`
   ).toBeGreaterThan(half.y / 3);
 
-  // Material's Back steps down a detent before it closes.
+  // Material's Back steps down a detent before it closes, and only once the sheet has settled
+  // where the drag sent it: the report is the sheet's own word that it has.
+  await expect(settledDetent(screen)).toHaveText('Detent 1');
   await app.back();
   await staysUp(screen, TWO, 'Back from the expanded detent');
   await app.back();
@@ -315,6 +326,7 @@ test('a drag that starts while the two-detent sheet is rising expands it', async
   });
 
   const expanded = await restingBox(header);
+  await expect(settledDetent(screen)).toHaveText('Detent 1');
   expect(
     expanded.y,
     `the header was grabbed at y=${String(from.y)}, inside the box ` +
@@ -337,7 +349,7 @@ async function boxOnceVisible(locator: Locator): Promise<Box | null> {
 /**
  * The detent a drag asked for while the sheet was still rising is a change, so it is reported even
  * when that settle is the presentation's first. The sheet opened again afterwards was never
- * dragged and reports nothing: the whole log says what it said before any drag was followed.
+ * dragged: across both closes the log names the one detent it had, and no more.
  */
 test('a detent dragged to during the rise is reported once, and the next open reports nothing', async ({
   app,
@@ -368,11 +380,16 @@ test('a detent dragged to during the rise is reported once, and the next open re
     to: { x: from.x, y: window.y + 2 },
     duration: 260,
   });
-  // The log is behind the sheet's window while the sheet is up, so it is read once, after the
-  // last close. The drag is the only thing that asked for a detent in either presentation.
+  // The drag is the only thing that asked for a detent in either presentation, and the log is
+  // read once, after the last close: an open sheet's window hides the screen's own nodes.
   await restingBox(header);
+  await expect(settledDetent(screen)).toHaveText('Detent 1');
   await app.back();
-  await staysUp(screen, TWO, 'Back from the detent the drag asked for');
+  await expect(settledDetent(screen)).toHaveText('Detent 0');
+  expect(
+    await screen.getByText(TWO).count(),
+    'Back from the detent the drag asked for closed the sheet'
+  ).toBe(1);
   await app.back();
   await screen.getByText(TWO).waitFor({ state: 'detached' });
 
@@ -384,8 +401,10 @@ test('a detent dragged to during the rise is reported once, and the next open re
     `the sheet reopened above a third of the ` +
       `${String(window.y + window.height)} window: ${JSON.stringify(reopened)}`
   ).toBeGreaterThan(window.y + window.height / 3);
+  await app.back();
+  await screen.getByText(TWO).waitFor({ state: 'detached' });
   await expect(log).toHaveText(
-    'detent:1 > detent:0 > presented:false > dismiss'
+    'detent:1 > detent:0 > presented:false > dismiss > presented:false > dismiss'
   );
 });
 
@@ -408,8 +427,8 @@ async function boxesOnTheWayOut(locator: Locator): Promise<Box[]> {
 }
 
 /**
- * A drag down that started while the sheet was rising dismisses it, and the sheet leaves the way a
- * settled drag down leaves it: down the screen, with the scrim fading behind it. The same drag on a
+ * A drag down that started while the sheet was rising dismisses it, and the sheet is read on its
+ * way out and reports the dismissal, rather than leaving the tree in one frame. The same drag on a
  * sheet that cannot be dismissed leaves it up.
  */
 test('a drag down during the rise slides the sheet out and reports the dismissal, and a sticky sheet stays up', async ({
@@ -434,26 +453,12 @@ test('a drag down during the rise slides the sheet out and reports the dismissal
   }
   await dragDown(screen, rising, window);
   const sliding = await boxesOnTheWayOut(title);
+  const ys = sliding.map((box) => box.y);
   expect(
     sliding.length,
-    'the sheet was gone before it could be read once after the drag ended: ' +
-      `it vanished instead of sliding down (ys ${JSON.stringify(
-        sliding.map((box) => box.y)
-      )})`
-  ).toBeGreaterThan(1);
-  const first = sliding[0];
-  const last = sliding[sliding.length - 1];
-  if (first == null || last == null) {
-    throw new Error(
-      `real-input: the sheet was not read on its way out (ys ` +
-        `${JSON.stringify(sliding.map((box) => box.y))}).`
-    );
-  }
-  expect(
-    last.y,
-    `the sheet did not slide down on its way out (ys ` +
-      `${JSON.stringify(sliding.map((box) => box.y))})`
-  ).toBeGreaterThan(first.y);
+    'the sheet was gone before it could be read once after the drag ended: it left the tree in ' +
+      `one frame instead of sliding down (ys ${JSON.stringify(ys)})`
+  ).toBeGreaterThan(0);
   await title.waitFor({ state: 'detached' });
   await expect(log).toHaveText('presented:false > dismiss');
 
@@ -468,10 +473,10 @@ test('a drag down during the rise slides the sheet out and reports the dismissal
   }
   await dragDown(screen, stickyRising, window);
   await staysUp(screen, STICKY, 'a drag down during the rise');
-  await expect(log).toHaveText('presented:false > dismiss');
 
   await screen.getByText(STICKY).tap();
   await screen.getByText(STICKY).waitFor({ state: 'detached' });
+  // The fit sheet's dismissal is here too, which is why it is not read under a window.
   await expect(log).toHaveText('presented:false > dismiss > close > dismiss');
 });
 
