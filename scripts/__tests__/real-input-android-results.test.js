@@ -68,7 +68,12 @@ function test(file, title, line, status, skip) {
   };
 }
 
-const PASSED = test(SWITCH_FILE, 'a real tap flips the switch once', 3, 'passed');
+const PASSED = test(
+  SWITCH_FILE,
+  'a real tap flips the switch once',
+  3,
+  'passed'
+);
 const QUARANTINED = test(
   SWITCH_FILE,
   'a drag across the switch flips it once',
@@ -116,20 +121,33 @@ const printed = () => log.mock.calls.map((call) => String(call[0]));
 /** One switch control run against the given report results. */
 function runSwitch(results) {
   const suite = new Suite('android', [control('switch')]);
-  const passed = recordResults(suite, [control('switch')], { results }, sources);
+  const passed = recordResults(
+    suite,
+    [control('switch')],
+    { results },
+    sources
+  );
   return { suite, passed, failures: suite.results[0]?.log?.failures ?? [] };
 }
 
 describe('quarantineList', () => {
   it('reads file and title from the section only, across wrapped items', () => {
     expect(quarantineList(FOLLOWUPS)).toEqual([
-      { file: 'switch.e2e.ts', title: 'a drag across the switch flips it once' },
-      { file: 'switch.e2e.ts', title: 'a long press on the switch flips nothing' },
+      {
+        file: 'switch.e2e.ts',
+        title: 'a drag across the switch flips it once',
+      },
+      {
+        file: 'switch.e2e.ts',
+        title: 'a long press on the switch flips nothing',
+      },
       { file: 'slider.e2e.ts', title: 'a tap on the label flips the switch' },
       { file: 'switch.e2e.ts', title: 'the thumb follows the finger' },
     ]);
     expect(quarantineList(null)).toEqual([]);
-    expect(quarantineList('# Follow-ups\n\n- `switch.e2e.ts` "x"\n')).toEqual([]);
+    expect(quarantineList('# Follow-ups\n\n- `switch.e2e.ts` "x"\n')).toEqual(
+      []
+    );
   });
 });
 
@@ -179,10 +197,15 @@ describe('recordResults on an Android e2e report', () => {
   it('fails a listed, commented skip when FOLLOWUPS cannot be read', () => {
     const suite = new Suite('android', [control('switch')]);
     expect(
-      recordResults(suite, [control('switch')], { results: [QUARANTINED] }, {
-        ...sources,
-        followups: null,
-      })
+      recordResults(
+        suite,
+        [control('switch')],
+        { results: [QUARANTINED] },
+        {
+          ...sources,
+          followups: null,
+        }
+      )
     ).toBe(false);
   });
 
@@ -199,9 +222,14 @@ describe('recordResults on an Android e2e report', () => {
   });
 
   it('fails a quarantined skip whose report line is not the test.skip( line', () => {
-    const { passed, failures } = runSwitch([PASSED, { ...QUARANTINED, source: { line: 6 } }]);
+    const { passed, failures } = runSwitch([
+      PASSED,
+      { ...QUARANTINED, source: { line: 6 } },
+    ]);
     expect(passed).toBe(false);
-    expect(failures[0]).toMatch(/real-input\/switch\.e2e\.ts:6 is not a test\.skip\( line/);
+    expect(failures[0]).toMatch(
+      /real-input\/switch\.e2e\.ts:6 is not a test\.skip\( line/
+    );
   });
 
   it('still fails a control whose file collected no test', () => {

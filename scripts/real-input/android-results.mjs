@@ -64,7 +64,9 @@ export function quarantineList(text) {
 export function quarantineGaps(result, { listed, readTestFile }) {
   const cause = result.skip?.cause ?? 'unknown';
   if (cause !== 'explicit') {
-    return [`it was skipped by the runner (${String(cause)}), not by test.skip`];
+    return [
+      `it was skipped by the runner (${String(cause)}), not by test.skip`,
+    ];
   }
   const file = String(result.file);
   const title = String(result.titlePath?.at(-1) ?? '');
@@ -73,7 +75,9 @@ export function quarantineGaps(result, { listed, readTestFile }) {
   const gaps = [];
   const lines = readTestFile(file)?.split('\n') ?? null;
   if (lines == null || !Number.isInteger(line) || line < 1) {
-    gaps.push(`its source (${where}) cannot be read for the QUARANTINED comment`);
+    gaps.push(
+      `its source (${where}) cannot be read for the QUARANTINED comment`
+    );
   } else if (!lines[line - 1]?.includes('test.skip(')) {
     gaps.push(`${where} is not a test.skip( line`);
   } else {
