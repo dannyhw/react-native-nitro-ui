@@ -801,9 +801,7 @@ async function contextMenuChecks(t) {
  * What runs after the suite, in this order: each entry navigates to its control's own
  * screen, so one that leaves a window standing would take the next one's screen down.
  */
-const TREE_CHECKS = [
-  { id: 'context-menu', run: contextMenuChecks },
-];
+const TREE_CHECKS = [{ id: 'context-menu', run: contextMenuChecks }];
 
 /** The controls these checks cover, so a caller can tell an empty run from a covered one. */
 export const TREE_CHECK_IDS = TREE_CHECKS.map((entry) => entry.id);

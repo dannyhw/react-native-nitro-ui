@@ -36,29 +36,36 @@ describe("the driver's node, as the e2e readers see it", () => {
   });
 
   it('keeps the action flags as printed, and empty where the driver printed none', () => {
-    const printed = asTreeNode({
+    // Two nodes, so that no flag read off another's field can match both.
+    const flagsOf = (node) => ({
+      clickable: node.clickable,
+      focusable: node.focusable,
+      longClickable: node.longClickable,
+    });
+    const menu = {
       index: 0,
       type: 'android.view.ViewGroup',
       clickable: false,
       focusable: true,
       longClickable: true,
       rect: RECT,
+    };
+    expect(flagsOf(asTreeNode(menu))).toEqual({
+      clickable: 'false',
+      focusable: 'true',
+      longClickable: 'true',
     });
-    expect({
-      clickable: printed.clickable,
-      focusable: printed.focusable,
-      longClickable: printed.longClickable,
-    }).toEqual({ clickable: 'false', focusable: 'true', longClickable: 'true' });
-    const bare = asTreeNode({
-      index: 1,
-      type: 'android.view.ViewGroup',
-      rect: RECT,
+    const item = { ...menu, clickable: true, longClickable: false };
+    expect(flagsOf(asTreeNode(item))).toEqual({
+      clickable: 'true',
+      focusable: 'true',
+      longClickable: 'false',
     });
-    expect({
-      clickable: bare.clickable,
-      focusable: bare.focusable,
-      longClickable: bare.longClickable,
-    }).toEqual({ clickable: '', focusable: '', longClickable: '' });
+    expect(
+      flagsOf(
+        asTreeNode({ index: 1, type: 'android.view.ViewGroup', rect: RECT })
+      )
+    ).toEqual({ clickable: '', focusable: '', longClickable: '' });
   });
 
   it("keeps a Spinner's own name apart from the choice it shows", () => {
