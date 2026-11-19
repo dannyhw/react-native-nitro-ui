@@ -428,7 +428,9 @@ test('a drag down during the rise slides the sheet out and reports the dismissal
   await title.waitFor({ state: 'visible' });
   const rising = await boxOnceVisible(title);
   if (rising == null) {
-    throw new Error('real-input: the rising fit sheet has no box to drag from.');
+    throw new Error(
+      'real-input: the rising fit sheet has no box to drag from.'
+    );
   }
   await dragDown(screen, rising, window);
   const sliding = await boxesOnTheWayOut(title);
@@ -439,11 +441,19 @@ test('a drag down during the rise slides the sheet out and reports the dismissal
         sliding.map((box) => box.y)
       )})`
   ).toBeGreaterThan(1);
+  const first = sliding[0];
+  const last = sliding[sliding.length - 1];
+  if (first == null || last == null) {
+    throw new Error(
+      `real-input: the sheet was not read on its way out (ys ` +
+        `${JSON.stringify(sliding.map((box) => box.y))}).`
+    );
+  }
   expect(
-    sliding[sliding.length - 1].y,
+    last.y,
     `the sheet did not slide down on its way out (ys ` +
       `${JSON.stringify(sliding.map((box) => box.y))})`
-  ).toBeGreaterThan(sliding[0].y);
+  ).toBeGreaterThan(first.y);
   await title.waitFor({ state: 'detached' });
   await expect(log).toHaveText('presented:false > dismiss');
 
@@ -452,7 +462,9 @@ test('a drag down during the rise slides the sheet out and reports the dismissal
   await sticky.waitFor({ state: 'visible' });
   const stickyRising = await boxOnceVisible(sticky);
   if (stickyRising == null) {
-    throw new Error('real-input: the rising sticky sheet has no box to drag from.');
+    throw new Error(
+      'real-input: the rising sticky sheet has no box to drag from.'
+    );
   }
   await dragDown(screen, stickyRising, window);
   await staysUp(screen, STICKY, 'a drag down during the rise');
@@ -493,7 +505,10 @@ test('a sideways fling on the sheet list during the rise neither expands the she
     from,
     to: {
       x: Math.max(from.x - Math.round(650 * displayDensity()), window.x + 2),
-      y: Math.min(from.y + Math.round(70 * displayDensity()), window.y + window.height - 2),
+      y: Math.min(
+        from.y + Math.round(70 * displayDensity()),
+        window.y + window.height - 2
+      ),
     },
     duration: 250,
   });
