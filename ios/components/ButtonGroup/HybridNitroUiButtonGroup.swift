@@ -640,15 +640,9 @@ private struct ItemToggleStyle: ToggleStyle {
   }
 }
 
-/// A `text` item is a label and a checked toggle a capsule, and the group measures its size once
-/// for a configuration: checking a toggle repaints it and re-measures nothing, so an item that
-/// takes more room in one state than another is drawn outside the box the row was measured into.
-/// Every item of a `text` group that holds a toggle therefore keeps the footprint of its own label
-/// in `.bordered` - the style a checked toggle takes - and draws what it draws centred inside it,
-/// so the row is the size of a capsule in every state, one item is measured no smaller than
-/// another, and the room between two neighbours is the spacing whatever the pair is. A `text`
-/// group with no toggle keeps the size of a label, and the other families measure the same in
-/// every state and need nothing.
+/// A `text` item is a label and a checked toggle a capsule, and nothing re-measures the row when a
+/// toggle is checked: `reserves` measures an item at its own label in `.bordered` - the style a
+/// checked toggle takes - and draws what it draws centred inside it, so every state fits one box.
 private struct BorderedFootprint<Label: View>: ViewModifier {
   let reserves: Bool
   let label: Label
