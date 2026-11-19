@@ -36,15 +36,18 @@ helpers behind it are out of scope here. What a restored case needs is in the FO
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `88b05385bf83` | 1 m 05 s | start 3.5 / med 13.4 / max 16.4 |
-| `harness:ios` | **PASS** | 613 tests / 30 suites + isolated 6 tests / 3 suites | `88b05385bf83` (harness:ios digest) | 14 m 26 s | start 4.7 / med 7.0 / max 18.3 |
-| `harness:android` | **PASS** | 671 tests / 31 suites + isolated 6 tests / 3 suites | `88b05385bf83` (harness:android digest) | 18 m 13 s | start 4.7 / med 6.3 / max 18.3 |
-| `real-input:ios` | missing | — | — | — | — |
+| `check` | **PASS** | 2178 tests / 96 suites | `d584f833efe6` | 1 m 08 s | start 8.7 / med 11.8 / max 14.2 |
+| `harness:ios` | **PASS** | 615 tests / 30 suites + isolated 6 tests / 3 suites | `d584f833efe6` (harness:ios digest) | 16 m 26 s | start 12.3 / med 8.1 / max 18.1 |
+| `harness:android` | **PASS** | 673 tests / 31 suites + isolated 6 tests / 3 suites | `d584f833efe6` (harness:android digest) | 18 m 15 s | start 20.4 / med 8.3 / max 20.4 |
+| `real-input:ios` | **PASS** (from `merge/FIX13`) | — | `85cf285d0ecf` (real-input:ios digest) | 44 m 12 s | start 3.8 / med 6.0 / max 17.5 |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:android:Form` | stale | 1 failed of 113 tests / 2 suites | 4a9ce1fdbea1 (not this tree) | 3 m 23 s | start 10.1 / med 7.2 / max 12.5 |
+| `harness:android:Form` | stale | 4 failed of 115 tests / 2 suites | 6353d4dc2b46 (not this tree) | 3 m 08 s | start 10.1 / med 8.7 / max 13.7 |
+| `harness:android:Form.harness` | **PASS** | 27 tests / 1 suites | `d584f833efe6` (harness:android digest) | 30.3 s | start 7.1 / med 7.1 / max 7.1 |
 
-The `harness:android:Form` row is a filtered red-proof run, on the mutated tree
-`4a9ce1fdbea1`; a filtered run satisfies no gate, which is why it reads stale here.
+The table is fix round 1's, regenerated at the final commit: round 1's own rows are gone from
+it, since its switch is gone from the tree. The two `harness:*:Form*` rows are filtered runs,
+which satisfy no gate - the `Form` row is the first run of the rewritten cases, which caught a
+`num()` read of a text field, and `Form.harness` is the same file green.
 
 `node scripts/gate.mjs need --for review`: *need: review is satisfied on this code tree.*
 
@@ -85,3 +88,30 @@ gate `harness:android:Form` - each red on its own mutation, green before and aft
   with them gone.
 - e2e (Android): `form-list-geometry` echoes the Form's geometry on iOS only; an Android echo of
   `scroll=`/`ime=` would give real-input checks a reading no keyboard can stand in front of.
+
+## Fix round 1
+
+**Lease:** `FIX15-d84ig` (`emulator-5574` + iPhone 17, Metro 9295/8295). Gates above.
+
+The switch is gone, doc text with it: opting out of the Form reserving the keys is no ask for
+its scroll view to stop answering Tab, the keyboard's Next key or a `focus()` from code, and per
+Q1 it buys nothing on an edge-to-edge window. `Form.tsx` is back to `main`, so the changeset is
+empty.
+
+The cases read what the Form itself does: field focused in row 8, Form parked at 700 dp, a 300 dp
+inset reported. Opted out, `contentH=` and `scroll=` hold to 1 dp; by default the content grows
+299.8 dp and the field lifts 178 dp clear. Two more ask the scroller for row 11 - it moves either
+way the prop says, the behaviour round 1 turned off. `focus=` is the premise: nothing focused,
+nothing revealed.
+
+Five filtered `Form.harness` runs (27 tests, ~30 s), each red on one mutation, green either side:
+
+- pad on any inset -> `grew its content by 299.8 dp …: expected 299.79 … less than or equal to 1`.
+- reveal without the opt-out check -> `lifted its focused field 178 dp off the spot it was parked
+  at: expected 177.9 … less than or equal to 1`.
+- `avoidsKeyboardForIme` answers `false` -> `still parked at 699.8 dp: expected 699.8 … greater
+  than 700.8`.
+- never pad -> `only 0.0 dp, not the 300 dp it was asked to reserve: expected 1980.2 … greater
+  than or equal to 2278.2`.
+- switch restored -> never satisfied `the scroller showing the row it was asked about, last parked
+  at 699.8 dp` (`rectReqs":"1`, `rectBelow":"1`).
