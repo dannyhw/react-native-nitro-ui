@@ -385,7 +385,7 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - No cut-caret test covers the multi-line field or SearchField, and the `insertText` path has no caret test.
   - Android: the `suggestions` read-back runs through the same interceptor, so it cannot show that a prop change reaches the keyboard (Compose 1.12.1 restarts the session, read from its bytecode). Every edit builds a small string production never needs.
 - ButtonGroup, open after overflow-row icons and iOS toggle styles:
-  - iOS `text` group with a toggle: only the toggle reserves the bordered capsule's footprint, so the gap beside an unchecked toggle is about 12 pt wider than between action items (documented). Giving every item in such a group the footprint is about 15 lines in `HybridNitroUiButtonGroup.swift`.
+  - iOS `text` group with a toggle: every item composes a hidden `.bordered` copy of its label to reserve its room, and the reserved padding is not the item's tap area; no accessibility read covers it.
   - A disabled *checked* iOS toggle is not measured; in four of the five variants it may draw like a disabled unchecked one.
   - `ButtonGroup.harness.tsx`: the "disabled drawn in the tint" check is a share of the box and cannot fire for `text`; the ink ratio is coarse for an item that draws few pixels; the `titleOnly` overflow read has no positive check that rows were drawn; the hidden capsule copy's accessibility is not read. `RealInputTests.swift`'s toggle check has its own 3 s state poll beside the shared wait helper.
   - iOS `HybridNitroUiButtonGroup.swift`: `inControlGroup ? nil : model.tint` is dead for a toggle.
