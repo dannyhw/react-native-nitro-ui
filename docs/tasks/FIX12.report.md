@@ -42,17 +42,8 @@ all wait for that to clear. What the brief's Proof asks for is listed under Owed
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `3aa4a98e9925` | 1 m 06 s | start 6.3 / med 9.3 / max 10.9 |
-| `harness:ios` | **PASS** (from `task/FIX6-form-row-press`) | 601 tests / 30 suites + isolated 6 tests / 3 suites | `647545962a59` (harness:ios digest) | 14 m 23 s | start 14.8 / med 7.4 / max 19.1 |
-| `harness:android` | **PASS** (from `task/FIX11-bottom-sheet-drag-ignored`) | 659 tests / 31 suites + isolated 6 tests / 3 suites | `2c94e69bee09` (harness:android digest) | 17 m 57 s | start 11.1 / med 9.7 / max 48.9 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
-
-`need --for review`: `need: review is satisfied on this code tree.` (`check` green, and
-`harness:android` green on its own digest from `task/FIX11-bottom-sheet-drag-ignored`, which this
-round changes no library code to disturb.)
+One table, regenerated on this round's final tree, under `## Fix round 1`. Round one's own table
+went stale when `main` was merged and is not repeated here.
 
 ## Red proofs
 
@@ -116,3 +107,48 @@ break disjoint guards and each goes red in a different case:
    FIX7 merges. Recommendation: the latter, with this branch's review held until the filtered run is
    green - the round's changes are test and example only, so the library cannot have been broken by
    them.
+
+
+## Fix round 1
+
+The device arrived, and the brief's Proof is not met. `real-input:android -- --control
+bottom-sheet` passed at 05:52:19Z and was red on its next run, at 06:05:10Z: my own slide-out
+witness read nothing at all (`title ys []`), where that same tree read all nine cases green at
+05:20:00Z and at 05:52:19Z. `topsAcrossDrag` opens its reads before the drag, so they queued behind
+it instead of across it once: the witness is the flake, not the library, and a sampler the engine
+cannot queue behind a gesture is a shared-helper question. No run showed a library defect, and no
+assertion was loosened, no wait lengthened, no retry added. A full `real-input:android` (39-42 min
+in this clone) and `need --for merge` did not fit the budget.
+
+Red proofs, three in one run and the last alone:
+
+- `a detent dragged to during the rise is reported once` -> `oweDetentReport` spent nowhere and not
+  cleared at a presentation -> :407 saw `detent:1 > detent:0 > presented:false > dismiss > detent:0
+  > presented:false > dismiss`.
+- `a drag down during the rise slides the sheet out` -> `userDismissed(animate = false)` while
+  rising -> :468 `title ys []`, never read lower than where the drag left it.
+- `a sideways fling on the sheet list during the rise` -> the root stops asking `scrollsUnderneath`;
+  `end()` drops `claimedByChild` and the vertical-led test -> :80 `the node left the tree before it
+  came to rest`.
+- the Back of the first -> `DetentReporter` reads `sheetState.targetValue` -> :388 expected
+  `Detent 0`, observed `no node`: Back closed the sheet, FIX11's `expected 0 to be 1` from its cause.
+
+### Owed, and the one call to make
+
+The filtered gate owes its second green, and the full `real-input:android` is still owed. For the
+slide-out case: keep round one's post-gesture read and let the sheet's own root be the witness (it
+outlives its title by ~200 ms and read green in every run here), or give the case a sampler that
+rides the same session as the gesture, which is `support.ts` work and outside this brief.
+Recommendation: the root witness, one line, already green in three runs.
+
+### Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2178 tests / 96 suites | `ff2ce00a76a6` | 1 m 02 s | start 6.4 / med 8.7 / max 9.7 |
+| `harness:ios` | **PASS** (from `merge/FIX7`) | 610 tests / 30 suites + isolated 6 tests / 3 suites | `e40fef38d309` (harness:ios digest) | 14 m 21 s | start 7.7 / med 7.0 / max 15.2 |
+| `harness:android` | **PASS** | 668 tests / 31 suites + isolated 6 tests / 3 suites | `ff2ce00a76a6` (harness:android digest) | 18 m 21 s | start 6.1 / med 5.0 / max 19.8 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `real-input:android:--control:bottom-sheet` | **FAIL** | 1 failed of 9 tests / 1 suites | `ff2ce00a76a6` (real-input:android digest) | 12 m 52 s | start 8.9 / med 5.6 / max 8.9 |
+| `real-input:android:--control:bottom-sheet:--a11y:switch` | **PASS** | 9 tests / 1 suites | `ff2ce00a76a6` (real-input:android digest) | 3 m 17 s | start 5.5 / med 5.2 / max 6.2 |
