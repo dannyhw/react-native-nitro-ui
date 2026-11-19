@@ -19,6 +19,7 @@ type SheetHandle = {
   nuiTestStateReport(): string;
   nuiTestDismiss(): void;
   nuiTestSelectDetent(index: number): void;
+  nuiTestRefuseNextPresent(): void;
 };
 
 const IOS = Platform.OS === 'ios';
@@ -259,12 +260,17 @@ const nothingLeft = (baseline: Report) => (report: Report) =>
       num(report, 'touchRoots') <= num(baseline, 'touchRoots')
     : report.roots === '0');
 
-async function staysUp(testId: string, ms: number, what: string) {
+async function staysUp(
+  testId: string,
+  ms: number,
+  what: string,
+  up: (report: Report) => boolean = isUp
+) {
   const events = eventLog.length;
   const deadline = nitroUiCore.now() + ms;
   while (nitroUiCore.now() < deadline) {
     const report = reportOf(testId);
-    if (!isUp(report) || eventLog.length !== events) {
+    if (!up(report) || eventLog.length !== events) {
       throw new Error(
         `"${testId}" did not stay up ${what}: report "${report.raw}"; events=[${eventLog.join(',')}]`
       );
@@ -325,6 +331,10 @@ async function waitForEvent(entry: string, timeoutMs = 8000) {
     timeoutMs
   );
 }
+
+/** How often the app heard `entry`: a close must not be reported twice. */
+const countEvents = (entry: string): number =>
+  eventLog.filter((seen) => seen === entry).length;
 
 async function settledLayout(
   testId: string,
@@ -830,6 +840,82 @@ describe('BottomSheet · presenting over a sheet that is still arriving', () => 
       const over = await waitForReport('over', (r) => r.raw !== '', 'a report');
       expect(num(over, 'presentWaitsTotal')).toBeGreaterThan(60);
     }
+  });
+});
+
+/**
+ * UIKit refuses a presentation that races one which got there first, without saying so: the
+ * completion never runs and the controller never gets a presenter. A sheet that kept such a
+ * controller would never present again on that mount.
+ */
+describe('BottomSheet · a present UIKit refused', () => {
+  afterEach(async () => {
+    reset();
+    await sleep(700);
+  });
+
+  it('lets it go, reports it once, and presents the next ask', async () => {
+    await render(<Stage testId="refused" />);
+    await waitForHandle('refused');
+    const before = await waitForReport(
+      'refused',
+      (r) => r.raw !== '',
+      'a report'
+    );
+    if (!IOS) return;
+    handles.get('refused')?.nuiTestRefuseNextPresent();
+    setters.get('refused')?.(true);
+    // Not a sheet that closed: the app hears `isPresented` go false, once, and no `onDismiss`,
+    // because nothing was ever on screen to go.
+    await waitForEvent('refused:presented:false');
+    const refused = await waitForFreshReport(
+      'refused',
+      (r) => num(r, 'refusedPresents') === 1 && r.onScreen === '0',
+      'the refused present to be let go'
+    );
+    expect(refused.presented).toBe('0');
+    expect(refused.live).toBe('0');
+    expect(refused.inSheet).toBe('0');
+    // The next ask presents: the mount did not keep the controller UIKit refused.
+    setters.get('refused')?.(true);
+    const up = await waitForUp('refused', 'presented after a refused present');
+    expect(num(up, 'refusedPresents')).toBe(1);
+    expect(num(up, 'presentCount')).toBe(2);
+    await staysUp('refused', 600, 'after a refused present');
+    setters.get('refused')?.(false);
+    await waitForEvent('refused:dismiss');
+    await waitForReport(
+      'refused',
+      nothingLeft(before),
+      'nothing of either sheet left'
+    );
+    expect(countEvents('refused:presented:false')).toBe(1);
+    expect(countEvents('refused:dismiss')).toBe(1);
+  });
+
+  it('keeps a present whose completion is still to come', async () => {
+    await render(<Stage testId="slow" />);
+    await waitForHandle('slow');
+    if (!IOS) return;
+    setters.get('slow')?.(true);
+    // The moment a refused present and a slow one look alike from the completion's side: none has
+    // run (`live=0`). UIKit has taken this one (`onScreen=1`), which is what tells them apart.
+    const arriving = await waitForReport(
+      'slow',
+      (r) => r.onScreen === '1' && r.live === '0',
+      'the present taken and its completion still to come'
+    );
+    expect(num(arriving, 'refusedPresents')).toBe(0);
+    // One run loop turn after the present is where a refusal is decided, so by now one would
+    // have been let go and reported.
+    await sleep(250);
+    expect(num(reportOf('slow'), 'refusedPresents')).toBe(0);
+    expect(reportOf('slow').onScreen).toBe('1');
+    expect(countEvents('slow:presented:false')).toBe(0);
+    await waitForUp('slow', 'its entry transition finished');
+    await staysUp('slow', 700, 'over its entry transition');
+    setters.get('slow')?.(false);
+    await waitForEvent('slow:dismiss');
   });
 });
 
