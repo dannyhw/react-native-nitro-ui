@@ -287,6 +287,8 @@ jobs:
       EMULATOR_PORT: '5554'
       ANDROID_SERIAL: emulator-5554
       METRO_PORT: '8081'
+      # Pinned: newer command-line tools put AVDs under an XDG folder otherwise.
+      ANDROID_AVD_HOME: /home/runner/.android/avd
 
     steps:
       - name: Checkout
@@ -330,8 +332,10 @@ jobs:
           sdk="$ANDROID_HOME/cmdline-tools/latest/bin"
           image='system-images;android-35;google_apis;x86_64'
           yes | "$sdk/sdkmanager" "$image" emulator platform-tools > /dev/null
+          mkdir -p "$ANDROID_AVD_HOME"
           echo no | "$sdk/avdmanager" create avd -n "$ANDROID_AVD" -k "$image" -d pixel_9 --force
-          cfg="$HOME/.android/avd/$ANDROID_AVD.avd/config.ini"
+          cfg="$ANDROID_AVD_HOME/$ANDROID_AVD.avd/config.ini"
+          ls -la "$ANDROID_AVD_HOME"
           printf 'hw.ramSize=4096\nhw.cpu.ncore=4\ndisk.dataPartition.size=6G\nhw.keyboard=no\nhw.initialOrientation=portrait\n' >> "$cfg"
 
       - name: Boot the emulator
