@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-19 In an iOS `text` ButtonGroup that holds a toggle, every item reserves the same capsule room
+  at the group's size, so an unchecked toggle no longer leaves a wider gap than an action item
+  (FIX13, #103).
 - 11-19 An item that moves into a ButtonGroup's overflow menu keeps its `androidIcon` on Android,
   and an iOS toggle item is drawn in the group's `variant` and `tintColor`, one step quieter while
   unchecked and never grey; checking a toggle in a `text` group no longer clips it (FIX7, #98).

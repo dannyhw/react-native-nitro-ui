@@ -178,6 +178,8 @@ final class ButtonGroupModel: NitroUiModel {
   private var accessibilityReport = "none"
   /// What the control's own box was drawing at the last row probe, or `none`.
   private var drawingReport = "none"
+  /// Where inside that box something was drawn at the last row probe, as point ranges, or `none`.
+  private var inkReport = "none"
   /// How many probes have answered, so a test can tell its own from the previous one's.
   private var probes = 0
   /// Whether the row composed an overflow control, and how many items it drew; `-1` before the
@@ -199,14 +201,17 @@ final class ButtonGroupModel: NitroUiModel {
   }
 
   /// Answer a row probe from the last placement, and from what the box was drawing. Safe from any
-  /// thread. [drawing] is read from the rendered layer, so it arrives from the probe itself.
+  /// thread. [drawing] and [ink] are read from the rendered layer, so they arrive from the probe
+  /// itself.
   func publishRowReport(
     order: [String],
-    drawing: String
+    drawing: String,
+    ink: String
   ) {
     reportLock.lock()
     probes += 1
     drawingReport = drawing
+    inkReport = ink
     if placedVisible < 0 {
       rowReport = "visible=none;overflow=none;row=none;shown=none"
     } else {
@@ -247,7 +252,8 @@ final class ButtonGroupModel: NitroUiModel {
     defer { reportLock.unlock() }
     return
       "checked=\(checkedReport);\(rowReport);menu=\(placedOverflow ? "composed" : "none");"
-      + "drawing=\(drawingReport);probes=\(probes);a11y=\(accessibilityReport)"
+      + "drawing=\(drawingReport);ink=\(inkReport);probes=\(probes);"
+      + "a11y=\(accessibilityReport)"
   }
 
   func resetAll() {
@@ -271,6 +277,7 @@ final class ButtonGroupModel: NitroUiModel {
     rowReport = "visible=none;overflow=none;row=none;shown=none"
     accessibilityReport = "none"
     drawingReport = "none"
+    inkReport = "none"
     probes = 0
     placedVisible = -1
     placedOverflow = false
@@ -380,7 +387,7 @@ struct ButtonGroupContent: NitroUIContent {
       }
     ) {
       HStack(spacing: ButtonGroupContent.spacing) {
-        row(items, useControlGroup: useControlGroup)
+        row(items, useControlGroup: useControlGroup, reservesFootprint: reservesFootprint(items))
         // A disabled group must not own a live popup, so the overflow control is left out of the
         // row.
         if !overflow.isEmpty, !model.disabled {
@@ -405,11 +412,18 @@ struct ButtonGroupContent: NitroUIContent {
     )
     return AnyView(
       HStack(spacing: ButtonGroupContent.spacing) {
-        row(items, useControlGroup: useControlGroup)
+        row(items, useControlGroup: useControlGroup, reservesFootprint: reservesFootprint(items))
       }
       .clipped()
       .modifier(OptionalGroupAccessibility(label: model.accessibilityLabel))
     )
+  }
+
+  /// Whether these items must each reserve the footprint of a checked toggle: only a `text` group
+  /// holds an item that draws less than that capsule, and only a group with a toggle is measured
+  /// at the height of one.
+  private func reservesFootprint(_ items: [ButtonGroupItemState]) -> Bool {
+    model.variant == .text && items.contains(where: \.toggle)
   }
 
   /// The group itself: `ControlGroup` or the plain row. A `Toggle(.button)` inside a `ControlGroup`
@@ -418,17 +432,18 @@ struct ButtonGroupContent: NitroUIContent {
   @ViewBuilder
   private func row(
     _ items: [ButtonGroupItemState],
-    useControlGroup: Bool
+    useControlGroup: Bool,
+    reservesFootprint: Bool
   ) -> some View {
     if useControlGroup {
       ControlGroup {
         ForEach(items, id: \.id) { item in
-          itemControl(item, inControlGroup: true)
+          itemControl(item, inControlGroup: true, reservesFootprint: reservesFootprint)
         }
       }
     } else {
       ForEach(items, id: \.id) { item in
-        itemControl(item, inControlGroup: false)
+        itemControl(item, inControlGroup: false, reservesFootprint: reservesFootprint)
       }
     }
   }
@@ -437,14 +452,19 @@ struct ButtonGroupContent: NitroUIContent {
 
   @ViewBuilder private func itemControl(
     _ item: ButtonGroupItemState,
-    inControlGroup: Bool
+    inControlGroup: Bool,
+    reservesFootprint: Bool
   ) -> some View {
     if item.toggle {
       Toggle(isOn: toggleBinding(item)) {
         itemLabel(item, inControlGroup: inControlGroup)
       }
       .toggleStyle(
-        ItemToggleStyle(variant: model.variant, tint: inControlGroup ? nil : model.tint)
+        ItemToggleStyle(
+          variant: model.variant,
+          tint: inControlGroup ? nil : model.tint,
+          reservesFootprint: reservesFootprint
+        )
       )
       .controlSize(model.scale.controlSize)
       .disabled(model.disabled || item.disabled)
@@ -453,6 +473,14 @@ struct ButtonGroupContent: NitroUIContent {
         itemLabel(item, inControlGroup: inControlGroup)
       }
       .modifier(ItemButtonStyle(style: ItemStyle(variant: model.variant)))
+      .modifier(
+        BorderedFootprint(
+          reserves: reservesFootprint,
+          label: itemLabel(item, inControlGroup: inControlGroup)
+        )
+      )
+      // Outside the footprint: the hidden `.bordered` copy measures the group's `size`, and an
+      // environment value reaches only the views it wraps.
       .controlSize(model.scale.controlSize)
       .modifier(OptionalItemTint(color: inControlGroup ? nil : model.tint))
       .disabled(model.disabled || item.disabled)
@@ -601,6 +629,7 @@ private struct ItemButtonStyle: ViewModifier {
 private struct ItemToggleStyle: ToggleStyle {
   let variant: ButtonVariant
   let tint: UIColor?
+  let reservesFootprint: Bool
 
   func makeBody(configuration: Configuration) -> some View {
     let style = ItemStyle(variant: variant).state(configuration.isOn)
@@ -609,23 +638,19 @@ private struct ItemToggleStyle: ToggleStyle {
     }
     .modifier(ItemButtonStyle(style: style))
     .modifier(OptionalItemTint(color: tint))
-    .modifier(CheckedFootprint(style: style, label: configuration.label))
+    .modifier(BorderedFootprint(reserves: reservesFootprint, label: configuration.label))
   }
 }
 
-/// A `text` toggle is a label while unchecked and a capsule while checked, and the group measures
-/// its size once for a configuration: checking an item repaints it and re-measures nothing, so an
-/// item that grows only when checked is drawn outside the box the row was measured into. An
-/// unchecked `text` toggle keeps the footprint of the same label in `.bordered` - the style it
-/// takes while checked - and draws its own label centred inside it, so a `text` group holding a
-/// toggle is the height of a capsule in every state and one with no toggle keeps the height of a
-/// label. The other families measure the same in both states and need nothing.
-private struct CheckedFootprint: ViewModifier {
-  let style: ItemStyle
-  let label: ToggleStyleConfiguration.Label
+/// A `text` item is a label and a checked toggle a capsule, and nothing re-measures the row when a
+/// toggle is checked: `reserves` measures an item at its own label in `.bordered` - the style a
+/// checked toggle takes - and draws what it draws centred inside it, so every state fits one box.
+private struct BorderedFootprint<Label: View>: ViewModifier {
+  let reserves: Bool
+  let label: Label
 
   func body(content: Content) -> some View {
-    if style == .borderless {
+    if reserves {
       ZStack {
         Button(action: {}) { label }
           .buttonStyle(.bordered)
@@ -979,9 +1004,11 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
       // recycled host may not have laid out its new mount yet.
       host.setNeedsLayout()
       host.layoutIfNeeded()
+      let sampled = nitroUiSampleDrawing(of: host, tint: model.tint)
       model.publishRowReport(
         order: model.items.map(\.id),
-        drawing: nitroUiSampleDrawing(of: host, tint: model.tint)
+        drawing: sampled.aggregate,
+        ink: sampled.ink
       )
     }
     if Thread.isMainThread {
@@ -1013,24 +1040,26 @@ private let nitroUiDrawingInkBudget = 24
 /// budget has to cover the rest. A grey label is nowhere near a colour that was picked for it.
 private let nitroUiTintBudget = 120
 
-/// What the box `view` is drawing, as `size=<WxH>,fill=<%>,tint=<%>`: the share of the box that
-/// differs from a neutral backdrop, and the share that is the group's own tint.
+/// What the box `view` is drawing: the aggregate shares as `size=<WxH>,fill=<%>,tint=<%>`, and
+/// where inside the box something is drawn, as point ranges `12.40~58.90|70.20~110.00`.
 ///
 /// The rendered layer is the only thing in-process that tells one variant's drawing from
 /// another's: a SwiftUI control keeps its capsule, its fill and its label colours to itself. The
 /// backdrop makes every pixel comparable, including the ones a translucent material leaves open.
+/// The ranges come from the same sample: what an item leaves empty beside its neighbour is only
+/// visible where the two drawings end, not in the space each was measured into.
 private func nitroUiSampleDrawing(
   of view: UIView,
   tint: UIColor?
-) -> String {
+) -> (aggregate: String, ink: String) {
   let bounds = view.bounds
   guard bounds.width >= 2, bounds.height >= 2 else {
-    return "size=\(Int(bounds.width))x\(Int(bounds.height)),fill=-,tint=-"
+    return ("size=\(Int(bounds.width))x\(Int(bounds.height)),fill=-,tint=-", "-")
   }
   let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
     view.drawHierarchy(in: bounds, afterScreenUpdates: true)
   }
-  guard let bitmap = image.cgImage else { return "no image" }
+  guard let bitmap = image.cgImage else { return ("no image", "-") }
   let width = bitmap.width, height = bitmap.height
   let bytesPerRow = 4 * width
   var data = [UInt8](repeating: 0, count: bytesPerRow * height)
@@ -1039,7 +1068,7 @@ private func nitroUiSampleDrawing(
     let context = CGContext(
       data: &data, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
       space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-  else { return "no context" }
+  else { return ("no context", "-") }
   let backdrop = 255
   context.setFillColor(UIColor.white.cgColor)
   context.fill(CGRect(x: 0, y: 0, width: width, height: height))
@@ -1050,6 +1079,10 @@ private func nitroUiSampleDrawing(
     target = (Int((argb >> 16) & 0xff), Int((argb >> 8) & 0xff), Int(argb & 0xff))
   }
   var filled = 0, tinted = 0
+  // Only the middle of the box is asked where the ink is: every item is drawn across it, while the
+  // top and bottom of a capsule are empty beside a label of the same row.
+  let bandHalf = max(1, height / 10)
+  var inkColumns = [Bool](repeating: false, count: width)
   for row in 0..<height {
     for column in 0..<width {
       let offset = row * bytesPerRow + column * 4
@@ -1059,6 +1092,9 @@ private func nitroUiSampleDrawing(
         > nitroUiDrawingInkBudget
       {
         filled += 1
+        if abs(row - height / 2) <= bandHalf {
+          inkColumns[column] = true
+        }
       }
       if let target,
         abs(red - target.red) + abs(green - target.green) + abs(blue - target.blue)
@@ -1069,7 +1105,42 @@ private func nitroUiSampleDrawing(
     }
   }
   let area = width * height
-  return
+  let aggregate =
     "size=\(Int(bounds.width))x\(Int(bounds.height)),fill=\(filled * 100 / area),"
     + "tint=\(tint == nil ? "-" : String(tinted * 100 / area))"
+  return (aggregate, nitroUiInkRanges(inkColumns, pointsPerColumn: bounds.width / CGFloat(width)))
+}
+
+/// The runs of `columns` that hold ink, as point ranges: columns of one word are closer together
+/// than the space between two items, and a run narrower than a stroke is anti-aliasing.
+private func nitroUiInkRanges(_ columns: [Bool], pointsPerColumn: CGFloat) -> String {
+  guard pointsPerColumn > 0 else { return "-" }
+  let join = max(1, Int(4.0 / pointsPerColumn))
+  let narrowest = max(1, Int(2.0 / pointsPerColumn))
+  var runs: [(start: Int, end: Int)] = []
+  var start: Int?
+  for (column, inked) in columns.enumerated() {
+    if inked {
+      if start == nil { start = column }
+    } else if let begun = start {
+      runs.append((begun, column))
+      start = nil
+    }
+  }
+  if let begun = start { runs.append((begun, columns.count)) }
+  var merged: [(start: Int, end: Int)] = []
+  for run in runs {
+    if let last = merged.last, run.start - last.end <= join {
+      merged[merged.count - 1] = (last.start, run.end)
+    } else {
+      merged.append(run)
+    }
+  }
+  return merged
+    .filter { $0.end - $0.start >= narrowest }
+    .map {
+      String(
+        format: "%.2f~%.2f", CGFloat($0.start) * pointsPerColumn, CGFloat($0.end) * pointsPerColumn)
+    }
+    .joined(separator: "|")
 }
