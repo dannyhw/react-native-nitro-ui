@@ -394,6 +394,7 @@ test('a detent dragged to during the rise is reported once, and the next open re
   await screen.getByText(TWO).waitFor({ state: 'detached' });
 
   // Opened again with no drag at all: it rises to the detent it opened at and says nothing.
+  await reveal(screen, screen.getByTestId('sheet-open-two'));
   await screen.getByTestId('sheet-open-two').tap();
   const reopened = await restingBox(screen.getByText(TWO));
   expect(
@@ -462,6 +463,7 @@ test('a drag down during the rise slides the sheet out and reports the dismissal
   await title.waitFor({ state: 'detached' });
   await expect(log).toHaveText('presented:false > dismiss');
 
+  await reveal(screen, screen.getByTestId('sheet-open-sticky'));
   await screen.getByTestId('sheet-open-sticky').tap();
   const sticky = screen.getByText('Swipe, back and outside do nothing');
   await sticky.waitFor({ state: 'visible' });
