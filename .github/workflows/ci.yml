@@ -345,7 +345,8 @@ jobs:
           echo "nproc: $(nproc)  mem: $(free -g | awk '/^Mem:/{print $2}')GiB  load: $(cut -d' ' -f1-3 /proc/loadavg)"
           launch=$(node -e "import('./scripts/emulator-launch.mjs').then((m) => console.log(m.emulatorLaunchCommand({ avd: process.env.ANDROID_AVD, port: Number(process.env.EMULATOR_PORT), snapshot: 'cold', host: { env: process.env, platform: process.platform } }, process.env.ANDROID_HOME + '/emulator/emulator')))")
           echo "launch: $launch"
-          nohup $launch > emulator.log 2>&1 &
+          # Outside the checkout: a new file there changes the tree the app stamp was built from.
+          nohup $launch > "$RUNNER_TEMP/emulator.log" 2>&1 &
           adb -s "$ANDROID_SERIAL" wait-for-device
           booted=''
           for _ in $(seq 1 300); do
@@ -368,7 +369,7 @@ jobs:
           path: |
             .real-input/android
             example/e2e/.e2e/android
-            emulator.log
+            ${{ runner.temp }}/emulator.log
           if-no-files-found: warn
 
   # Xcode 27 because `rn-harness.config.mjs` asks for an iOS 27 simulator. Opt-in:
