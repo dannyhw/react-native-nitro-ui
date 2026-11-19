@@ -208,6 +208,20 @@ describe('androidIcon · the development build', () => {
     expect(sent?.startsWith('url:')).toBe(true);
   });
 
+  it('leaves a hash in an asset name for the request to quote', () => {
+    const id = registerVectorAsset({ name: 'c#sharp' });
+    expect(
+      androidIconUrl(
+        resolveAndroidIcon(id, {
+          devServerOrigin: DEV_ORIGIN,
+          deviceScale: 2,
+        }) ?? ''
+      )
+    ).toBe(
+      'http://10.0.2.2:8081/src/assets/icons/c#sharp.xml?platform=android&hash=a1b2c3d4'
+    );
+  });
+
   it('builds the URL React Native would build for the same asset', () => {
     // `scaledAssetPath()` rather than `assetServerURL()`, which needs a server
     // URL and stamps the running platform into the result.
@@ -289,6 +303,20 @@ describe('androidIcon · the development build', () => {
 });
 
 describe('androidIcon · the forms a caller can write', () => {
+  it('does not ask for a fragment an app wrote into a uri', () => {
+    // A `#` written in a uri separates a fragment, which no request carries.
+    expect(
+      androidIconUrl(
+        resolveAndroidIcon({ uri: 'https://host/star.xml#v2' }) ?? ''
+      )
+    ).toBe('https://host/star.xml');
+    expect(
+      androidIconUrl(
+        resolveAndroidIcon('https://host/star.xml?hash=ab#v2') ?? ''
+      )
+    ).toBe('https://host/star.xml?hash=ab');
+  });
+
   it('marks a source with a remote uri so native reads it', () => {
     expect(
       androidIconUrl(
