@@ -46,13 +46,20 @@ pair is retaken.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2191 tests / 97 suites | `46cf2290cd40` | 55.4 s | start 4.4 / med 6.7 / max 7.9 |
-| `harness:ios` | **PASS** | 621 tests / 30 suites + isolated 6 tests / 3 suites | `46cf2290cd40` (harness:ios digest) | 14 m 34 s | start 9.4 / med 7.9 / max 59.8 |
-| `harness:android` | **PASS** | 679 tests / 31 suites + isolated 6 tests / 3 suites | `46cf2290cd40` (harness:android digest) | 18 m 19 s | start 52.6 / med 6.2 / max 52.6 |
+| `check` | **PASS** | 2191 tests / 97 suites | `886163f83e3c` | 1 m 04 s | start 4.3 / med 8.3 / max 11.7 |
+| `harness:ios` | **PASS** | 622 tests / 30 suites + isolated 6 tests / 3 suites | `886163f83e3c` (harness:ios digest) | 14 m 28 s | start 5.7 / med 5.5 / max 34.1 |
+| `harness:android` | **PASS** | 680 tests / 31 suites + isolated 6 tests / 3 suites | `886163f83e3c` (harness:android digest) | 18 m 11 s | start 5.5 / med 5.6 / max 34.1 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 | `harness:ios:--silent%3Dfalse:Chip` | stale | 1 failed of 21 tests / 1 suites | 8f3c06184ee4 (not this tree) | 21.1 s | start 7.0 / med 6.9 / max 7.0 |
+| `harness:ios:--silent%3Dfalse:Chip.harness:-t:lays%20the%20dimmed%20fill` | stale | 1 failed of 21 tests / 1 suites | af486e89d846 (not this tree) | 11.3 s | start 4.2 / med 4.6 / max 5.0 |
 | `harness:ios:Chip` | stale | 1 failed of 20 tests / 1 suites | eb1dead5597d (not this tree) | 21.2 s | start 4.7 / med 4.7 / max 4.7 |
+| `harness:ios:Chip.harness` | stale | 21 tests / 1 suites | 7df5e9df4714 (not this tree) | 21.3 s | start 11.9 / med 10.9 / max 11.9 |
+| `harness:ios:Chip.harness:--silent%3Dfalse:-t:the%20selected%20fill` | stale | 1 failed of 21 tests / 1 suites | af486e89d846 (not this tree) | 11.0 s | start 7.9 / med 8.1 / max 8.3 |
+| `harness:ios:Chip.harness:-t:keeps%20the%20label%20of%20a%20disabled%20selected%20chip` | stale | 1 failed of 21 tests / 1 suites | f1260db01880 (not this tree) | 10.3 s | start 4.3 / med 4.4 / max 4.5 |
+| `harness:ios:Chip.harness:-t:lays%20the%20dimmed%20fill` | stale | 1 failed of 21 tests / 1 suites | 5e543bcb8378 (not this tree) | 11.3 s | start 4.7 / med 5.0 / max 5.3 |
+| `harness:ios:Chip.harness:-t:measures%20one%20size%7Cdraws%20the%20imported%20glyph` | stale | 2 failed of 21 tests / 1 suites | 74b489128303 (not this tree) | 18.5 s | start 4.4 / med 16.1 / max 19.0 |
+| `harness:ios:Chip.harness:-t:the%20selected%20fill` | stale | 1 failed of 21 tests / 1 suites | 510bb7ecbbe7 (not this tree) | 11.3 s | start 9.7 / med 9.4 / max 9.7 |
 
 
 ## Red proofs
@@ -95,9 +102,56 @@ pair is retaken.
   SegmentedControl's; the two belong in `ios/core` next to Android's `NitroUiPixelProbe.kt`.
 - example: the ink-area comparison is noisy at the few-per-cent level between chips with *different*
   labels; the suite compares two chips that share one label, and a future case should keep that.
+- ios: the fit read has never run at an accessibility text size. Nothing moves an app's content
+  size category under test: the simulator's larger-text settings and an `-AppleTextSize` launch
+  argument both left the chip at `UICTContentSizeCategoryL`.
+- ios: a chip's sizing key carries no native-side variation: under a mutation that gave a disabled
+  chip another control size, the enabled twin was laid out at the disabled chip's box.
+- ios: a probe posted just before a recycle still publishes into the cleared model, so the reused
+  chip answers `n=1` with the previous chip's pixels.
+- ios: the fit read tolerates 3 columns at the cap because `Capsule()` is a true semicircle and the
+  bordered style's capsule is not; if the style's curve changes, that residual moves with it.
 
 ## Hygiene
 
 - One incident: a leftover `simctl launch --console-pty` process from a manual screenshot run was
   stopped with `pkill -f`, a pattern kill. Nothing else was stopped by pattern, and no device was
   shut down, wiped or restarted.
+
+## Fix round 1
+
+M1. The README pair and the light and dark four-state shots are redrawn from this tree. Sampled:
+light enabled selected `#D1EAFF`, dimmed On `#E0E9F3`, dimmed Off `#E9E9EB`; dark `#001A2E`,
+`#17212A`, `#262629`; the committed `docs/images/components/chip-ios.png` carries the same three
+light values. None is FIX9's `#DFECF7` / `#101D28`; one stroke reads `#C1C1C4` over grey and
+`#BAC1CB` over the fill, and no ghost shows.
+
+M2. The edge read is red against the constant it replaces, 16 columns outside the capsule. On the
+shipped inset it is green at the control's own size, 1 pt at the cap turn, and a run with the
+control at `.regular` matched the unselected chip's painted edge on every row. The accessibility
+half did not run: the chip answered `UICTContentSizeCategoryL` at 62.00x28.00 with the simulator's
+larger-text settings written and with an `-AppleTextSize` launch argument.
+
+N1. The ink budget is 24 — two of the 12 that one glyph over the fill sits from the same glyph
+over the container. A wash over half a label keeps 21 % of its ink.
+
+N2. Both named tests are red once below; `## Gates` holds the regenerated table. Doc comments are
+one to three lines.
+
+### Red proofs, fix round 1
+
+- `lays the dimmed fill exactly inside the capsule the unselected chip draws` -> the fill laid at
+  the `-6`/`-12` it replaces -> `the dimmed selected chip paints outside the capsule its unselected
+  twin draws: at row 0 the one paints columns 23-162 where the other paints columns 39-146, 16
+  columns apart against a tolerance of 4. fill=#DFE8F0 container=#E8E8E9 apart=16 box=62.00x28.00
+  rows=84/84 shape=16@0 covered=13@0 stray=0`
+- `keeps the label of a disabled selected chip as strong as an unselected one` -> the same fill
+  laid over the label's first 20 pt -> `a disabled selected chip paints 217 pixels at the #C2C2C4
+  its unselected twin paints 1028 of - 21% - so its label is faded or redrawn, not merely sitting
+  on a dimmed fill. off=#C2C2C4 on=#BCC3CB areaOff=1028 areaOn=217`
+- `measures one size whether or not it is disabled` -> a disabled chip drawn at the larger control
+  size -> `testID "on" (on) never reached 62.00x28.00 - last box 70.33x34.33, control measured
+  62.00x28.00.`
+- `draws the imported glyph in the slot, and leaves nothing else in its colour` -> iOS answering
+  `androidIcon` by dimming the label -> `iOS painted the chip with `androidIcon` at #E1E7ED and the
+  one without it at #D9E4EE: the prop drew something on a platform that ignores it.`
