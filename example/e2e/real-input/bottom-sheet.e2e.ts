@@ -273,3 +273,53 @@ test('a drag up on the two-detent header expands the sheet, Back steps down a de
     'detent:1 > detent:0 > presented:false > dismiss'
   );
 });
+
+/**
+ * The header is also grabbed *before* the sheet has finished rising, which is what a person who
+ * keeps dragging as it opens does. The sheet may finish rising first, but the drag has to be
+ * followed rather than dropped. The box is read once, where the header is now and not where it
+ * will come to rest, and aimed at the middle of the header rather than an edge of it: the sheet
+ * only travels a little further from here, so the point stays on the header.
+ */
+test('a drag that starts while the two-detent sheet is rising expands it', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'sheet');
+  const window = await windowBox(screen);
+  const header = screen.getByText(TWO);
+
+  await reveal(screen, screen.getByTestId('sheet-open-two'));
+  await screen.getByTestId('sheet-open-two').tap();
+  await header.waitFor({ state: 'visible' });
+
+  const grab = screen.getByTestId('sheet-two-header');
+  const rising = await boxOf(header);
+  const held = await boxOf(grab);
+  if (rising == null || held == null) {
+    throw new Error(
+      `real-input: the rising sheet has no box to drag from (header ${JSON.stringify(
+        rising
+      )}, grab ${JSON.stringify(held)}).`
+    );
+  }
+  const from = {
+    x: Math.round(held.x + held.width / 2),
+    y: Math.round(held.y + held.height / 2),
+  };
+  await screen.swipe({
+    from,
+    to: { x: from.x, y: window.y + 2 },
+    duration: 900,
+  });
+
+  const expanded = await restingBox(header);
+  expect(
+    expanded.y,
+    `the header was grabbed at y=${String(from.y)}, inside the box ` +
+      `${String(held.y)}..${String(held.y + held.height)} read while its top was still at ` +
+      `${String(rising.y)} of the ${String(window.y + window.height)} window; the header ` +
+      `came to rest at ${String(expanded.y)}`
+  ).toBeLessThan(rising.y / 2);
+});
