@@ -220,7 +220,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - real-input Android (G17): the clear button is located by geometry (the one clickable node in the field's right half) because Material 3 gives it no stable `resource-id`; a tree change would make it report "two candidates" rather than mis-tap, but a named route would be better.
 - gate.mjs (G17): `wait --gate <g>` prints "last log line" from the newest log for the gate name, so in the seconds before a re-run writes its own log it shows the *previous* run's failure line — reads as if the new run were already red.
 - G17 review: move Android SearchField to material3 1.5's stateful `InputField` in a plain `Surface`, not `SearchBar`, which wraps the field in `DisableSoftKeyboard`. Keyboard props come with it.
-- G17 review: `SearchFieldStrings` reads `Resources.getSystem()` once per process, so it ignores an app's own language setting.
 - G17 review: the declared-fallback constants aren't checked against the native constants (the harness poisons the cache).
 - G17 review: Android `hasText` uses `derivedStateOf` without `remember`; there's no SearchField IME composition test on Android.
 - G18 review: iOS Tooltip's own window calls `makeKeyAndVisible`, which may close the keyboard beside a focused field. Measure it.
@@ -418,3 +417,4 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - Android: each overflow row reports its painted colour (`overflowIcons=`) on every composition, as `Menu` does; the report can go stale across reopenings, and a `Pending` glyph's tint is not reported.
 - Form harness, the Android keyboard opt-out cases: the default-path checks accept a 2 dp lift and a 1 dp scroll; asserting that the focused field ends above the keyboard by the reveal margin, and that the requested row ends inside the viewport, would make them prove the default behaviour too (CodeRabbit on #106).
 - SearchField autoCorrect: the harness step that turns `autoCorrect` off cannot catch a missing keyboard restart (the interceptor reads the prop live); no SearchField number or phone keyboard case; the new case waits 8000 ms where the file default is 5000 ms.
+- SearchField strings: they follow a language change only once the activity restarts (the field does not read `LocalConfiguration`); `SearchFieldStrings.forLocale` is public Kotlin only for the example probe; the device check cannot tell the drawing context from the application context, which differs below API 33 with AppCompat's per-app language.

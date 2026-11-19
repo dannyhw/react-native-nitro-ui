@@ -39,7 +39,7 @@ is per component: its cold first frame is its own 28 pt / 56 dp height, not Text
 | `maxLength`          | `number \| null \| undefined`          | none                                         | Enforced natively, in UTF-16 code units, as `TextField`'s.                                                             |
 | `keyboardType`       | `TextFieldKeyboardType \| undefined`   | `'default'`                                  | The keyboard the field opens. `TextField`'s values and mapping: see [the table there](text-field.md#api).              |
 | `autoCapitalize`     | `TextFieldAutoCapitalize \| undefined` | `'none'`                                     | What the keyboard capitalises. A query is not a sentence, so the default is `'none'`, not `TextField`'s `'sentences'`. |
-| `autoCorrect`        | `boolean \| undefined`                 | `true`                                       | Whether the keyboard may correct the query. `false` also takes Android's suggestion strip away (see The keyboard).      |
+| `autoCorrect`        | `boolean \| undefined`                 | `true`                                       | Whether the keyboard may correct the query. `false` also asks Android's keyboard to show no suggestions (see The keyboard). |
 | `editable`           | `boolean \| undefined`                 | `true`                                       | `false`: the query shows, but the field takes no focus, no input and no clear.                                         |
 | `onSubmitEditing`    | `(text: string) => void`               | —                                            | The Search key, with the query as a string; the field then loses focus. Never called for an empty query.               |
 | `onFocus` / `onBlur` | `() => void`                           | —                                            | First responder / Compose focus, gained and lost.                                                                      |
@@ -82,7 +82,7 @@ native view reached JS, is held by the wrapper and run when the view arrives. A 
 | Keyboard                | `UIKeyboardType` / `UITextAutocapitalizationType` / `.autocorrectionType` + `.spellCheckingType`, as `TextField` sets them | `KeyboardOptions(capitalization, autoCorrectEnabled, keyboardType)` handed to `InputField`     |
 | Search key              | `textFieldShouldReturn`, with `enablesReturnKeyAutomatically` on                                                           | the input field's `onSearch`, and `ImeAction.Search` Material merges over the keyboard options |
 | Empty query             | UIKit disables the Return key                                                                                              | `onSearch` returns without reporting                                                           |
-| Prompt when none is set | nothing: UIKit sets no `placeholder` on the bare field                                                                     | the framework's `search_hint` string                                                           |
+| Prompt when none is set | nothing: UIKit sets no `placeholder` on the bare field                                                                     | the framework's `search_hint` string, in the app's language                                      |
 | Announcement            | the `.searchField` accessibility trait                                                                                     | the editable node under the field's name                                                       |
 
 ## The text, and the handshake
@@ -143,9 +143,10 @@ when its keyboard options change while it has focus, so the IME gets the new key
 field losing focus.
 
 `autoCorrect={false}` refuses correction in the way each platform's keyboard understands: iOS gets
-`autocorrectionType = .no`, and Android is sent `TYPE_TEXT_FLAG_NO_SUGGESTIONS` along with no
-autocorrect flag, which is what actually stops it drawing a suggestion strip over the word at the
-caret - leaving the autocorrect flag out does not. The flag belongs to Android's text input class,
+`autocorrectionType = .no` and `spellCheckingType = .no`, and Android is sent
+`TYPE_TEXT_FLAG_NO_SUGGESTIONS` along with no autocorrect flag, which asks the keyboard not to
+draw a suggestion strip over the word at the caret - leaving the autocorrect flag out does not.
+Most keyboards honour it; a keyboard may still ignore it. The flag belongs to Android's text input class,
 so a number or phone keyboard is sent what it is sent with the default.
 
 UIKit's `.numberPad` and `.decimalPad` have no Return key, so on iOS a field with
@@ -162,8 +163,14 @@ number keyboard keeps its action key, which is still Search. `"phone-pad"`, `"em
   the default. Pass `placeholder` if you want a prompt on iOS.
 - Android shows the framework's word. Material 3's input field leaves the prompt to the app, so
   the component reads the framework's `search_hint` string resource. That resource is private to
-  the framework, so it is resolved by name once per process, and if it is not found the field
-  falls back to the English the platform uses.
+  the framework, so it is resolved by name, and if it is not found the field falls back to the
+  English the platform uses.
+
+Both Android strings - the prompt and the clear button's screen-reader label, the framework's
+`searchview_description_clear` - are read from the configuration the field draws in, so an app
+shown in another language than the device's, including a per-app language on Android 13 and later,
+gets its own words. After a language change they follow once the activity restarts, which is
+Android's default.
 
 The library ships no search string of its own.
 

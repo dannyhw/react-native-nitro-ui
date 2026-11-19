@@ -38,6 +38,20 @@ type ProbeModule = {
   ): Promise<string>;
   /** Android only: `NitroUiProbeModule.searchGlyphPixels`. */
   searchGlyphPixels(): Promise<string>;
+  /** Android only: `NitroUiProbeModule.searchFieldStrings`. */
+  searchFieldStrings(localeTag: string): Promise<{
+    appHint: string;
+    appClear: string;
+    localeHint: string;
+    localeClear: string;
+    deviceHint: string;
+    deviceClear: string;
+    appLocale: string;
+    deviceLocale: string;
+    requestedLocale: string;
+    hostHint: string;
+    hostClear: string;
+  }>;
 };
 const probe = (): ProbeModule =>
   TurboModuleRegistry.getEnforcing('NitroUiProbe') as unknown as ProbeModule;
@@ -682,6 +696,50 @@ describe('SearchField', () => {
       expect(unprompted?.placeholder ?? '').not.toBe('');
     }
     expect(unprompted?.placeholder).not.toBe('Search recipes');
+  });
+
+  /*
+   * The default prompt and the clear button's label are the framework's private strings,
+   * so the question is which configuration they are read from: the app's views are drawn
+   * in one, the device in another, and a per-app language on Android 13 and later makes
+   * them differ. German is what the framework translates both strings into.
+   */
+  it('reads its prompt and clear label in the app’s language', async () => {
+    // Android only: the strings are Android framework resources, and iOS draws no prompt.
+    if (iOS) return;
+    render(<Controlled id="localized" initial="" />);
+    await waitForTestId('localized');
+    const drawn = await stateWhen(
+      'localized',
+      (current) => current.placeholder !== '',
+      'the framework prompt'
+    );
+
+    const inGerman = await probe().searchFieldStrings('de');
+    expect(inGerman.requestedLocale).toBe('de');
+    // The check only means something if the emulator itself is not in German.
+    expect(inGerman.requestedLocale).not.toBe(inGerman.appLocale);
+    expect(inGerman.localeHint).toBe('Suchen…');
+    expect(inGerman.localeClear).toBe('Anfrage löschen');
+    expect(inGerman.localeHint).not.toBe(inGerman.deviceHint);
+    expect(inGerman.localeClear).not.toBe(inGerman.deviceClear);
+
+    // Reading a language leaves every other answer alone, and reading it again gives the
+    // same words: the strings belong to a configuration, not to the process.
+    const readAgain = await probe().searchFieldStrings('de');
+    expect(readAgain.localeHint).toBe(inGerman.localeHint);
+    expect(readAgain.localeClear).toBe(inGerman.localeClear);
+    expect(readAgain.appHint).toBe(inGerman.appHint);
+    expect(readAgain.appClear).toBe(inGerman.appClear);
+
+    // What the mounted field draws is what its own context resolves.
+    expect(drawn.placeholder).toBe(inGerman.appHint);
+    expect(inGerman.hostHint).toBe(inGerman.appHint);
+    expect(inGerman.hostClear).toBe(inGerman.appClear);
+    console.log(
+      `search field strings: app ${inGerman.appLocale} prompt ` +
+        `"${inGerman.appHint}", de prompt "${inGerman.localeHint}"`
+    );
   });
 
   it('draws its search glyph as a magnifier: a painted ring around an unpainted lens', async () => {
