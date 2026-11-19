@@ -172,10 +172,17 @@ centred inside it, so the checked capsule is inside the box the row was measured
 item takes the same room as its neighbours whatever mix of them the row holds. A `text` group with
 no toggle, or whose toggles have all moved into the overflow menu, keeps the size of a label.
 
+The room is a capsule's, and a checked item fills it edge to edge while a label leaves the capsule's
+padding at each side. The space you see between a checked item and its neighbour is that padding
+narrower than the space between two unchecked ones: what the row keeps even is the room every item
+was measured at, not the whitespace between the drawings.
+
 ## Overflow
 
 Items that do not fit move into a menu. Which ones is decided by the box: six items that
 overflow at 220 pt can be a full row across the screen.
+An iOS `text` group that holds a toggle measures every item at a capsule, so its row reaches the
+menu at a wider box than the labels it draws.
 
 - Android uses Material's own overflow: the ellipsis indicator, and `ButtonGroup`'s built-in
   `DropdownMenu` for the rows. Which items overflowed is private to Material
