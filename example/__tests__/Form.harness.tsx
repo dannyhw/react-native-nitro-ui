@@ -2592,15 +2592,53 @@ describe('Form keyboard opt-out (Android)', () => {
   /** The tall Form at rest: nothing asked of it, no keyboard reported to it. */
   async function mountTall(avoids: boolean): Promise<Record<string, string>> {
     await render(<TallForm avoids={avoids} />);
-    const atRest = await formReport(
+    await formReport(
       (r) =>
         num(r, 'rows') === TALL_ROWS &&
         num(r, 'contentH') >= TALL_ROWS * TALL_ROW_HEIGHT,
       'the tall Form laid out past its viewport',
       'tall'
     );
+    const atRest = await settledReport();
     expect(raw(atRest, 'keyboard')).toBe(avoids ? 'rn' : 'off');
     return atRest;
+  }
+
+  /**
+   * The tall Form's report once its rows have stopped moving.
+   *
+   * A section learns its header, footer and gap from a round trip through JavaScript, so the
+   * content grows after its first layout: a baseline taken too early reads that growth as
+   * something the keyboard did.
+   */
+  async function settledReport(): Promise<Record<string, string>> {
+    const form = need(forms.tall);
+    let previous = parse(form.nuiTestFormReport());
+    for (let read = 0; read < 30; read += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const next = parse(form.nuiTestFormReport());
+      if (
+        raw(next, 'contentH') === raw(previous, 'contentH') &&
+        raw(next, 'scroll') === raw(previous, 'scroll')
+      ) {
+        return next;
+      }
+      previous = next;
+    }
+    throw new Error(
+      `the tall Form's numbers never settled - last read ${JSON.stringify(previous)}`
+    );
+  }
+
+  /**
+   * A report built after this call, not the one the last call left behind: the first read
+   * asks for a rebuild, the second reads what the UI thread has since written.
+   */
+  async function freshReport(): Promise<Record<string, string>> {
+    const form = need(forms.tall);
+    form.nuiTestFormReport();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return parse(form.nuiTestFormReport());
   }
 
   /**
@@ -2632,10 +2670,16 @@ describe('Form keyboard opt-out (Android)', () => {
     const form = need(forms.tall);
 
     form.nuiTestCommand(`ime:${REPORTED_IME_DP}`);
-    const insetUp = await formReport(
+    await formReport(
       (r) => Math.abs(num(r, 'ime') - REPORTED_IME_DP) <= 1,
       'the Form being told a keyboard is up',
       'tall'
+    );
+    // A reservation is made by a render, so it is given one before the content is read.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const insetUp = await freshReport();
+    expect(Math.abs(num(insetUp, 'ime') - REPORTED_IME_DP)).toBeLessThanOrEqual(
+      1
     );
     expect(
       Math.abs(num(insetUp, 'contentH') - content),
@@ -2677,14 +2721,18 @@ describe('Form keyboard opt-out (Android)', () => {
     const content = num(atRest, 'contentH');
 
     need(forms.tall).nuiTestCommand(`ime:${REPORTED_IME_DP}`);
-    const reserved = await formReport(
+    await formReport(
       (r) => num(r, 'contentH') >= content + REPORTED_IME_DP - 2,
       `the Form reserving the ${String(REPORTED_IME_DP)} dp keyboard at the end of its content`,
       'tall'
     );
+    const reserved = await freshReport();
     expect(
       Math.abs(num(reserved, 'ime') - REPORTED_IME_DP)
     ).toBeLessThanOrEqual(1);
+    expect(num(reserved, 'contentH')).toBeGreaterThanOrEqual(
+      content + REPORTED_IME_DP - 2
+    );
 
     await askForRow(1);
     const moved = await formReport(
