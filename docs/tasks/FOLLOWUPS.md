@@ -40,21 +40,20 @@ is raised with the owner once.
 
 - `form.e2e.ts` "opting out of keyboard avoidance leaves the content and its offset alone"
   (Android), quarantined 2026-11-18 and left out by FIX15 (2026-11-19), which moved the proof
-  rather than repair the read. The case measures the box of a Note row it parks deliberately
-  behind the keyboard, and a dump keeps no node for what a person cannot see; both failures lost
-  that node with no keyboard on screen and the Form's own state reading `avoid no` /
-  `keyboardAvoidance: off` - and a request to show a row moves it only as far as the scroll
-  view's own viewport needs, which for that parked row was nowhere. FIX15 did close a hole the
-  case was written for: the platform carries a focus or rectangle request up to React Native's
-  scroll view whatever the Form's own view answers, so `keyboardAvoidance={false}` now passes
-  `scrollsChildToFocus={false}` with it. The Android proof is now the "Form keyboard opt-out
-  (Android)" cases in `Form.harness.tsx`, which report an `ime` inset and ask the scroller for a
-  row below the viewport through `nuiTestCommand`, read `scroll=` and `contentH=` back, and go
-  red with the opt-out ignored. Getting the real-input case back needs a reading that survives a
-  keyboard standing over its node - the Form's own `scroll=` and `ime=` echoed into
-  `form-list-geometry`, which `FormScreen` polls on iOS only today - then three filtered
-  `--control form` runs and one after the `bottom-sheet` to `dialog` sequence. Its last version
-  is `49b84b9d`, in `example/e2e/real-input/form.e2e.ts`.
+  rather than repair the read. Both recorded failures - and the repeats while its own task was
+  written - had the Note field focused, the Form's state reading `avoid no` /
+  `keyboardAvoidance: off`, no keyboard on screen, and the field's box gone from the dump.
+  Nothing in the records explains the missing node: a row parked at y 1954 in a viewport ending
+  at 2424 px is on screen when no keyboard is up, so "a keyboard standing over its node" does
+  not fit what was recorded, and the cause stays unknown. The Android proof is now the "Form
+  keyboard opt-out (Android)" cases in `Form.harness.tsx`: they park a Form with a focused
+  field at a non-zero offset, report an `ime` inset through `nuiTestCommand`, read `scroll=`,
+  `contentH=` and `focus=` back, and go red when an opted-out Form grows its content or lifts
+  that field. Bringing the real-input case back starts with finding why that node was missing;
+  echoing the Form's own `scroll=` and `ime=` into `form-list-geometry` on Android - which
+  `FormScreen` polls on iOS only today - is where to look first, not a known fix. Then three
+  filtered `--control form` runs and one after the `bottom-sheet` to `dialog` sequence. Its
+  last version is `49b84b9d`, in `example/e2e/real-input/form.e2e.ts`.
 
 Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into tasks F1–F6:
 
