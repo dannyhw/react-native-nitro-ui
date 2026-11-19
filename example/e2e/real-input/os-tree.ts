@@ -62,6 +62,33 @@ function driverBinary(): string {
 }
 
 /**
+ * The reason a failed driver gave, which it prints to stdout as JSON under `--json`, or
+ * nothing when the file holds no such answer.
+ */
+function driverReason(file: string): string {
+  let text = '';
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+  try {
+    const error = (JSON.parse(text) as { error?: { code?: unknown; message?: unknown } })
+      ?.error;
+    if (error != null) {
+      return ` — the driver says ${[error.code, error.message]
+        .filter((part) => part != null && part !== '')
+        .map(String)
+        .join(': ')}`;
+    }
+  } catch {
+    // Not JSON: fall through to the raw text.
+  }
+  const raw = text.trim().slice(0, 300);
+  return raw === '' ? '' : ` — the driver printed: ${raw}`;
+}
+
+/**
  * One fresh capture of the accessibility tree, as the flags-only shape the readers need.
  *
  * `--force-full` because a repeat of the same request is answered with an “unchanged”
@@ -115,13 +142,14 @@ export function tree(
         }
       );
     } catch (error) {
+      closeSync(fd);
       throw new Error(
         `real-input: reading the accessibility tree from the driver failed: ` +
-          String((error as Error)?.message ?? error)
+          String((error as Error)?.message ?? error) +
+          driverReason(file)
       );
-    } finally {
-      closeSync(fd);
     }
+    closeSync(fd);
     answer = readFileSync(file);
   } finally {
     rmSync(dir, { recursive: true, force: true });
