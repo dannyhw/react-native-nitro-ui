@@ -45,15 +45,16 @@ local four-state side-by-side are both shot; see Fix round 2 for the paths of th
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `788f1c731e92` | 1 m 10 s | start 5.3 / med 6.8 / max 7.9 |
-| `harness:ios` | **PASS** | 603 tests / 30 suites + isolated 6 tests / 3 suites | `788f1c731e92` (harness:ios digest) | 14 m 21 s | start 5.1 / med 5.1 / max 19.3 |
-| `harness:android` | **PASS** | 661 tests / 31 suites + isolated 6 tests / 3 suites | `788f1c731e92` (harness:android digest) | 18 m 01 s | start 5.4 / med 5.3 / max 20.2 |
+| `check` | **PASS** | 2178 tests / 96 suites | `cc9f51065fec` | 1 m 01 s | start 6.5 / med 10.2 / max 11.1 |
+| `harness:ios` | **PASS** | 604 tests / 30 suites + isolated 6 tests / 3 suites | `cc9f51065fec` (harness:ios digest) | 14 m 21 s | start 7.7 / med 6.7 / max 12.7 |
+| `harness:android` | **PASS** | 662 tests / 31 suites + isolated 6 tests / 3 suites | `cc9f51065fec` (harness:android digest) | 18 m 02 s | start 5.6 / med 6.1 / max 11.9 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:ios:--json:Chip` | **PASS** | 19 tests / 1 suites | `788f1c731e92` (harness:ios digest) | 21.8 s | start 4.5 / med 5.2 / max 5.4 |
-| `harness:ios:--silent%3Dfalse:Chip` | **PASS** | 19 tests / 1 suites | `788f1c731e92` (harness:ios digest) | 22.1 s | start 5.4 / med 5.4 / max 5.8 |
-| `harness:ios:--verbose:Chip` | **PASS** | 19 tests / 1 suites | `788f1c731e92` (harness:ios digest) | 21.9 s | start 4.8 / med 4.7 / max 4.8 |
-| `harness:ios:Chip` | **PASS** | 19 tests / 1 suites | `788f1c731e92` (harness:ios digest) | 23.4 s | start 4.0 / med 4.0 / max 5.0 |
+| `harness:ios:--json:Chip` | stale | 19 tests / 1 suites | 788f1c731e92 (not this tree) | 21.8 s | start 4.5 / med 5.2 / max 5.4 |
+| `harness:ios:--silent%3Dfalse:Chip` | **PASS** | 20 tests / 1 suites | `cc9f51065fec` (harness:ios digest) | 23.4 s | start 10.9 / med 10.3 / max 10.9 |
+| `harness:ios:--verbose:Chip` | stale | 19 tests / 1 suites | 788f1c731e92 (not this tree) | 21.9 s | start 4.8 / med 4.7 / max 4.8 |
+| `harness:ios:Chip` | stale | 1 failed of 19 tests / 1 suites | e3bde55126b2 (not this tree) | 22.9 s | start 6.3 / med 5.3 / max 6.3 |
+
 
 `need --for review`: need: review is satisfied on this code tree. The two `real-input` gates are
 left for merge, where `RealInputTests.testRealInputChip` re-checks the disabled chip's iOS role and
@@ -105,3 +106,21 @@ The suite logs its colours; a green run prints none, so from a filtered run:
 Red proof: `Chip.harness.tsx` > `paints a disabled selected chip apart from an unselected one, and
 dimmer than an enabled one` -> round one's Swift restored -> `the dimmed chip is -38 lighter and has to
 be at least 13 lighter` (`#BED6ED` vs `#C5E3FF`); also 11 paler where 13 is asked. N3-N6 stay follow-ups.
+
+## Fix round 2
+
+M5: the fade stops at the label. `ChipDisabledFill` masks its capsules with the label's own shape
+(`destinationOut`, accessibility-hidden), so one view draws the control and its text keeps
+strength: both disabled chips now read `#C2C2C4` at their darkest, where round one read
+`#C9D6E1` beside `#C2C2C4`. The rereview's (b) cannot work - the best fade/tint pair leaving the ink
+alone is 4 short of the fill bounds. The read is ink, not a box mean a fainter label only lightens;
+its ink-area floor, a quarter of the unselected chip's, is what the cut's anti-aliased fringe leaves
+(a half floor went red: 505 of 1038). M6: `chip.md`, the changeset and the Swift comment now
+say the fade goes toward the system background colour; Limits adds the off-surface case. N2 is
+corrected above; the README iOS image is retaken, local pair
+`/tmp/fix9r2-chip-states-light-dark.png`. N1 stays a follow-up. Hygiene: the round's first two
+harness gates ran beside FIX8's `real-input:ios`.
+
+Red proof: `Chip.harness.tsx` > `keeps the label of a disabled selected chip as strong as an unselected
+one` -> round one's Swift restored -> `the dimmed fill is 56 fainter than 6 and washes the text it
+paints. off=#C2C2C4 on=#C9D6E1 areaOff=1038 areaOn=0`.
