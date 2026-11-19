@@ -164,13 +164,13 @@ group is 31 pt, cached after one measurement. `checked`, `disabled` and `tintCol
 not resize; `appearance`, `variant`, `size`, `labelStyle` and the items are the size
 configuration, so adding an item is a new configuration and a tap is not.
 
-An iOS `text` group that holds a toggle is measured at the height of a capsule while every toggle
-in it is still unchecked: `text` draws a label, which is shorter than the capsule a checked toggle
-takes, and checking one is a repaint rather than a new configuration. The unchecked item keeps that
-height and draws its label centred in it, so the checked capsule is inside the box the row was
-measured into. Only a toggle reserves the capsule, so the gap beside an unchecked toggle is wider
-than the gap between two action items. A `text` group with no toggle, or whose toggles have all
-moved into the overflow menu, keeps the height of a label.
+An iOS `text` group that holds a toggle is measured at the size of a capsule while every toggle in
+it is still unchecked: `text` draws a label, which is smaller than the capsule a checked toggle
+takes, and checking one is a repaint rather than a new configuration. Every item of such a group —
+action item or toggle, checked or unchecked — is measured at that capsule and draws its own label
+centred inside it, so the checked capsule is inside the box the row was measured into and every
+item takes the same room as its neighbours whatever mix of them the row holds. A `text` group with
+no toggle, or whose toggles have all moved into the overflow menu, keeps the size of a label.
 
 ## Overflow
 

@@ -387,7 +387,7 @@ struct ButtonGroupContent: NitroUIContent {
       }
     ) {
       HStack(spacing: ButtonGroupContent.spacing) {
-        row(items, useControlGroup: useControlGroup)
+        row(items, useControlGroup: useControlGroup, reservesFootprint: reservesFootprint(items))
         // A disabled group must not own a live popup, so the overflow control is left out of the
         // row.
         if !overflow.isEmpty, !model.disabled {
@@ -412,11 +412,18 @@ struct ButtonGroupContent: NitroUIContent {
     )
     return AnyView(
       HStack(spacing: ButtonGroupContent.spacing) {
-        row(items, useControlGroup: useControlGroup)
+        row(items, useControlGroup: useControlGroup, reservesFootprint: reservesFootprint(items))
       }
       .clipped()
       .modifier(OptionalGroupAccessibility(label: model.accessibilityLabel))
     )
+  }
+
+  /// Whether these items must each reserve the footprint of a checked toggle: only a `text` group
+  /// holds an item that draws less than that capsule, and only a group with a toggle is measured
+  /// at the height of one.
+  private func reservesFootprint(_ items: [ButtonGroupItemState]) -> Bool {
+    model.variant == .text && items.contains(where: \.toggle)
   }
 
   /// The group itself: `ControlGroup` or the plain row. A `Toggle(.button)` inside a `ControlGroup`
@@ -425,17 +432,18 @@ struct ButtonGroupContent: NitroUIContent {
   @ViewBuilder
   private func row(
     _ items: [ButtonGroupItemState],
-    useControlGroup: Bool
+    useControlGroup: Bool,
+    reservesFootprint: Bool
   ) -> some View {
     if useControlGroup {
       ControlGroup {
         ForEach(items, id: \.id) { item in
-          itemControl(item, inControlGroup: true)
+          itemControl(item, inControlGroup: true, reservesFootprint: reservesFootprint)
         }
       }
     } else {
       ForEach(items, id: \.id) { item in
-        itemControl(item, inControlGroup: false)
+        itemControl(item, inControlGroup: false, reservesFootprint: reservesFootprint)
       }
     }
   }
@@ -444,14 +452,19 @@ struct ButtonGroupContent: NitroUIContent {
 
   @ViewBuilder private func itemControl(
     _ item: ButtonGroupItemState,
-    inControlGroup: Bool
+    inControlGroup: Bool,
+    reservesFootprint: Bool
   ) -> some View {
     if item.toggle {
       Toggle(isOn: toggleBinding(item)) {
         itemLabel(item, inControlGroup: inControlGroup)
       }
       .toggleStyle(
-        ItemToggleStyle(variant: model.variant, tint: inControlGroup ? nil : model.tint)
+        ItemToggleStyle(
+          variant: model.variant,
+          tint: inControlGroup ? nil : model.tint,
+          reservesFootprint: reservesFootprint
+        )
       )
       .controlSize(model.scale.controlSize)
       .disabled(model.disabled || item.disabled)
@@ -461,6 +474,12 @@ struct ButtonGroupContent: NitroUIContent {
       }
       .modifier(ItemButtonStyle(style: ItemStyle(variant: model.variant)))
       .controlSize(model.scale.controlSize)
+      .modifier(
+        BorderedFootprint(
+          reserves: reservesFootprint,
+          label: itemLabel(item, inControlGroup: inControlGroup)
+        )
+      )
       .modifier(OptionalItemTint(color: inControlGroup ? nil : model.tint))
       .disabled(model.disabled || item.disabled)
     }
@@ -608,6 +627,7 @@ private struct ItemButtonStyle: ViewModifier {
 private struct ItemToggleStyle: ToggleStyle {
   let variant: ButtonVariant
   let tint: UIColor?
+  let reservesFootprint: Bool
 
   func makeBody(configuration: Configuration) -> some View {
     let style = ItemStyle(variant: variant).state(configuration.isOn)
@@ -616,23 +636,25 @@ private struct ItemToggleStyle: ToggleStyle {
     }
     .modifier(ItemButtonStyle(style: style))
     .modifier(OptionalItemTint(color: tint))
-    .modifier(CheckedFootprint(style: style, label: configuration.label))
+    .modifier(BorderedFootprint(reserves: reservesFootprint, label: configuration.label))
   }
 }
 
-/// A `text` toggle is a label while unchecked and a capsule while checked, and the group measures
-/// its size once for a configuration: checking an item repaints it and re-measures nothing, so an
-/// item that grows only when checked is drawn outside the box the row was measured into. An
-/// unchecked `text` toggle keeps the footprint of the same label in `.bordered` - the style it
-/// takes while checked - and draws its own label centred inside it, so a `text` group holding a
-/// toggle is the height of a capsule in every state and one with no toggle keeps the height of a
-/// label. The other families measure the same in both states and need nothing.
-private struct CheckedFootprint: ViewModifier {
-  let style: ItemStyle
-  let label: ToggleStyleConfiguration.Label
+/// A `text` item is a label and a checked toggle a capsule, and the group measures its size once
+/// for a configuration: checking a toggle repaints it and re-measures nothing, so an item that
+/// takes more room in one state than another is drawn outside the box the row was measured into.
+/// Every item of a `text` group that holds a toggle therefore keeps the footprint of its own label
+/// in `.bordered` - the style a checked toggle takes - and draws what it draws centred inside it,
+/// so the row is the size of a capsule in every state, one item is measured no smaller than
+/// another, and the room between two neighbours is the spacing whatever the pair is. A `text`
+/// group with no toggle keeps the size of a label, and the other families measure the same in
+/// every state and need nothing.
+private struct BorderedFootprint<Label: View>: ViewModifier {
+  let reserves: Bool
+  let label: Label
 
   func body(content: Content) -> some View {
-    if style == .borderless {
+    if reserves {
       ZStack {
         Button(action: {}) { label }
           .buttonStyle(.bordered)
