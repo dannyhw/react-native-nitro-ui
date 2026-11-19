@@ -32,6 +32,9 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   through the sheet's `nuiTest` seam. Until then a hit costs one `--rerun-failed`. Not quarantined: no
   log shows the driver at fault, so a drag the sheet ignored is treated as a bug with a low hit
   rate and gets a bugfix task.
+- `Tooltip.harness.tsx` (iOS), the suite lost to an app-process exit with no crash log,
+  2026-11-19, `harness:ios` on a task branch while another task's real-input run loaded the
+  machine, green on `--rerun-failed`, seen once.
 - `SearchField.harness.tsx` "takes no submit from a Return pressed on a query it has just cleared"
   (Android), a stray `change:` event, 2026-11-19, `harness:android` on a merge run started 10:35
   UTC, green on `--rerun-failed`, seen once.
@@ -173,7 +176,7 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G14: once, on a cold Android launch with Metro just started, the two-detent example sheet closed itself (`presented:false`); not reproduced in three tries. The stable `confirmValueChange` added afterwards is defensive, not proven.
 - G14: how often a non-`fit` iOS sheet re-reports its content box during an interactive detent drag (each report is a JS re-layout) was not measured.
 - G14: an RN `Modal` rendered on the same screen as an open in-chain iOS sheet is expected not to present (RN presents from `reactViewController`); read from source, not measured.
-- G14 (review): iOS, a present UIKit refuses after it was issued (no completion, `presentingViewController` nil) leaves `sheet` set, and `sync()` returns early on it, so that mount never presents again; recover by forgetting a controller that never got a presenter.
+- iOS BottomSheet, open after a refused present became recoverable: re-presents after a refusal are not bounded per ask, so a refusal that kept happening while the chain looks free would report `onIsPresentedChange(false)` over and over, and each one logs the "dismissed by the user" development warning; no harness case covers the own-window refusal path; the refusal test asserts no `onDismiss` only from the final count. The slow-present case polls for a state that lasts only until the entry finishes, so a loaded runner can miss it (CodeRabbit on #108); a native witness that records the accepted entry would make it steady.
 - G14 (Q2, follow-up task): reproduce react-native-screens 4.30.1's Android `ScreenStack` mount crash (`addViewAt … child already has a parent`) in a fresh app instance without nitro-ui, and report it upstream; then measure BottomSheet in a native-stack screen and a `formSheet` on Android.
 - G14 (re-review): `BottomSheet.harness`'s "dropped 0 ms after presenting" is vacuous - the `isPresented` write and the unmount batch into one commit, so no sheet is ever asked for; drop between the commit and the present instead (a main-turn wait), or remove the case.
 - G14 (re-review): `NitroUiPresentation.controller` keeps a dialog's last `UIAlertController` alive in a pooled `NitroUiDialog` until it presents again; BottomSheet now calls `forgetController()` after its teardown and its sheet's exit, and the dialogs could do the same.

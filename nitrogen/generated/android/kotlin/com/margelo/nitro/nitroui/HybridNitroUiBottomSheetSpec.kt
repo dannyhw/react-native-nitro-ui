@@ -156,6 +156,10 @@ abstract class HybridNitroUiBottomSheetSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun nuiTestSelectDetent(index: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestRefuseNextPresent(): Unit
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

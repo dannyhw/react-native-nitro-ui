@@ -121,6 +121,7 @@ an iPad's page sheet, a landscape safe area.
 | A drag to another detent                                               | `onDetentChange(index)`                        |
 | Its place in the app leaves the window (a push, a full-screen `Modal`) | `onIsPresentedChange(false)`, then `onDismiss` |
 | A presented controller under it is dismissed (iOS)                     | `onIsPresentedChange(false)`, then `onDismiss` |
+| UIKit refuses to present it (iOS)                                      | `onIsPresentedChange(false)`, no `onDismiss`   |
 
 - **A refused dismissal presents again**, with one development warning, as a dialog's
   does. The content stays mounted: the app never stopped asking for it.
@@ -131,6 +132,10 @@ an iPad's page sheet, a landscape safe area.
   `presentationControllerWillDismiss`/`DidDismiss` (a swipe or an outside tap) and from
   `isBeingDismissed` in `viewDidDisappear` (anything else), never from a view merely
   leaving the screen.
+- **A present UIKit refuses** (iOS) happens when another presentation is starting or ending at
+  that moment. The sheet notices, reports `onIsPresentedChange(false)` with no `onDismiss`
+  (nothing was on screen), and presents again the next time `isPresented` is `true`. An app that
+  keeps `isPresented` at `true` and writes back the `false` it is told gets a second attempt.
 - **`isPresented` true at mount** presents once the component's place in the app is in a
   window.
 

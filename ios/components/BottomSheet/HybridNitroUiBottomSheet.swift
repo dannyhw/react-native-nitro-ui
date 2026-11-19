@@ -140,6 +140,16 @@ final class NitroUiSheetAnchorView: UIView {
   }
 }
 
+/// Test seam: a controller whose presence makes UIKit refuse the presentation asked for next, so
+/// a refused present can be reproduced on demand. It draws nothing, and is dismissed as soon as
+/// the refusal it caused has been dealt with.
+private func makeRefusalBlocker() -> UIViewController {
+  let blocker = UIViewController()
+  blocker.modalPresentationStyle = .overFullScreen
+  blocker.view.backgroundColor = .clear
+  return blocker
+}
+
 // MARK: - The sheet's controller
 
 /// How one presentation is configured. Compared before it is re-applied, so a prop
@@ -534,6 +544,12 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
   private var presentWaits = 0
   /// How often this mount's presents waited on a busy chain, in all - diagnostics only.
   private var presentWaitsTotal = 0
+  /// How many of this mount's presents UIKit refused.
+  private var refusedPresents = 0
+  /// The next present is to be refused once (``nuiTestRefuseNextPresent()``).
+  private var refusalArmed = false
+  /// What made UIKit refuse: presented just before the refused present, and let go with it.
+  private weak var refusalBlocker: UIViewController?
   /// Whether this mount has ended (`onDropView`).
   private var dropped = false
   /// Bumped per mount, so a deferred step from a dropped mount stands down.
@@ -675,6 +691,7 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     presentCount = 0
     presentWaits = 0
     presentWaitsTotal = 0
+    refusedPresents = 0
     appTopClass = "-"
     lastOwnWindow = false
     lastSelected = 0
@@ -707,6 +724,9 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     awaitingPresent = false
     owesDismissal = false
     state.displayed = false
+    refusalArmed = false
+    refusalBlocker?.dismiss(animated: false)
+    refusalBlocker = nil
     if let sheet {
       detach(sheet)
       if presentation.controller === sheet {
@@ -852,12 +872,21 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       self.publishReport()
     }
     if let top, NitroUiPresenterChain.isModalHost(top) {
+      let armRefusal: ((UIViewController) -> Void)? = refusalArmed
+        ? { [weak self] root in self?.forceRefusal(from: root) }
+        : nil
       lastOwnWindow = presentation.presentInOwnWindow(
-        controller, over: anchor, animated: true, onShown: onShown)
+        controller,
+        over: anchor,
+        animated: true,
+        prepare: armRefusal,
+        onShown: onShown)
       if !lastOwnWindow {
         sheet = nil
         restoreContent()
         presentCount -= 1
+      } else {
+        watchForRefusal(controller)
       }
     } else {
       lastOwnWindow = false
@@ -868,8 +897,52 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
         presentCount -= 1
         return
       }
+      forceRefusal(from: presenter)
       presentation.present(controller, from: presenter, animated: true, onShown: onShown)
+      watchForRefusal(controller)
     }
+    publishReport()
+  }
+
+  /// Have UIKit refuse the presentation about to be asked of `presenter`, as it refuses one that
+  /// races a presentation which got there first.
+  private func forceRefusal(from presenter: UIViewController) {
+    guard refusalArmed else { return }
+    refusalArmed = false
+    let blocker = makeRefusalBlocker()
+    presenter.present(blocker, animated: false)
+    refusalBlocker = blocker
+  }
+
+  /// Ask, one run loop turn later, whether UIKit took `controller`. Observed, not documented: a
+  /// present UIKit carries out, even a slow one, has set `presentingViewController` by then, and a
+  /// refused one never does and runs no completion.
+  private func watchForRefusal(_ controller: NitroUiSheetController) {
+    let generation = mountGeneration
+    DispatchQueue.main.async { [weak self] in
+      guard let self, !self.dropped, self.mountGeneration == generation,
+        self.sheet === controller
+      else { return }
+      MainActor.assumeIsolated { self.forgetRefusal(controller) }
+    }
+  }
+
+  /// UIKit refused `controller`, so nothing is up and nothing was counted: take the controller
+  /// away, report the sheet as not shown once, and leave this mount able to present again.
+  @MainActor
+  private func forgetRefusal(_ controller: NitroUiSheetController) {
+    guard presentation.forgetUnstarted(controller) else { return }
+    refusalBlocker?.dismiss(animated: false)
+    refusalBlocker = nil
+    detach(controller)
+    sheet = nil
+    restoreContent()
+    refusedPresents += 1
+    if state.displayed {
+      let count = state.user(false)
+      presentedChange?(false, Double(count))
+    }
+    reportDismissed(ended: false)
     publishReport()
   }
 
@@ -1002,6 +1075,14 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     }
   }
 
+  /// Test-only: have UIKit refuse the next present of this sheet, as it refuses one that races a
+  /// presentation which got there first.
+  func nuiTestRefuseNextPresent() throws {
+    runOnMain { [weak self] in
+      self?.refusalArmed = true
+    }
+  }
+
   private func runOnMain(_ action: @escaping () -> Void) {
     if Thread.isMainThread {
       action()
@@ -1029,6 +1110,7 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     fields.append("js=\(state.js == true ? 1 : 0)")
     fields.append("live=\(Self.live.value)")
     fields.append("presentCount=\(presentCount)")
+    fields.append("refusedPresents=\(refusedPresents)")
     let up = sheet.map(sheetIsUp) ?? false
     fields.append("onScreen=\(up ? 1 : 0)")
     fields.append("detents=\(config.detents.map(\.kind).joined(separator: ","))")
