@@ -302,8 +302,17 @@ internal class NitroUiSheetRootView(
       jsTouchDispatcher.handleTouchEvent(event, dispatcher, context as ReactContext)
       jsPointerDispatcher?.handleMotionEvent(event, dispatcher, true)
     }
-    drag.onEvent(event)
     return super.onInterceptTouchEvent(event)
+  }
+
+  /**
+   * The whole gesture arrives here, whichever way the down was consumed, so this is where a
+   * rising-sheet drag is measured: Android stops asking `onInterceptTouchEvent` once no child
+   * took the down, and the plain content of a sheet's header takes nothing.
+   */
+  override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+    drag.onEvent(event)
+    return super.dispatchTouchEvent(event)
   }
 
   override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -318,9 +327,9 @@ internal class NitroUiSheetRootView(
   }
 
   /**
-   * Hand over a rising-sheet drag, measured here because this root sees every gesture of the
-   * sheet's content on the way in. It is latched at the down, so a sheet that settles mid-drag
-   * does not lose the drag already under way.
+   * Hand over a drag made while the sheet is rising, if the content under the finger is the
+   * sheet's own. It is latched at the down, so a sheet that settles mid-gesture does not lose the
+   * drag already under way.
    */
   var dragUntilSettled: ((travelPx: Int, velocityPxPerSecond: Float) -> Unit)? = null
 
