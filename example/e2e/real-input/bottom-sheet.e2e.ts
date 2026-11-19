@@ -693,9 +693,26 @@ test("a drag that starts beside the sheet's list during the rise is the sheet's 
 });
 
 /**
+ * How far above the field's resting place a rising sheet has to still be for the case below to aim
+ * at it. A box read names where the field was when the read walked past it, and the sheet carries
+ * on rising while the press is on its way, so the field is always higher than the read says. Within
+ * this much of where the sheet is going, the rest of its travel is shorter than the field itself,
+ * so a press aimed at the top of the read cannot arrive below the field however long it takes.
+ */
+const AIM_ABOVE_REST_PX = 135;
+
+/** How far below the top of that read the press lands, clear of the edge it is aimed at. */
+const AIM_INSET_PX = 8;
+
+/** The least the field still has to travel for its sheet to be called rising. */
+const STILL_RISING_PX = 24;
+
+/**
  * A `TextInput` takes the gesture from its touch-down, so a drag that starts on one is the
  * field's own even while the sheet is rising: it is not asked of the sheet, and the sheet carries
- * on rising.
+ * on rising. The drag is aimed at the top edge of a read taken near the field's destination, which
+ * is the one aim a rising sheet cannot move out from under the finger, and the field's own
+ * press-in is then the witness that the drag really started inside it.
  */
 test('a drag down that starts on the sheet TextInput during the rise is the field’s, and the sheet stays up', async ({
   app,
@@ -706,33 +723,53 @@ test('a drag down that starts on the sheet TextInput during the rise is the fiel
   const log = screen.getByTestId('sheet-log');
   const window = await windowBox(screen);
   const input = screen.getByTestId('sheet-input');
+  const touches = screen.getByTestId('sheet-input-touches');
   await expect(log).toHaveText('none');
-
   await reveal(screen, screen.getByTestId('sheet-open-fit'));
+
+  // An opening allowed to finish, for the one number the aim needs: where this field comes to
+  // rest. A presentation with no history rests in the same place every time.
   await screen.getByTestId('sheet-open-fit').tap();
+  const rest = await restingBox(input);
+  await app.back();
+  await screen.getByText(FIT).waitFor({ state: 'detached' });
+  await expect(log).toHaveText('presented:false > dismiss');
+
   const room = Math.round(80 * displayDensity());
+  await screen.getByTestId('sheet-open-fit').tap();
   const rising = await boxWhileRising(
     input,
-    (box) => box.y + box.height / 2 + room < window.y + window.height
+    (box) =>
+      box.y - rest.y >= STILL_RISING_PX &&
+      box.y - rest.y <= AIM_ABOVE_REST_PX &&
+      box.y + AIM_INSET_PX + room <= window.y + window.height - 2
   );
   if (rising == null) {
     throw new Error(
-      'real-input: the rising fit sheet never shows its TextInput with room to drag down.'
+      `real-input: the rising fit sheet never showed its TextInput on the way down to the ` +
+        `resting y=${String(Math.round(rest.y))} it settles at.`
     );
   }
   const from = {
     x: Math.round(rising.x + rising.width / 2),
-    y: Math.round(rising.y + rising.height / 2),
+    y: Math.round(rising.y + AIM_INSET_PX),
   };
   await screen.swipe({
     from,
-    to: {
-      x: from.x,
-      y: Math.min(from.y + room, window.y + window.height - 2),
-    },
+    to: { x: from.x, y: Math.min(from.y + room, window.y + window.height - 2) },
     duration: 250,
   });
 
+  const pressed =
+    (await touches.count()) === 1
+      ? ((await touches.textContent()) ?? 'no text')
+      : 'the field left the tree with its sheet';
+  expect(
+    pressed,
+    `the drag aimed at y=${String(from.y)} from a read of the field at ` +
+      `y=${String(Math.round(rising.y))}, still ${String(Math.round(rest.y - rising.y))} of the ` +
+      `way to its rest at y=${String(Math.round(rest.y))}: the field was never pressed`
+  ).toContain('in 1');
   await staysUp(
     screen,
     FIT,
@@ -744,7 +781,9 @@ test('a drag down that starts on the sheet TextInput during the rise is the fiel
   );
   await app.back();
   await screen.getByText(FIT).waitFor({ state: 'detached' });
-  await expect(log).toHaveText('press:1 > presented:false > dismiss');
+  await expect(log).toHaveText(
+    /^presented:false > dismiss > press:1 > presented:false > dismiss$/
+  );
 });
 
 /**
