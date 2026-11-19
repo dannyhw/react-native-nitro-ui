@@ -16,6 +16,7 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.internal.featureflags.ReactNativeFeatureFlags
 import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.uimanager.ViewManager
+import com.margelo.nitro.nitroui.SearchFieldStrings
 
 /**
  * Test-only probe for the harness suite: answers questions about the process and its view
@@ -66,6 +67,73 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
     } catch (error: Throwable) {
       promise.reject("view-recycling-flag", error)
     }
+  }
+
+  /**
+   * The SearchField's framework strings. `app*` is what the app's own configuration
+   * resolves, `locale*` what [localeTag] resolves, `device*` what the device's
+   * configuration resolves, and `host*` what the mounted hosted control's own context
+   * resolves. The three locales are reported too, so a test can tell whether they differ.
+   */
+  @ReactMethod
+  fun searchFieldStrings(localeTag: String, promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no activity")
+      return
+    }
+    activity.runOnUiThread {
+      try {
+        val (appHint, appClear) = SearchFieldStrings.forLocale(activity, "")
+        val (localeHint, localeClear) = SearchFieldStrings.forLocale(activity, localeTag)
+        // The device's own configuration, which a field must not read: the framework
+        // strings looked up in `Resources.getSystem()` are the device's words whatever
+        // the app is showing.
+        val system = android.content.res.Resources.getSystem()
+        val host = findHost(activity.window.decorView)
+        val hostStrings = host?.let { SearchFieldStrings.forLocale(it.context, "") }
+        val answer =
+          Arguments.createMap().apply {
+            putString("appHint", appHint)
+            putString("appClear", appClear)
+            putString("localeHint", localeHint)
+            putString("localeClear", localeClear)
+            putString("deviceHint", deviceString(system, "search_hint"))
+            putString("deviceClear", deviceString(system, "searchview_description_clear"))
+            putString("appLocale", activity.resources.configuration.locales.toLanguageTags())
+            putString("deviceLocale", system.configuration.locales.toLanguageTags())
+            putString(
+              "requestedLocale",
+              if (localeTag.isEmpty()) {
+                ""
+              } else {
+                val configuration = android.content.res.Configuration(activity.resources.configuration)
+                configuration.setLocale(java.util.Locale.forLanguageTag(localeTag))
+                activity
+                  .createConfigurationContext(configuration)
+                  .resources
+                  .configuration
+                  .locales
+                  .toLanguageTags()
+              },
+            )
+            putString("hostHint", hostStrings?.first ?: "")
+            putString("hostClear", hostStrings?.second ?: "")
+          }
+        promise.resolve(answer)
+      } catch (error: Throwable) {
+        promise.reject("search-field-strings", error)
+      }
+    }
+  }
+
+  /** [name] as the device's configuration resolves it: the framework's private strings. */
+  private fun deviceString(
+    resources: android.content.res.Resources,
+    name: String,
+  ): String {
+    val id = resources.getIdentifier(name, "string", "android")
+    return if (id != 0) resources.getString(id) else ""
   }
 
   private var connection: android.view.inputmethod.InputConnection? = null
