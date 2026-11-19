@@ -121,6 +121,7 @@ export interface SearchFieldProps extends Omit<
           autoCorrect: boolean;
           expanded: boolean;
           canClear: boolean;
+          suggestions: string;
         };
         nuiTestClear(): void;
         nuiTestSubmit(): void;
