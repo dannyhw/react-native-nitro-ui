@@ -39,20 +39,22 @@ A line here blocks no merge. Its fix queues behind components, and one still her
 is raised with the owner once.
 
 - `form.e2e.ts` "opting out of keyboard avoidance leaves the content and its offset alone"
-  (Android), quarantined 2026-11-18. It failed twice in a row on the ButtonGroup merge tree
-  (`merge/FIX7`, full run and its `--rerun-failed`) with the Note field focused, no keyboard on
-  screen and the field's box gone from the tree, and passed alone on that tree and on `main`; it
-  also failed repeatedly while its own task was written. The Form's state read correctly at the
-  failure (`avoid no`, `keyboardAvoidance: off`), so the keyboard or the tree read is at fault, not
-  the Form's offset. One fix was tried and judged not to apply: blocking the Form's
-  `requestChildRectangleOnScreen` forward does nothing, because the ScrollView's content container
-  never passes it on and Compose's `requestRectangleOnScreen` walks every ancestor anyway. Fix
-  task: read `form-avoid-echo`, the report's `keyboard=` and `scroll=` before the focus tap and at
-  the failure, and add a deterministic Android harness case (an `ime:<dp>` and a `rect:<row>` test
-  command through `nuiTestCommand`, then assert `scroll=` holds while opted out and moves while
-  not). iOS's opt-out case still runs. The Android real-input runner counts a skipped test as a failure,
-  so the case was taken out of `form.e2e.ts` rather than skipped; it is on `main` at `49b84b9d`
-  (`git show 49b84b9d:example/e2e/real-input/form.e2e.ts`) for the fix task to restore.
+  (Android), quarantined 2026-11-18 and left out by FIX15 (2026-11-19), which moved the proof
+  rather than repair the read. The case measures the box of a Note row it parks deliberately
+  behind the keyboard, and a dump keeps no node for what a person cannot see; both failures lost
+  that node with no keyboard on screen and the Form's own state reading `avoid no` /
+  `keyboardAvoidance: off` - and a request to show a row moves it only as far as the scroll
+  view's own viewport needs, which for that parked row was nowhere. FIX15 did close a hole the
+  case was written for: the platform carries a focus or rectangle request up to React Native's
+  scroll view whatever the Form's own view answers, so `keyboardAvoidance={false}` now passes
+  `scrollsChildToFocus={false}` with it. The Android proof is now the "Form keyboard opt-out
+  (Android)" cases in `Form.harness.tsx`, which report an `ime` inset and ask the scroller for a
+  row below the viewport through `nuiTestCommand`, read `scroll=` and `contentH=` back, and go
+  red with the opt-out ignored. Getting the real-input case back needs a reading that survives a
+  keyboard standing over its node - the Form's own `scroll=` and `ime=` echoed into
+  `form-list-geometry`, which `FormScreen` polls on iOS only today - then three filtered
+  `--control form` runs and one after the `bottom-sheet` to `dialog` sequence. Its last version
+  is `49b84b9d`, in `example/e2e/real-input/form.e2e.ts`.
 
 Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into tasks F1–F6:
 
