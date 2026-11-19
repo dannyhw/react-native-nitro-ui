@@ -1392,8 +1392,17 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
     }
   });
 
-  /** Wide enough that a three-item row is never moved into the overflow menu. */
-  const ROW_WELL = { width: 260 } as const;
+  /**
+   * Every `size` the group takes, each in a well wide enough that its three-item row is never
+   * moved into the overflow menu: every item reserves a capsule, and a capsule grows with the size.
+   */
+  const ROW_SIZES = [
+    { size: 'small', well: 260 },
+    { size: 'medium', well: 260 },
+    { size: 'large', well: 300 },
+    { size: 'xlarge', well: 350 },
+    { size: 'xxlarge', well: 350 },
+  ] as const;
 
   /** The point ranges across the control's box that were drawing something. */
   function parseInk(raw: string): { start: number; end: number }[] {
@@ -1431,67 +1440,71 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
    */
   const EVEN_GAP = 1;
 
-  it('leaves the same room between every pair of items in a text group holding a toggle', async () => {
+  /** One row whose middle pair is a checked toggle, and one whose middle pair is a label. */
+  const EVEN_ROWS = [
+    ['action', 'on', 'off'],
+    ['action', 'action', 'off'],
+  ] as const;
+
+  it('leaves the same room between every pair of items in a text group holding a toggle, at every size', async () => {
     if (Platform.OS !== 'ios') return;
 
-    // A row whose middle pair is a checked toggle and one whose middle pair is a label: an action
-    // item, a checked capsule and an unchecked toggle each leave a different amount of the space
-    // they were measured at empty around what they draw, so a row of mixed items is evenly spaced
-    // only when every item of the row is measured at the same size.
-    const rows = [
-      { testId: 'bg-even-capsule', kinds: ['action', 'on', 'off'] },
-      { testId: 'bg-even-labels', kinds: ['action', 'action', 'off'] },
-    ] as const;
-
+    // An action item, a checked capsule and an unchecked toggle each leave a different amount of
+    // the space they were measured at empty around what they draw, so a row of mixed items is
+    // evenly spaced only when every item of the row is measured at the same size -- at the size
+    // the group asks for, since an item that reserved a capsule of another size would be measured
+    // wider or narrower than the item beside it.
     const seen: string[] = [];
-    for (const row of rows) {
-      await render(
-        <View style={ROW_WELL}>
-          <ButtonGroup
-            items={evenRow([...row.kinds])}
-            tintColor={TINT}
-            variant="text"
-            testID={row.testId}
-            hybridRef={captureHybrid(row.testId)}
-          />
-        </View>
-      );
-      await waitForTestId(row.testId);
-      await waitForMeasured(
-        row.testId,
-        `the "text" row of ${row.kinds.join('+')}`
-      );
+    for (const { size, well } of ROW_SIZES) {
+      for (const kinds of EVEN_ROWS) {
+        const row = `the "${size}" row of ${kinds.join('+')}`;
+        const testId = `bg-even-${size}-${kinds.join('-')}`;
+        await render(
+          <View style={{ width: well }}>
+            <ButtonGroup
+              items={evenRow([...kinds])}
+              size={size}
+              tintColor={TINT}
+              variant="text"
+              testID={testId}
+              hybridRef={captureHybrid(testId)}
+            />
+          </View>
+        );
+        await waitForTestId(testId);
+        await waitForMeasured(testId, row);
 
-      const probed = await probeRow(row.testId);
-      const runs = parseInk(probed.ink ?? 'none');
-      const gaps = gapsOf(runs);
-      seen.push(
-        `${row.kinds.join('+')}: ink=${probed.ink ?? 'nothing'} gaps=${JSON.stringify(
-          gaps.map((gap) => Number(gap.toFixed(2)))
-        )}`
-      );
+        const probed = await probeRow(testId);
+        const runs = parseInk(probed.ink ?? 'none');
+        const gaps = gapsOf(runs);
+        seen.push(
+          `${row}: ink=${probed.ink ?? 'nothing'} gaps=${JSON.stringify(
+            gaps.map((gap) => Number(gap.toFixed(2)))
+          )}`
+        );
 
-      // The row this reads is the row of three items, not a shorter one whose rest went into the
-      // menu: a menu button drawn beside two items would be a third drawing of its own.
-      if (probed.visible !== '3') {
-        throw new Error(
-          `the "${row.kinds.join('+')}" row placed ${probed.visible} of 3 items, so its ` +
-            `gaps are not the gaps of this row: ${JSON.stringify(probed)}.`
-        );
-      }
-      if (runs.length !== 3) {
-        throw new Error(
-          `the "${row.kinds.join('+')}" row drew ${runs.length} separate things in the box ` +
-            `it measured (${seen.join('; ')}), so its items cannot be placed apart.`
-        );
-      }
-      const spread = Math.max(...gaps) - Math.min(...gaps);
-      if (spread > EVEN_GAP) {
-        throw new Error(
-          `the "${row.kinds.join('+')}" row leaves ${gaps[0]!.toFixed(2)} pt and ` +
-            `${gaps[1]!.toFixed(2)} pt between its drawings, ${spread.toFixed(2)} pt apart, ` +
-            `so an item is drawn in less room than its neighbour takes. ${seen.join('; ')}`
-        );
+        // The row this reads is the row of three items, not a shorter one whose rest went into
+        // the menu: a menu button drawn beside two items would be a third drawing of its own.
+        if (probed.visible !== '3') {
+          throw new Error(
+            `${row} placed ${probed.visible} of 3 items, so its gaps are not the gaps of this ` +
+              `row: ${JSON.stringify(probed)}.`
+          );
+        }
+        if (runs.length !== 3) {
+          throw new Error(
+            `${row} drew ${runs.length} separate things in the box it measured ` +
+              `(${seen.join('; ')}), so its items cannot be placed apart.`
+          );
+        }
+        const spread = Math.max(...gaps) - Math.min(...gaps);
+        if (spread > EVEN_GAP) {
+          throw new Error(
+            `${row} leaves ${gaps[0]!.toFixed(2)} pt and ${gaps[1]!.toFixed(2)} pt between its ` +
+              `drawings, ${spread.toFixed(2)} pt apart, so an item is drawn in less room than its ` +
+              `neighbour takes. ${seen.join('; ')}`
+          );
+        }
       }
     }
   });
