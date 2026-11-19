@@ -1,10 +1,9 @@
 /**
  * The Android real-input checks the e2e driver cannot make, run after the e2e suite with
  * its daemon down: a `uiautomator` dump cannot be asked while the driver holds the
- * device's one accessibility connection. They read `clickable`, `focusable` and
- * `long-clickable` each on its own, where the driver's node map folds the first two into
- * one flag and has no third, and they hold a finger down and then drag it without
- * lifting. The device is the caller's: one `adb shell` at a time, at the leased serial only.
+ * device's one accessibility connection. They hold a finger down and then drag it without
+ * lifting, a gesture the driver has no command for. The device is the caller's: one
+ * `adb shell` at a time, at the leased serial only.
  *
  * @file
  */
@@ -16,7 +15,7 @@ import {
   findByDescription,
   findByTestId,
 } from './uiautomator.mjs';
-import { nativeChecked, tightestFlaggedNode } from './android-tree.mjs';
+import { nativeChecked } from './android-tree.mjs';
 import { SweepDevice } from './a11y-sweep-device.mjs';
 
 /** How long a press gets to show its witness, in ms. */
@@ -737,32 +736,6 @@ async function contextClose(t) {
   await sleep(300);
 }
 
-/**
- * The node with this testID, scrolled wholly inside `ctx-scroll` with slow drags on the
- * right-edge strip: no fling, and no ContextMenu under the finger.
- *
- * @param {ReturnType<typeof makeContext>} t
- * @param {string} testID
- */
-async function contextReveal(t, testID) {
-  const edge = t.displayWidth() - 8;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const view = t.nodeByTestId('ctx-scroll')?.bounds;
-    const node = t.nodeByTestId(testID)?.bounds;
-    if (view == null) t.log.abort('the ContextMenu screen has no ctx-scroll');
-    if (node != null && node.y1 >= view.y1 + 8 && node.y2 <= view.y2 - 8) {
-      return node;
-    }
-    // Absent from the dump means scrolled out of sight, and everything here is below.
-    const down = node == null || node.y2 > view.y2 - 8;
-    const from = Math.round((view.y1 + view.y2) / 2);
-    await t.swipePx(edge, from, edge, down ? from - 350 : from + 350, 900);
-  }
-  const last = t.nodeByTestId(testID);
-  if (last == null) t.log.abort(`no "${testID}" on the ContextMenu screen`);
-  return last.bounds;
-}
-
 /** @param {ReturnType<typeof makeContext>} t */
 async function contextTop(t) {
   const edge = t.displayWidth() - 8;
@@ -796,8 +769,8 @@ async function contextMenuChecks(t) {
   const target = t.nodeByTestId('ctx-target')?.bounds;
   if (target == null) log.abort('no ctx-target on the ContextMenu screen');
 
-  // 1. Hold, then drag in the same gesture: the menu is up and the page stays still.
-  //    Back closes it.
+  // Hold, then drag in the same gesture: the menu is up and the page stays still.
+  // Back closes it.
   {
     const from = pointIn(target, 0.4, 0.5);
     const before = contextEcho(t);
@@ -821,84 +794,6 @@ async function contextMenuChecks(t) {
       1
     );
   }
-
-  // 2. An accessible ContextMenu is long-clickable: what TalkBack offers its
-  //    double-tap-and-hold on.
-  {
-    await contextReveal(t, 'ctx-accessible');
-    const named = t
-      .dump()
-      .find((node) => node.contentDesc === 'Message from Grace');
-    log.checkEquals('it is long-clickable', named?.longClickable, 'true');
-    log.checkEquals('and focusable', named?.focusable, 'true');
-    // A long-clickable node is an actionable stop, so a menu that is not `accessible`
-    // has to offer none: it would otherwise read its own Text as a stop the app never
-    // asked for.
-    const plain = t.nodeByTestId('ctx-bottom');
-    log.checkEquals(
-      'a ContextMenu that is not accessible offers TalkBack no long-click',
-      plain?.longClickable,
-      'false'
-    );
-    log.checkEquals('and is not focusable', plain?.focusable, 'false');
-  }
-}
-
-/** Each item's title sits inside a clickable node of its own group. */
-async function buttonGroupChecks(t) {
-  // Material draws each item as its own box, a separate title and a role decoration,
-  // so the title is only where the search starts; the press lands on the item's box.
-  for (const [groupLabel, title] of [
-    ['Real-input formatting toggles', 'Bold'],
-    ['Real-input formatting toggles', 'Italic'],
-    ['Real-input group with a disabled item', 'Cut'],
-    ['Real-input disabled group', 'Copy'],
-  ]) {
-    const group = t.requireControl(groupLabel);
-    const tree = t.dump();
-    const named = tree.filter((node) => {
-      const { bounds } = node;
-      return (
-        (node.text === title || node.contentDesc === title) &&
-        bounds.width > 0 &&
-        bounds.height > 0 &&
-        bounds.x1 >= group.bounds.x1 - 1 &&
-        bounds.y1 >= group.bounds.y1 - 1 &&
-        bounds.x2 <= group.bounds.x2 + 1 &&
-        bounds.y2 <= group.bounds.y2 + 1
-      );
-    });
-    if (named.length === 0) {
-      t.log.abort(
-        `group "${groupLabel}" draws no item titled "${title}" in its own box`
-      );
-    }
-    const control = tightestFlaggedNode(tree, named[0], 'clickable');
-    t.log.check(
-      `"${title}" in "${groupLabel}" sits inside a clickable node`,
-      control != null
-    );
-    if (control == null) {
-      const { bounds } = named[0];
-      t.log.note(
-        `the name is on [${named[0].className}] at ` +
-          `[${String(bounds.x1)},${String(bounds.y1)}]` +
-          `[${String(bounds.x2)},${String(bounds.y2)}], so nothing here can be ` +
-          'pressed, checked or disabled by a reader'
-      );
-    }
-  }
-}
-
-/** The enabled Picker's name sits on the node a tap is aimed at. */
-async function pickerChecks(t) {
-  await t.requireControlOnScreen('Real-input enabled picker');
-  const pickerNode = t.nodesNamed('Real-input enabled picker');
-  t.log.checkEquals(
-    'it is the node a tap is aimed at, too (the name is not parked on a container)',
-    pickerNode[0]?.clickable,
-    'true'
-  );
 }
 
 /** What a screen reader is offered around a `<Host>`: its own text, in order. */
@@ -908,8 +803,6 @@ async function pickerChecks(t) {
  */
 const TREE_CHECKS = [
   { id: 'context-menu', run: contextMenuChecks },
-  { id: 'button-group', run: buttonGroupChecks },
-  { id: 'picker', run: pickerChecks },
 ];
 
 /** The controls these checks cover, so a caller can tell an empty run from a covered one. */

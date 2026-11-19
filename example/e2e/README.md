@@ -39,10 +39,8 @@ accessibility connection. Two passes, in this order:
 - `scripts/real-input/android-tree-checks.mjs` then drives the device itself —
   `input tap`, `input motionevent`, `uiautomator dump` — at the leased serial only,
   one check per control id in `TREE_CHECK_IDS`, each navigating to its own screen.
-  These are the few checks the driver cannot make: reading `clickable`, `focusable`
-  or `long-clickable` as a flag of its own (the driver folds the first two into
-  `hittable` and has no third), and holding a finger down and then dragging it
-  without lifting. A check leaves this file when the driver can make it.
+  These are the checks the driver cannot make: holding a finger down and then
+  dragging it without lifting. A check leaves this file when the driver can make it.
 
 A phase-2 failure lands on the same summary line as a test failure, named
 `<control> (tree)`.
