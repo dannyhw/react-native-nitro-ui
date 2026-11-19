@@ -298,7 +298,7 @@ export default function BottomSheetScreen() {
               style={styles.row60}
               contentContainerStyle={styles.chips}
             >
-              {CHIPS.slice(0, 3).map((chip) => (
+              {CHIPS.slice(0, 9).map((chip) => (
                 <View
                   key={chip}
                   style={[styles.chip, { backgroundColor: ink.row }]}
