@@ -247,7 +247,7 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     text: "", focused: false, composing: false, nativeEvents: 0, jsEvents: 0, lastWrite: "none",
     editable: true, maxLength: -1, placeholder: "", accessibilityLabel: "", returnKeyType: "search",
     keyboardType: "default", autoCapitalize: "none", autoCorrect: true,
-    expanded: false, canClear: false)
+    expanded: false, canClear: false, suggestions: "unknown")
 
   override init() {
     host = NitroSwiftUIHost(model: TextFieldModel())
@@ -536,7 +536,9 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
       ),
       // iOS has no expanded state; the field is always the collapsed field.
       expanded: false,
-      canClear: (control?.nuiAllowsClear ?? false) && !(control?.nuiText.isEmpty ?? true))
+      canClear: (control?.nuiAllowsClear ?? false) && !(control?.nuiText.isEmpty ?? true),
+      // The trait the keyboard is handed: UIKit gives a keyboard its corrections with it.
+      suggestions: control.map { $0.nuiSuggestionsOffered ? "offered" : "refused" } ?? "unknown")
     stateLock.lock()
     stateSnapshot = snapshot
     stateLock.unlock()

@@ -55,10 +55,11 @@ namespace margelo::nitro::nitroui {
     bool autoCorrect     SWIFT_PRIVATE;
     bool expanded     SWIFT_PRIVATE;
     bool canClear     SWIFT_PRIVATE;
+    std::string suggestions     SWIFT_PRIVATE;
 
   public:
     NitroUiSearchFieldTestState() = default;
-    explicit NitroUiSearchFieldTestState(std::string text, bool focused, bool composing, double nativeEvents, double jsEvents, std::string lastWrite, bool editable, double maxLength, std::string placeholder, std::string accessibilityLabel, std::string returnKeyType, std::string keyboardType, std::string autoCapitalize, bool autoCorrect, bool expanded, bool canClear): text(text), focused(focused), composing(composing), nativeEvents(nativeEvents), jsEvents(jsEvents), lastWrite(lastWrite), editable(editable), maxLength(maxLength), placeholder(placeholder), accessibilityLabel(accessibilityLabel), returnKeyType(returnKeyType), keyboardType(keyboardType), autoCapitalize(autoCapitalize), autoCorrect(autoCorrect), expanded(expanded), canClear(canClear) {}
+    explicit NitroUiSearchFieldTestState(std::string text, bool focused, bool composing, double nativeEvents, double jsEvents, std::string lastWrite, bool editable, double maxLength, std::string placeholder, std::string accessibilityLabel, std::string returnKeyType, std::string keyboardType, std::string autoCapitalize, bool autoCorrect, bool expanded, bool canClear, std::string suggestions): text(text), focused(focused), composing(composing), nativeEvents(nativeEvents), jsEvents(jsEvents), lastWrite(lastWrite), editable(editable), maxLength(maxLength), placeholder(placeholder), accessibilityLabel(accessibilityLabel), returnKeyType(returnKeyType), keyboardType(keyboardType), autoCapitalize(autoCapitalize), autoCorrect(autoCorrect), expanded(expanded), canClear(canClear), suggestions(suggestions) {}
 
   public:
     friend bool operator==(const NitroUiSearchFieldTestState& lhs, const NitroUiSearchFieldTestState& rhs) = default;
@@ -89,7 +90,8 @@ namespace margelo::nitro {
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "autoCapitalize"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "autoCorrect"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "expanded"))),
-        JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "canClear")))
+        JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "canClear"))),
+        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "suggestions")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::nitroui::NitroUiSearchFieldTestState& arg) {
@@ -110,6 +112,7 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "autoCorrect"), JSIConverter<bool>::toJSI(runtime, arg.autoCorrect));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "expanded"), JSIConverter<bool>::toJSI(runtime, arg.expanded));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "canClear"), JSIConverter<bool>::toJSI(runtime, arg.canClear));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "suggestions"), JSIConverter<std::string>::toJSI(runtime, arg.suggestions));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -136,6 +139,7 @@ namespace margelo::nitro {
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "autoCorrect")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "expanded")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "canClear")))) return false;
+      if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "suggestions")))) return false;
       return true;
     }
   };

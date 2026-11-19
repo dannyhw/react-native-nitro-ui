@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -136,7 +137,9 @@ private class SearchFieldHost(
 
   @Composable
   override fun Component(model: TextFieldModel) {
-    SearchFieldContent(model)
+    InterceptPlatformTextInput(remember(model) { NitroUiAutoCorrectInterceptor(model) }) {
+      SearchFieldContent(model)
+    }
   }
 }
 
@@ -303,7 +306,7 @@ class HybridNitroUiSearchField(
   private var snapshot =
     NitroUiSearchFieldTestState(
       "", false, false, 0.0, 0.0, "none", true, -1.0, "", "", "search",
-      "default", "none", true, false, false,
+      "default", "none", true, false, false, SUGGESTIONS_UNKNOWN,
     )
 
   init {
@@ -322,6 +325,11 @@ class HybridNitroUiSearchField(
   companion object {
     // Must match the component name in the generated view manager.
     private const val SIZING_COMPONENT_NAME = "NitroUiSearchField"
+
+    // What the test state reports for `suggestions`.
+    private const val SUGGESTIONS_OFFERED = "offered"
+    private const val SUGGESTIONS_REFUSED = "refused"
+    private const val SUGGESTIONS_UNKNOWN = "unknown"
 
     // The size before anything is measured, in dp: Material's 56 dp input field height,
     // and the width a field draws at under a parent that gives it none.
@@ -582,10 +590,11 @@ class HybridNitroUiSearchField(
     val keyboardType: String,
     val autoCapitalize: String,
     val autoCorrect: Boolean,
+    val suggestions: String,
   )
 
   // A focused field whose `EditorInfo` is not read yet. `pending` is a value no prop can have.
-  private val PENDING_KEYBOARD = AppliedKeyboard("pending", "pending", true)
+  private val PENDING_KEYBOARD = AppliedKeyboard("pending", "pending", true, SUGGESTIONS_UNKNOWN)
 
   // The keyboard the options describe, without walking the view tree.
   private fun optionsKeyboard(): AppliedKeyboard =
@@ -595,6 +604,8 @@ class HybridNitroUiSearchField(
       autoCapitalize =
         NitroUiKeyboardNames.nameOfCapitalization(capitalizationOf(model.autoCapitalize)),
       autoCorrect = model.autoCorrect,
+      // What the IME is told is only known from a focused field's `EditorInfo`.
+      suggestions = SUGGESTIONS_UNKNOWN,
     )
 
   // Unfocused: the options. Focused: the last read-back for the current stamp, or pending.
@@ -625,6 +636,12 @@ class HybridNitroUiSearchField(
         keyboardType = NitroUiKeyboardNames.nameOfInputType(info.inputType),
         autoCapitalize = NitroUiKeyboardNames.nameOfCapitalization(info.inputType),
         autoCorrect = NitroUiKeyboardNames.autoCorrectOf(info.inputType, model.autoCorrect),
+        suggestions =
+          if (NitroUiKeyboardNames.suggestionsOf(info.inputType)) {
+            SUGGESTIONS_OFFERED
+          } else {
+            SUGGESTIONS_REFUSED
+          },
       )
     probedKeyboard = read
     probedStamp = keyboardStamp
@@ -677,6 +694,7 @@ class HybridNitroUiSearchField(
         keyboard.autoCorrect,
         host.expanded,
         model.editable && text.isNotEmpty(),
+        keyboard.suggestions,
       )
   }
 
@@ -722,7 +740,8 @@ class HybridNitroUiSearchField(
     if (
       current.keyboardType == keyboard.keyboardType &&
         current.autoCapitalize == keyboard.autoCapitalize &&
-        current.autoCorrect == keyboard.autoCorrect
+        current.autoCorrect == keyboard.autoCorrect &&
+        current.suggestions == keyboard.suggestions
     ) {
       return
     }
@@ -731,6 +750,7 @@ class HybridNitroUiSearchField(
         keyboardType = keyboard.keyboardType,
         autoCapitalize = keyboard.autoCapitalize,
         autoCorrect = keyboard.autoCorrect,
+        suggestions = keyboard.suggestions,
       )
   }
 

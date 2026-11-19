@@ -837,6 +837,7 @@ export interface SearchFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> 
             autoCorrect: boolean;
             expanded: boolean;
             canClear: boolean;
+            suggestions: string;
         };
         nuiTestClear(): void;
         nuiTestSubmit(): void;

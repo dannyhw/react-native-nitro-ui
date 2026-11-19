@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-19 An Android `SearchField` with `autoCorrect={false}` asks the keyboard for no suggestion
+  strip, as `TextField` does (FIX20, #113).
 - 11-19 Nothing user-visible: the Android real-input suite reads the accessibility tree from the
   driver through a file, so a large answer on a loaded machine no longer arrives cut short, and a
   failed read carries the driver's reason (X58, #110). The suite's own e2e tests now check the

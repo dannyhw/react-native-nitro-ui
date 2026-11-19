@@ -74,6 +74,14 @@ export interface NitroUiSearchFieldTestState {
   /** Android only, and always `false`: the search bar is held collapsed. */
   expanded: boolean;
   canClear: boolean;
+  /**
+   * What the keyboard in use is told about suggestions and autocorrections: `'offered'`,
+   * `'refused'`, or `'unknown'` before anything has been read. iOS reads the field's own
+   * autocorrection trait, so it answers whether or not a keyboard is up. Android reads the
+   * `EditorInfo` a focused field hands the IME, once per keyboard configuration, and answers
+   * `'unknown'` while the field is not focused or that read-back is still to come.
+   */
+  suggestions: string;
 }
 
 export interface NitroUiSearchFieldMethods extends HybridViewMethods {
