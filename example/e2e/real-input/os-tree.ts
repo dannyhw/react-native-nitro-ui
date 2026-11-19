@@ -73,8 +73,9 @@ function driverReason(file: string): string {
     return '';
   }
   try {
-    const error = (JSON.parse(text) as { error?: { code?: unknown; message?: unknown } })
-      ?.error;
+    const error = (
+      JSON.parse(text) as { error?: { code?: unknown; message?: unknown } }
+    )?.error;
     if (error != null) {
       return ` — the driver says ${[error.code, error.message]
         .filter((part) => part != null && part !== '')
