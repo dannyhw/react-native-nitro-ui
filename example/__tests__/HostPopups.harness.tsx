@@ -191,6 +191,24 @@ async function boxOf(testId: string, timeoutMs = 15000): Promise<ViewInfo> {
   }
 }
 
+/**
+ * The index the control holds once the app's write has reached it: a pick closes the
+ * menu natively, and React's `setIndex` only arrives on a later commit, so the menu
+ * report being back to closed says nothing about the index yet.
+ */
+async function indexReached(
+  handle: PickerHandle,
+  expected: number,
+  timeoutMs = 8000
+): Promise<number | null> {
+  return await waitForAnswer(
+    () =>
+      handle.selectedIndex === expected ? handle.selectedIndex : undefined,
+    `the hosted picker to hold index ${String(expected)}`,
+    timeoutMs
+  );
+}
+
 async function mount(ui: Parameters<typeof render>[0], timeoutMs = 30000) {
   return await render(ui, { timeout: timeoutMs });
 }
@@ -755,7 +773,9 @@ if (Platform.OS === 'android') {
         (r) => !r.expanded && r.live === 0
       );
       expect(log.acceptedPickers.picker).toBe(OPTIONS.length - 1);
-      expect(picker.selectedIndex).toBe(OPTIONS.length - 1);
+      expect(await indexReached(picker, OPTIONS.length - 1)).toBe(
+        OPTIONS.length - 1
+      );
       expect(afterPick.menu).toEqual([-1, -1, -1, -1]);
 
       // Choosing the row already shown is the refusal: it closes and emits nothing.
@@ -773,7 +793,7 @@ if (Platform.OS === 'android') {
       picker.nuiTestSelect(0);
       await waitForMenu(picker, (r) => !r.expanded && r.live === 0);
       expect(log.acceptedPickers.picker).toBe(0);
-      expect(picker.selectedIndex).toBe(0);
+      expect(await indexReached(picker, 0)).toBe(0);
     });
 
     it('relays the rows when the options change while it is open', async () => {
@@ -797,7 +817,9 @@ if (Platform.OS === 'android') {
       );
       expect(after.rows).toBe(0);
       expect(log.acceptedPickers.picker).toBe(MORE_OPTIONS.length - 1);
-      expect(picker.selectedIndex).toBe(MORE_OPTIONS.length - 1);
+      expect(await indexReached(picker, MORE_OPTIONS.length - 1)).toBe(
+        MORE_OPTIONS.length - 1
+      );
     });
 
     it('closes when the control is disabled while the menu is open', async () => {
