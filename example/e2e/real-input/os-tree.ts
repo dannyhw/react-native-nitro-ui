@@ -4,7 +4,15 @@
  * the node carrying a control’s name is the node carrying its state.
  */
 import { execFileSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -58,6 +66,34 @@ function driverBinary(): string {
 }
 
 /**
+ * The reason a failed driver gave, which it prints to stdout as JSON under `--json`, or
+ * nothing when the file holds no such answer.
+ */
+function driverReason(file: string): string {
+  let text = '';
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+  try {
+    const error = (
+      JSON.parse(text) as { error?: { code?: unknown; message?: unknown } }
+    )?.error;
+    if (error != null) {
+      return ` — the driver says ${[error.code, error.message]
+        .filter((part) => part != null && part !== '')
+        .map(String)
+        .join(': ')}`;
+    }
+  } catch {
+    // Not JSON: fall through to the raw text.
+  }
+  const raw = text.trim().slice(0, 300);
+  return raw === '' ? '' : ` — the driver printed: ${raw}`;
+}
+
+/**
  * One fresh capture of the accessibility tree, as the flags-only shape the readers need.
  *
  * `--force-full` because a repeat of the same request is answered with an “unchanged”
@@ -68,8 +104,14 @@ function driverBinary(): string {
  * driver folds a childless role node (a Compose `RadioButton`, say) into its clickable
  * parent, which then reports the child's class with its own box. The unmerged tree also
  * keeps off-screen nodes, at their own boxes, and other apps' windows.
+ *
+ * `driver` is the driver script to run, the suite's own install unless a test passes
+ * a stand-in.
  */
-export function tree(options: { unmerged?: boolean } = {}): TreeNode[] {
+export function tree(
+  options: { unmerged?: boolean } = {},
+  driver: string = driverBinary()
+): TreeNode[] {
   const serial = process.env.ANDROID_SERIAL;
   if (serial == null || serial === '') {
     throw new Error(
@@ -77,36 +119,54 @@ export function tree(options: { unmerged?: boolean } = {}): TreeNode[] {
         'Source the lease before running the suite.'
     );
   }
-  let stdout = '';
+  // The driver exits at most 2 s after writing, drained or not, so a large answer
+  // on a pipe can be cut short. Its writes to a file are synchronous and complete.
+  const dir = mkdtempSync(join(tmpdir(), 'nitro-ui-tree-'));
+  let answer: Buffer;
   try {
-    stdout = execFileSync(
-      process.execPath,
-      [
-        driverBinary(),
-        'snapshot',
-        '--json',
-        '--force-full',
-        '--serial',
-        serial,
-        '--session',
-        DRIVER_SESSION,
-        ...(options.unmerged === true ? ['--raw'] : []),
-      ],
-      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 60_000 }
-    );
-  } catch (error) {
-    throw new Error(
-      `real-input: reading the accessibility tree from the driver failed: ` +
-        String((error as Error)?.message ?? error)
-    );
+    const file = join(dir, 'snapshot.json');
+    const fd = openSync(file, 'w');
+    try {
+      execFileSync(
+        process.execPath,
+        [
+          driver,
+          'snapshot',
+          '--json',
+          '--force-full',
+          '--serial',
+          serial,
+          '--session',
+          DRIVER_SESSION,
+          ...(options.unmerged === true ? ['--raw'] : []),
+        ],
+        {
+          stdio: ['pipe', fd, 'pipe'],
+          maxBuffer: 64 * 1024 * 1024,
+          timeout: 60_000,
+        }
+      );
+    } catch (error) {
+      closeSync(fd);
+      throw new Error(
+        `real-input: reading the accessibility tree from the driver failed: ` +
+          String((error as Error)?.message ?? error) +
+          driverReason(file)
+      );
+    }
+    closeSync(fd);
+    answer = readFileSync(file);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
+  const stdout = answer.toString('utf8');
   let nodes: unknown;
   try {
     const parsed: unknown = JSON.parse(stdout);
     nodes = (parsed as { data?: { nodes?: unknown } })?.data?.nodes;
   } catch (error) {
     throw new Error(
-      `real-input: the driver answered with ${String(stdout.length)} bytes that are ` +
+      `real-input: the driver answered with ${String(answer.length)} bytes that are ` +
         `not a snapshot this suite can read: ${String(
           (error as Error)?.message ?? error
         )}`
