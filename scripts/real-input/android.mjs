@@ -15,6 +15,11 @@ import process from 'node:process';
 
 import { artifactsDir, ensureMetro, run, Suite } from './support.mjs';
 import { androidRunPlan, androidUsage } from './android-run.mjs';
+import {
+  FOLLOWUPS_FILE,
+  recordResults,
+  TEST_SUFFIX,
+} from './android-results.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { exampleTabs } from './tab-targets.mjs';
 import { runA11ySweepOnDevice } from './a11y-sweep-device.mjs';
@@ -40,9 +45,6 @@ const BUNDLE_ID = 'nitroui.example';
 /** Where the suite lives, relative to the repo root. */
 const E2E_DIR = 'example/e2e';
 
-/** One test file per control, named after its id in `controls.mjs`. */
-const TEST_SUFFIX = '.e2e.ts';
-
 /**
  * Where an e2e run writes, relative to `example/e2e`.
  *
@@ -67,6 +69,18 @@ const RUN_MAX_MS = 45 * 60 * 1000;
 /** @returns {string} */
 function repoRoot() {
   return path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+}
+
+/**
+ * @param {string} file
+ * @returns {string | null}
+ */
+function readOrNull(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -299,61 +313,6 @@ function runE2E({ files, env }) {
 }
 
 /**
- * The verdicts of one e2e run, as one report line per control.
- *
- * A control's file is its suite, so a control is green when every test in its
- * file passed and red with one line per failed test — the line is the failure
- * itself, because `gate.mjs` harvests the `✗` lines into a run's excerpt.
- *
- * @param {Suite} suite
- * @param {ReadonlyArray<(typeof REAL_INPUT_CONTROLS)[number]>} controls
- * @param {any} report The `run` object of e2e's report.
- * @returns {boolean} whether every selected control passed
- */
-function recordResults(suite, controls, report) {
-  const results = Array.isArray(report?.results) ? report.results : [];
-  let anyResult = false;
-  /** Checks the report says did not pass, whatever e2e itself exited with. */
-  let failures = 0;
-  for (const control of controls) {
-    const file = `real-input/${control.id}${TEST_SUFFIX}`;
-    const fromFile = results.filter(
-      (result) => result.kind === 'test' && result.file === file
-    );
-    if (fromFile.length === 0) {
-      // A control that ran nothing is a failure, never a skip: the file exists but
-      // collected nothing (a filter, a skipped test, a bad import).
-      suite.markMissing(control.id);
-      failures += 1;
-      continue;
-    }
-    anyResult = true;
-    const log = suite.begin(control);
-    for (const result of fromFile) {
-      const title = result.titlePath?.join(' › ') ?? control.title;
-      if (result.status === 'passed') {
-        log.check(title, true);
-        continue;
-      }
-      failures += 1;
-      if (result.status === 'skipped') {
-        log.check(`${title} — skipped, which is not a pass`, false);
-        continue;
-      }
-      const failure =
-        result.error?.message ??
-        result.error?.value ??
-        result.status ??
-        'failed';
-      log.check(`${title}: ${String(failure).split('\n')[0]}`, false);
-    }
-  }
-  // Whether the report proves the run passed — not merely that it produced
-  // something. e2e's own exit code is a second, weaker opinion on top of this one.
-  return anyResult && failures === 0;
-}
-
-/**
  * Stop the private agent-device daemon this run started, if it is still up.
  *
  * The tool's own shutdown, against the state dir this run owns: leaving it
@@ -501,7 +460,12 @@ async function main() {
             env,
           });
     const controlsPassed =
-      wanted.length === 0 || recordResults(suite, wanted, report);
+      wanted.length === 0 ||
+      recordResults(suite, wanted, report, {
+        followups: readOrNull(path.join(repoRoot(), FOLLOWUPS_FILE)),
+        readTestFile: (file) =>
+          readOrNull(path.join(repoRoot(), E2E_DIR, file)),
+      });
     // After the suite, and on every run that does not narrow it with `--a11y`: the pass
     // is one property of the tree per control, so a run that only checked four controls
     // still reads the whole table's a11y state. It stops the daemon it needs down itself.

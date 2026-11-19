@@ -10,6 +10,7 @@ import {
   reveal,
   textOf,
 } from './support';
+import { actionFlags } from './os-tree';
 import { actsOnOneNamedNode, itemAnnounces } from './reader';
 
 const NAME = 'Real-input picker';
@@ -200,6 +201,13 @@ test('a real tap picks one radio row, opens no window and checks only that row; 
 
   // One node carries the name, the value it shows, and the role of a list of choices.
   await actsOnOneNamedNode(screen, { name: enabledName, state: 'enabled' });
+  const named = actionFlags({ label: enabledName });
+  expect(
+    named?.clickable,
+    `the name is parked on a node a tap is not aimed at: ${
+      named?.detail ?? 'no node carries it'
+    }`
+  ).toBe('true');
   await expect(enabled).toHaveText('Mica');
   await expect(screen.getByRole('combobox', { name: enabledName })).toHaveCount(
     1

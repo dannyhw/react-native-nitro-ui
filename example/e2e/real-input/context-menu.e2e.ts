@@ -2,6 +2,7 @@ import { test } from '@e2e-dev/mobile';
 import { expect, type Screen } from 'e2e';
 
 import { displayDensity, popupWindowCount } from './device-read';
+import { actionFlags } from './os-tree';
 import { boxOf, openScreen, reveal, type Box, type Point } from './support';
 
 test('a real long press opens the context menu at the finger and the view under it never fires', async ({
@@ -354,6 +355,35 @@ test('an accessible menu is one named node, a hold opens only the innermost menu
   expect(afterDisabled.dOpens, 'a disabled ContextMenu reported an open').toBe(
     afterNested.dOpens
   );
+});
+
+test('an accessible menu is a stop TalkBack can double-tap and hold', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'contextmenu');
+  await revealInScroll(screen, 'ctx-accessible');
+  const named = actionFlags({ label: 'Message from Grace' });
+  expect(
+    { longClickable: named?.longClickable, focusable: named?.focusable },
+    named?.detail ?? 'no node carries "Message from Grace"'
+  ).toEqual({ longClickable: 'true', focusable: 'true' });
+});
+
+// A long-clickable node is an actionable stop, so a menu that is not `accessible` offers
+// none: its own Text would otherwise be read as a stop the app never asked for.
+test('a menu that is not accessible offers TalkBack no long-click and no stop', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'contextmenu');
+  const plain = actionFlags({ testId: 'ctx-bottom' });
+  expect(
+    { longClickable: plain?.longClickable, focusable: plain?.focusable },
+    plain?.detail ?? 'no node carries the testID "ctx-bottom"'
+  ).toEqual({ longClickable: 'false', focusable: 'false' });
 });
 
 test('at the bottom edge the menu opens above the finger', async ({

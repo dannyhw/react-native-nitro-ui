@@ -389,6 +389,8 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - No test covers a red Android run with both a failed control and a failed accessibility case.
   - The Android plan's `full` field is read only by tests.
   - `check-runner.test.js` "runs no more steps at once than --jobs" failed once at load 77 and passed on rerun.
+  - A control whose every test is quarantined passes with no check behind it; it could read as not run.
+  - Nothing checks against a real e2e report that a skipped test's `source.line` is its `test.skip(` line; if it is off, every quarantine reads red.
 - Form row presses, open after a control inside a pressing row became the control's own:
   - A React Native `Pressable`, `Switch` or `TextInput` inside a row with `onPress` answers and also presses the row (documented); matching the nitro-ui rule needs a way to tell a pressable React Native view from plain content at touch-down.
   - The row's hit walk reads layout boxes: it ignores `transform`, Android's `zIndex` drawing order, `pointerEvents="none"` (Android) and `isUserInteractionEnabled` (iOS), and zero-size wrappers whose children overflow. iOS gives the tap up for a control on any branch under the point, Android only in the topmost view's ancestry.

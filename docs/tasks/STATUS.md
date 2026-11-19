@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-19 Nothing user-visible: an Android real-input test skipped with a `QUARANTINED <date>`
+  comment and listed under "Quarantined tests" reads as quarantined instead of turning the gate
+  red, and the icon provenance test checks fixtures in subfolders (X57, #107).
 - 11-19 Nothing user-visible: Android harness cases prove a Form's `keyboardAvoidance={false}`
   without a keyboard (no content growth, no lift of the focused field); the quarantined real-input
   case stays out with its cause unknown (FIX15, #106).

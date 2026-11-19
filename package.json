@@ -225,6 +225,9 @@
       "@commitlint/config-conventional"
     ]
   },
+  "overrides": {
+    "agent-device": "0.21.40"
+  },
   "trustedDependencies": [
     "@parcel/watcher",
     "esbuild",

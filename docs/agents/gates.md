@@ -25,6 +25,10 @@ and any unit that never ran. The outcome is recorded under the full gate's name.
 
 - It is green only if every re-run unit passed, every check that runs on every real-input run
   passed, and the gate's digest was the same at the red run, at the start and at the end.
+- A `real-input:android` test skipped by `test.skip(` with a `// QUARANTINED <YYYY-MM-DD>`
+  comment on the line above, and listed by file and quoted title under "Quarantined tests" in
+  `docs/tasks/FOLLOWUPS.md`, prints a `QUARANTINED` line and decides nothing, in a full run or a
+  completion. Any other skip is red and says which of the two is missing.
 - It refuses, saying why and recording nothing, when there is no red run on this digest, when
   the digest moved, or when the failure is not a unit a filter can name: a build failure, a
   failed isolated harness suite (only a full run starts that app instance), or a real-input

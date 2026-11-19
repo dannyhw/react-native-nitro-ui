@@ -101,12 +101,13 @@ describe('tree', () => {
   });
 
   it('says the driver failed when it exits non-zero, and leaves no file', () => {
+    // Under --json the real driver reports a failure on stdout, as JSON.
     const failing = driver(
-      `process.stderr.write('DEVICE_IN_USE'); process.exit(3);`
+      `process.stdout.write(JSON.stringify({ success: false, error: { code: 'DEVICE_IN_USE', message: 'another client holds the device' } })); process.exit(1);`
     );
 
     expect(() => tree({}, failing)).toThrow(
-      /reading the accessibility tree from the driver failed: [\s\S]*DEVICE_IN_USE/
+      /reading the accessibility tree from the driver failed: [\s\S]*the driver says DEVICE_IN_USE: another client holds the device/
     );
     expect(readdirSync(temp)).toEqual([]);
   });
