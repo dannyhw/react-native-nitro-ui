@@ -71,6 +71,7 @@ export default function BottomSheetScreen() {
   const [inputIn, setInputIn] = useState(0);
   const [inputOut, setInputOut] = useState(0);
   const [twoOpen, setTwoOpen] = useState(false);
+  const [twoDetent, setTwoDetent] = useState<number | null>(null);
   const [fractionOpen, setFractionOpen] = useState(false);
   const [stickyOpen, setStickyOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -197,7 +198,10 @@ export default function BottomSheetScreen() {
         <Opener
           label="Open the two-detent sheet"
           testID="sheet-open-two"
-          onPress={() => setTwoOpen(true)}
+          onPress={() => {
+            setTwoDetent(null);
+            setTwoOpen(true);
+          }}
         />
         <BottomSheet
           testID="sheet-two"
@@ -206,7 +210,10 @@ export default function BottomSheetScreen() {
             record(`presented:${String(next)}`);
             setTwoOpen(next);
           }}
-          onDetentChange={(index) => record(`detent:${index}`)}
+          onDetentChange={(index) => {
+            record(`detent:${index}`);
+            setTwoDetent(index);
+          }}
           onDismiss={() => record('dismiss')}
           detents={DETENTS_TWO}
         >
@@ -214,6 +221,14 @@ export default function BottomSheetScreen() {
           <View testID="sheet-two-header" style={styles.header}>
             <Text style={[styles.title, { color: ink.ink }]}>
               Drag this up for large
+            </Text>
+            {/* The screen's log is behind this sheet's window: this line is the detent
+                the app was told about, readable while the sheet is up. */}
+            <Text
+              testID="sheet-two-detent"
+              style={[styles.value, { color: ink.ink }]}
+            >
+              {twoDetent == null ? 'Detent none' : `Detent ${twoDetent}`}
             </Text>
           </View>
           {/* `nestedScrollEnabled`: on Android a drag at the list's top edge then
