@@ -168,7 +168,8 @@ number keyboard keeps its action key, which is still Search. `"phone-pad"`, `"em
 Both Android strings - the prompt and the clear button's screen-reader label, the framework's
 `searchview_description_clear` - are read from the configuration the field draws in, so an app
 shown in another language than the device's, including a per-app language on Android 13 and later,
-gets its own words. The next draw after a language change has the new ones.
+gets its own words. After a language change they follow once the activity restarts, which is
+Android's default.
 
 The library ships no search string of its own.
 

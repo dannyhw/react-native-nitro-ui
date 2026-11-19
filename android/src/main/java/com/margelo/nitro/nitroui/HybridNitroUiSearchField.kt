@@ -68,9 +68,8 @@ internal const val SEARCH_FIELD_GLYPH_TAG = "nitroui.searchfield.glyph"
  *
  * They are read from the configuration a field draws in, not from the device's: an app
  * shown in another language than the device's, including a per-app language on Android 13
- * and later, gets its own words, and the next draw after a language change has the new
- * ones. Cached per locale list, and bounded, so rendering under many locales cannot grow
- * the cache for the life of the process.
+ * and later, gets its own words. Cached per locale list, and bounded, so rendering under many
+ * locales cannot grow the cache for the life of the process.
  */
 object SearchFieldStrings {
   /** The prompt a field with no `placeholder` draws for [context]. */

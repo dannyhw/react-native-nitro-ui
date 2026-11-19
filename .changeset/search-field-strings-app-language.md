@@ -10,5 +10,5 @@ strings were read from `Resources.getSystem()` once per process, which is the de
 configuration. An app shown in another language than the device's, including a per-app language on
 Android 13 and later, got the device's words — the clear button's screen-reader label among them.
 Both are now resolved for the configuration the field draws in, so an app's own language is what it
-says, and the next draw after a language change has the new words. A `placeholder` the app passes
+says, and after a language change they follow once the activity restarts. A `placeholder` the app passes
 is unchanged, and the English fallbacks stay for a framework without the strings. iOS is unchanged.
