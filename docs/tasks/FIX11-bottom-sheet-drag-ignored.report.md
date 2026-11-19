@@ -32,19 +32,8 @@ reproduces every time is the same drop, aimed at the moment its window is open: 
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | stale | 2178 tests / 96 suites | a427c8bd9042 (not this tree) | 1 m 09 s | start 3.7 / med 13.8 / max 17.0 |
-| `harness:ios` | **PASS** (from `task/FIX6-form-row-press`) | 601 tests / 30 suites + isolated 6 tests / 3 suites | `647545962a59` (harness:ios digest) | 14 m 23 s | start 14.8 / med 7.4 / max 19.1 |
-| `harness:android` | stale | 659 tests / 31 suites + isolated 6 tests / 3 suites | 64861b7585e4 (not this tree) | 18 m 19 s | start 7.6 / med 7.1 / max 20.9 |
-| `real-input:ios` | **PASS** (from `merge/FIX6`) | — | `647545962a59` (real-input:ios digest) | 44 m 44 s | start 3.5 / med 6.0 / max 22.2 |
-| `real-input:android` | missing | — | — | — | — |
-| `real-input:android:--control:bottom-sheet` | stale | 4 failed of 9 tests / 1 suites | a427c8bd9042 (not this tree) | 5 m 47 s | start 10.6 / med 4.5 / max 10.6 |
-| `real-input:android:--control:bottom-sheet:--a11y:switch` | stale | 1 failed of 6 tests / 1 suites | 16de4a8edfe5 (not this tree) | 2 m 31 s | start 5.7 / med 4.2 / max 5.7 |
-
-`need --for review`: need: review is satisfied on this code tree. The last row is the mutation run behind the red proof below:
-the same six cases with the fix taken out again. The full `real-input:android` is the merge run:
-the brief asks for the filtered one here.
+One table, regenerated on this round's final tree, under `## Fix round 2`.
+Round 1's own table went stale as the tree moved and is not repeated here.
 
 ## Red proofs
 
@@ -99,3 +88,76 @@ One device run, on the tree before the last two commits: 4 failed of 9.
 Owed on this tree: `check`, `harness:android`, a green `real-input:android --control
 bottom-sheet`, and every red proof of the new cases. Two device leases were held by other tasks
 for most of the round; the run above is the window this round got.
+
+## Fix round 2
+
+The rising drag reached no dismissal because the root measured it at `onInterceptTouchEvent`, which
+Android stops asking once no child has taken the down - a plain title or header `Text` takes
+nothing. Those drags arrive only in `onTouchEvent` (16 `MOVE`s there, 0 at the intercept), so no
+travel was read. Measured at `dispatchTouchEvent`, the drag closes the sheet and `hide()` runs
+228 ms, the sheet's own y 1426 → 2551.
+
+`real-input:android --control bottom-sheet` is 6 of 9: the same three cases, none a library defect.
+The slide-out case wants ≥2 boxes on the way out; the title leaves the window ~45 ms into that
+spring, against 40 ms reads, so one is the ceiling (`ys [2157]`, twice). The detent-report case
+reads `sheet-log` at :387 under the reopened sheet's window (`no node`), twice in three runs
+earlier at :132, where Back closes the sheet. The sideways case expects `press:1` after Back, which
+always logs `press:1 > presented:false > dismiss`.
+
+Red proofs, one run, two mutations:
+
+- slide-out → `animate = false` while rising → :443 `(ys [])`; the fix reads `ys [2157]`.
+- sideways → `scrollsUnderneath`, `claimedByChild`, vertical-led checks dropped → :71 `the node left
+  the tree`; the fix rests the chip.
+- detent-report → the leaked flag → unprovable while :387 finds no node.
+
+Owed: a green `real-input:android`, mutation A's proof, the sticky half of the slide-out case.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2178 tests / 96 suites | `2c94e69bee09` | 1 m 06 s | start 8.2 / med 9.1 / max 10.1 |
+| `harness:ios` | **PASS** (from `task/FIX6-form-row-press`) | 601 tests / 30 suites + isolated 6 tests / 3 suites | `647545962a59` (harness:ios digest) | 14 m 23 s | start 14.8 / med 7.4 / max 19.1 |
+| `harness:android` | **PASS** | 659 tests / 31 suites + isolated 6 tests / 3 suites | `2c94e69bee09` (harness:android digest) | 17 m 57 s | start 11.1 / med 9.7 / max 48.9 |
+| `real-input:ios` | **PASS** (from `merge/FIX6`) | — | `647545962a59` (real-input:ios digest) | 44 m 44 s | start 3.5 / med 6.0 / max 22.2 |
+| `real-input:android` | missing | — | — | — | — |
+| `real-input:android:--control:bottom-sheet` | **FAIL** | 3 failed of 9 tests / 1 suites | `2c94e69bee09` (real-input:android digest) | 13 m 19 s | start 9.4 / med 6.4 / max 15.7 |
+| `real-input:android:--control:bottom-sheet:--a11y:switch` | stale | 3 failed of 9 tests / 1 suites | 07d14e38df7f (not this tree) | 4 m 18 s | start 17.9 / med 7.2 / max 17.9 |
+
+## Questions for orchestrator
+
+None of the three reds is a library defect, so round 2 left all three assertions untouched. Each
+needs a call about round 1's own cases, which no review has seen green.
+
+1. `a drag down during the rise slides the sheet out`. The behaviour now matches M2: the drag
+   dismisses, `hide()` runs a 228 ms Material spring, the sheet's own y runs 1426 → 1718 → 2105 →
+   2340 → 2453 → 2551. What the case cannot see is two reads of it: the title's box leaves the
+   window once the sheet's y passes 2279, which the spring reaches ~45 ms in, and one tree read
+   costs 40-45 ms (the traces print `expect.toHaveText getByTestId("sheet-log")` at 40 ms, 41 ms,
+   45 ms). Options: (a) assert ≥1 box plus the reported dismissal - its own docstring says one box
+   is what separates a slide from "one frame, scrim included", and 0 boxes is the M2 bug exactly;
+   (b) keep ≥2 and accept a red case, or a flaky one, until a slower exit is wanted for its own
+   sake; (c) read a node that outlives the title - none exists: by the second read the whole sheet
+   is below y 2454. (d) give the rising dismissal a softer spec than `hide()`'s - that would make
+   this dismissal slower than a settled one, to satisfy a read. Recommend (a), by whoever owns the
+   case; round 1's `last.y > first.y` then needs the same node read twice, so it wants (a) written
+   as "≥1 box, and the sheet's reported dismissal".
+2. `a detent dragged to during the rise is reported once`. Its last read is behind the reopened
+   sheet's window, which finds no node at all - the read `3911ac0c` moved everywhere else. Closing
+   the reopened sheet first and asserting both closes
+   (`detent:1 > detent:0 > presented:false > dismiss > presented:false > dismiss`) proves the same
+   claim, that the second open reports no detent, and makes mutation A provable. Say the word and
+   it is a two-line test change.
+3. The same case fails earlier in two of the three runs: `Back from the detent the drag asked for
+   closed the sheet: expected 0 to be 1` (:132). Either Back
+   does not step down a detent the drag asked for, or that drag sometimes asks for none. That is a
+   real question, one device run per guess, and it is not reachable while the read in 2 is
+   impossible. Treat it as its own defect (M4) or tell me to dig after the two reads are fixed.
+4. `a sideways fling on the sheet list` expects the log to be exactly `press:1` after `app.back()`
+   has closed the sheet, and a close always logs `presented:false > dismiss` - the string the
+   file's own first case asserts. Extending the expected string adds the dismissal the case does not
+   dispute; the guard it exists for (`the sideways fling closed the sheet`) is green on this tree and
+   red under the mutation. Recommend extending it.
+
+Also owed, unrunnable this round: the sticky half of the M2 case never executes, because the case
+throws two lines earlier - `dismissible` is checked in `userDismissed`, but the rising sticky drag
+is untested on a device.
