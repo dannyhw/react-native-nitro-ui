@@ -1661,7 +1661,7 @@ describe('Chip · the selected fill in every state (G12)', () => {
         own == null || other == null
           ? Number.MAX_SAFE_INTEGER
           : Math.max(Math.abs(own[0] - other[0]), Math.abs(own[1] - other[1]));
-      if (gap > worst.gap) {
+      if (gap > worst.gap || worst.row < 0) {
         worst = {
           row,
           gap,
