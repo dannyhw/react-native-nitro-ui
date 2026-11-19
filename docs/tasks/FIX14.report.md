@@ -1,6 +1,6 @@
 # FIX14 — An Android icon whose file path has a space in it is drawn in development
 
-**Branch:** `task/FIX14-android-icon-url-spaces` (from `main` at `4cf99e54`) · **Round:** 1 of up to 3 ·
+**Branch:** `task/FIX14-android-icon-url-spaces` (from `main` at `4cf99e54`) · **Round:** 2 of up to 3 ·
 **Lease:** `FIX14-8pji7` (`nitroui_b` / `emulator-5570`, `iPhone Air` / Metro android `9293`, iOS `8293`)
 
 ## Summary
@@ -35,8 +35,8 @@ per URL. Release builds, drawable names and named Material Symbols are untouched
 
 ## Gates
 
-Round 1's own runs are in the ledger. The table that stands is the generated one at the end of this
-report, under `## Fix round 1`, which covers the branch's final code tree.
+Each round's own runs are in the ledger. The table that stands is the generated one at the end of
+this report, under `## Fix round 2`, which covers the branch's final code tree.
 
 ## Fix round 1
 
@@ -62,11 +62,38 @@ Red proofs — one build each, one thing broken:
 `need --for review` asked for `check` and `harness:android` alone; both are green here. The
 `MetroIconPath` row names a suite that no longer exists.
 
+## Fix round 2
+
+`{ uri: '...#v2' }` is asked for without its fragment again: the strip lives in
+`resolveAndroidIconString`, so a hand-written URL loses its fragment before native quotes it, while a
+Metro asset URL keeps a `#` in its file's name. `docs/components/button.md` and the changeset now name
+the development names that draw nothing — a `?` anywhere in a folder or file name, and a folder or
+file whose own name already looks like an escape, which Metro reads as the decoded `aAb` and answers
+with nothing. The claim that any name a file system allows draws is gone.
+
+Red proofs — one run each, one thing broken:
+
+- `does not ask for a fragment an app wrote into a uri` -> no strip -> `https://host/star.xml#v2` for
+  `https://host/star.xml` (`src/__tests__/iconSource.test.ts:312`).
+- `leaves a hash in an asset name for the request to quote` -> the strip in `markAndroidIconUrl` ->
+  `http://10.0.2.2:8081/src/assets/icons/c` for `.../c#sharp.xml?platform=android&hash=a1b2c3d4`
+  (`src/__tests__/iconSource.test.ts:220`).
+  `aHashInAFileNameIsPartOfTheNameAndNotAFragment` still quotes a Metro `#`.
+
+`need --for review` now reads the diff as `ios + android`, so it asks for `harness:ios` and
+`harness:android` on moved digests. No device pair was free (FIX15 pair-a, FIX16 pair-b): an ios
+lease request stayed queued and was never granted, so neither gate ran in this round.
+
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `201ffc08b8f5` | 1 m 02 s | start 7.5 / med 8.4 / max 9.3 |
-| `harness:ios` | **PASS** (from `task/FIX13-button-group-text-spacing`) | 611 tests / 30 suites + isolated 6 tests / 3 suites | `85cf285d0ecf` (harness:ios digest) | 14 m 26 s | start 11.2 / med 5.8 / max 11.2 |
-| `harness:android` | **PASS** | 669 tests / 31 suites + isolated 6 tests / 3 suites | `201ffc08b8f5` (harness:android digest) | 20 m 18 s | start 4.6 / med 5.8 / max 19.4 |
-| `real-input:ios` | **PASS** (from `merge/FIX13`) | — | `85cf285d0ecf` (real-input:ios digest) | 44 m 12 s | start 3.8 / med 6.0 / max 17.5 |
+| `check` | **PASS** | 2180 tests / 96 suites | `5b4395c81bca` | 1 m 16 s | start 20.3 / med 20.4 / max 24.0 |
+| `harness:ios` | stale | 611 tests / 30 suites + isolated 6 tests / 3 suites | 67bec96aa336 (not this tree) | 14 m 30 s | start 5.9 / med 8.1 / max 30.0 |
+| `harness:android` | stale | 669 tests / 31 suites + isolated 6 tests / 3 suites | 201ffc08b8f5 (not this tree) | 20 m 18 s | start 4.6 / med 5.8 / max 19.4 |
+| `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 | `harness:android:MetroIconPath` | stale | 1 tests / 1 suites | af7fe4d940b2 (not this tree) | 7.1 s | start 5.8 / med 6.1 / max 6.4 |
+
+## Questions for orchestrator
+
+A fix in shared `src/` cannot avoid asking for both harness gates at review. Run them here once a pair
+frees, or let the merge branch run them — say which.
