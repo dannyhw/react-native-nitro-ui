@@ -156,13 +156,17 @@ internal class BottomSheetModel : NitroUiModel() {
     return true
   }
 
-  /** Material asked to dismiss: a swipe down, the back gesture or a tap on the scrim. */
-  fun userDismissed() {
+  /**
+   * The person asked to dismiss: a swipe down, the back gesture, a tap on the scrim, or a drag
+   * down followed while the sheet was rising. [animate] is whether Material has the sheet still
+   * on screen: it has during a rise, and `closing` must stay set so the composition runs `hide()`.
+   */
+  fun userDismissed(animate: Boolean) {
     if (!presented || !dismissible) {
       return
     }
     userDismissals.incrementAndGet()
-    userClosed(animate = false)
+    userClosed(animate)
   }
 
   /** The sheet's place in the app went away while it was up (its view left the window). */
@@ -178,7 +182,7 @@ internal class BottomSheetModel : NitroUiModel() {
     val count = state.user(false)
     applyDisplayed()
     if (!animate) {
-      // Material has hidden the sheet already (or there is no window to animate in).
+      // Material has hidden the sheet already, or there is no window to animate in.
       closing = false
     }
     onPresentedChange?.invoke(false, count.toDouble())
@@ -647,7 +651,8 @@ internal class BottomSheetHost(
               scope.launch { sheetState.expand() }
             }
             // A drag back down means the sheet was not wanted: what a swipe down does already.
-            !upward && model.dismissible -> model.userDismissed()
+            // Material has not hidden the sheet, so this one still has to slide out.
+            !upward && model.dismissible -> model.userDismissed(animate = true)
             else -> Unit
           }
         }
@@ -655,7 +660,7 @@ internal class BottomSheetHost(
     val radius = model.cornerRadius
     val color = model.containerColor
     ModalBottomSheet(
-      onDismissRequest = { model.userDismissed() },
+      onDismissRequest = { model.userDismissed(animate = false) },
       modifier =
         Modifier
           .measureSheet(geometry, model)
@@ -1041,7 +1046,7 @@ class HybridNitroUiBottomSheet(
 
   override fun nuiTestDismiss() {
     runOnUi {
-      model.userDismissed()
+      model.userDismissed(animate = false)
       host.applyModelWrites()
     }
   }
