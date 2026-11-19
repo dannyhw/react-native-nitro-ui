@@ -6,6 +6,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
+import android.view.VelocityTracker
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,8 +62,9 @@ import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -118,6 +121,19 @@ internal class BottomSheetModel : NitroUiModel() {
 
   /** The sheet surface's measured height and its allowed height, px, for the report. */
   @Volatile var geometryReport = "sheetPx=0;containerPx=0"
+
+  /**
+   * Whether a detent the person dragged to is owed its report. Set when a drag is followed while
+   * the sheet has not settled at a value yet, where the settle it causes is the first one.
+   */
+  @Volatile var oweDetentReport = false
+
+  /** Whether a detent report is owed for the settle arriving now. */
+  fun consumeDetentReport(): Boolean {
+    val owed = oweDetentReport
+    oweDetentReport = false
+    return owed
+  }
 
   /** Make the composition match [state]'s `displayed`. Returns whether it moved. */
   fun applyDisplayed(): Boolean {
@@ -208,6 +224,7 @@ internal class BottomSheetModel : NitroUiModel() {
     selected = 0
     boxReport = "boxW=0;boxH=0"
     geometryReport = "sheetPx=0;containerPx=0"
+    oweDetentReport = false
   }
 
   companion object {
@@ -277,6 +294,7 @@ internal class NitroUiSheetRootView(
       jsTouchDispatcher.handleTouchEvent(event, dispatcher, context as ReactContext)
       jsPointerDispatcher?.handleMotionEvent(event, dispatcher, true)
     }
+    measureDragUntilSettled(event)
     return super.onInterceptTouchEvent(event)
   }
 
@@ -289,6 +307,66 @@ internal class NitroUiSheetRootView(
     // Keep the stream, as React Native's modal root does: otherwise a root with no
     // gesture-handling child stops receiving the MOVEs a `Pressable` needs.
     return true
+  }
+
+  /**
+   * Hand over a drag that passes through this root while Material has not settled the sheet at a
+   * value: Material's own drag on the sheet is switched off until that settle, and the opening
+   * animation is what settles it, so a drag that starts while the sheet is opening is dropped -
+   * and it stays dropped when the sheet settles partway through it, as a drag is only looked for
+   * where a gesture begins. The travel and the release velocity are px and px per second, positive
+   * for a drag upward. It is measured on the way in, where every gesture of the sheet's content
+   * passes whether or not a child view ends up holding it. The composition sets it per
+   * presentation stage, and it is latched at the down, so a sheet that settles mid-drag does not
+   * lose the drag already under way.
+   */
+  var dragUntilSettled: ((travelPx: Int, velocityPxPerSecond: Float) -> Unit)? = null
+
+  private val dragSlopPx = ViewConfiguration.get(context).scaledTouchSlop
+  private var dragHandler: ((travelPx: Int, velocityPxPerSecond: Float) -> Unit)? = null
+  private var dragVelocity: VelocityTracker? = null
+  private var dragFromY = 0f
+  private var dragTravelPx = 0
+
+  /** Measure the gesture a [dragUntilSettled] handler may need. Nothing moves before the slop. */
+  private fun measureDragUntilSettled(event: MotionEvent) {
+    when (event.actionMasked) {
+      MotionEvent.ACTION_DOWN -> {
+        dragFromY = event.y
+        dragTravelPx = 0
+        dragHandler = dragUntilSettled
+        dragVelocity =
+          dragHandler?.let { VelocityTracker.obtain().apply { addMovement(event) } }
+      }
+
+      MotionEvent.ACTION_MOVE -> {
+        val tracker = dragVelocity ?: return
+        tracker.addMovement(event)
+        dragTravelPx = (dragFromY - event.y).roundToInt()
+      }
+
+      MotionEvent.ACTION_UP -> {
+        // A cancelled gesture belongs to whatever took it, so only an up hands the drag over.
+        val tracker = dragVelocity
+        val handler = dragHandler
+        dragVelocity = null
+        dragHandler = null
+        if (handler != null && abs(dragTravelPx) >= dragSlopPx) {
+          tracker?.computeCurrentVelocity(1000)
+          // Android reads a finger moving up as a negative velocity.
+          handler(dragTravelPx, -(tracker?.yVelocity ?: 0f))
+        }
+        tracker?.recycle()
+      }
+    }
+  }
+
+  /** The gesture is over because this root is: forget a drag left half-measured. */
+  fun forgetDrag() {
+    dragVelocity?.recycle()
+    dragVelocity = null
+    dragHandler = null
+    dragUntilSettled = null
   }
 
   /**
@@ -420,6 +498,7 @@ internal class BottomSheetHost(
     BottomSheetModel.liveRoots.decrementAndGet()
     root.onSizeReport = null
     root.eventDispatcher = null
+    root.forgetDrag()
     for (child in children) {
       if (child.parent === root) root.removeView(child)
     }
@@ -542,6 +621,35 @@ internal class BottomSheetHost(
     val geometry = remember(model) { SheetGeometry() }
     DetentReporter(model, sheetState, detents, expanded, geometry)
     TestSeam(sheetState, detents, canPartiallyExpand = !skipPartiallyExpanded)
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    // Material3 decides a sheet's detent change from 56.dp of travel or a fling over 125.dp a
+    // second, so a drag followed below is measured the same way. It cannot be followed by handing
+    // over its deltas: while the opening animation still carries the sheet, a raw delta is
+    // overwritten by the next frame of that animation.
+    val detentTravelPx = with(density) { 56.dp.toPx() }
+    val detentVelocityPxPerSecond = with(density) { 125.dp.toPx() }
+    val dragUntilSettled: (Int, Float) -> Unit =
+      remember(model, sheetState, scope, detentTravelPx, detentVelocityPxPerSecond) {
+        { travelPx, velocity ->
+          val upward = travelPx > 0 || velocity > 0f
+          val decisive =
+            abs(travelPx) >= detentTravelPx || abs(velocity) >= detentVelocityPxPerSecond
+          when {
+            !decisive -> Unit
+            // The detent above the one the sheet is opening to, where there is one to reach.
+            upward &&
+              sheetState.targetValue != SheetValue.Expanded &&
+              sheetState.hasExpandedState -> {
+              model.oweDetentReport = true
+              scope.launch { sheetState.expand() }
+            }
+            // A drag back down means the sheet was not wanted: what a swipe down does already.
+            !upward && model.dismissible -> model.userDismissed()
+            else -> Unit
+          }
+        }
+      }
     val radius = model.cornerRadius
     val color = model.containerColor
     ModalBottomSheet(
@@ -567,7 +675,6 @@ internal class BottomSheetHost(
         ),
     ) {
       val interop = rememberNestedScrollInteropConnection()
-      val density = LocalDensity.current
       val sizing =
         when {
           // Only `medium`: a half-height sheet, expanded, is Material's one way to rest there.
@@ -577,9 +684,17 @@ internal class BottomSheetHost(
           expanded.kind == "fraction" -> Modifier.fillMaxHeight(expanded.value.toFloat().coerceIn(0.01f, 1f))
           else -> Modifier.fillMaxHeight()
         }
+      // Material switches its own drag on the sheet off until the sheet has settled at a value,
+      // and the opening animation is what settles it: a drag that starts while the sheet is still
+      // opening is measured by the root and followed here.
+      val followsDrag = presented && sheetState.currentValue == SheetValue.Hidden
       AndroidView(
         factory = { obtainSheetRoot() },
         onRelease = { root -> releaseSheetRoot(root) },
+        update = {
+          root ->
+          root.dragUntilSettled = if (followsDrag) dragUntilSettled else null
+        },
         modifier = Modifier.fillMaxWidth().then(sizing).nestedScroll(interop),
       )
     }
@@ -602,14 +717,20 @@ internal class BottomSheetHost(
     // half the screen becomes `Expanded` without changing detent. The geometry is read too
     // because it can move without the value moving.
     LaunchedEffect(sheetState) {
+      var opening = true
       snapshotFlow { Triple(sheetState.currentValue, geometry.known, geometry.converged) }
         .filter { (value, known, _) -> value != SheetValue.Hidden && known }
         .map { (value, _, converged) -> detentIndexOf(value, currentDetents, currentExpanded, converged) }
         .distinctUntilChanged()
-        .drop(1)
         .collect { index ->
-          model.selected = index
-          model.onDetentChange?.invoke(index.toDouble())
+          // The detent a sheet opens at is not a change. One the person dragged to is, even when
+          // the drag cancelled the opening animation and its settle is the presentation's first.
+          val report = !opening || model.consumeDetentReport()
+          opening = false
+          if (report) {
+            model.selected = index
+            model.onDetentChange?.invoke(index.toDouble())
+          }
         }
     }
     LaunchedEffect(sheetState) {
