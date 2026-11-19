@@ -96,6 +96,7 @@ internal class HybridNitroUiForm(
     // The report is a cache; without this a recycled Form's first read would describe its
     // previous owner.
     report = "pending"
+    view.resetTestRequests()
     view.resetAccessibility()
   }
 
@@ -105,6 +106,7 @@ internal class HybridNitroUiForm(
     onImeInset = null
     view.resetAccessibility()
     view.tagImeListenerToNothing()
+    view.resetTestRequests()
   }
 
   /** Called by the box when the `ime` inset moved. dp, and once per change. */
@@ -171,6 +173,10 @@ internal class HybridNitroUiForm(
       "taps=${rows.sumOf { it.taps }}",
       "pressed=${rows.count { it.pressed }}",
       "scroll=${String.format("%.1f", scrollOffsetDp())}",
+      "contentH=${String.format("%.1f", view.contentHeightDp())}",
+      "rectReqs=${view.rectRequests}",
+      "rectBelow=${if (view.rectAskedBelow) 1 else 0}",
+      "focus=${view.focusedRowIndex()}",
       "keyboard=${if (avoidsKeyboard) "rn" else "off"}",
       "ime=${String.format("%.2f", if (reportedImeInsetDp < 0f) 0f else reportedImeInsetDp)}",
       "offset=0.00",
@@ -194,8 +200,13 @@ internal class HybridNitroUiForm(
     reportHandler.post { scrollToDp(y) }
   }
 
-  /** The test commands act on the iOS list; there is nothing for them to do on Android. */
-  override fun nuiTestCommand(command: String) = Unit
+  /**
+   * `ime:<dp>` reports an IME inset and `rect:<row>` asks the scroller to show a row, both as
+   * the platform would. Read on the UI thread, so the report built after this one describes it.
+   */
+  override fun nuiTestCommand(command: String) {
+    reportHandler.post { view.runTestCommand(command) }
+  }
 
   private fun scrollToDp(y: Double) {
     val density = view.resources.displayMetrics.density
@@ -354,6 +365,29 @@ internal class NitroUiFormView(
     return null
   }
 
+  /** The height of the scroller's content, in dp: what a keyboard reservation grows. */
+  fun contentHeightDp(): Double {
+    val scroller = scrollableView() ?: return 0.0
+    var tallest = 0
+    for (index in 0 until scroller.childCount) {
+      tallest = maxOf(tallest, scroller.getChildAt(index).height)
+    }
+    return (tallest / resources.displayMetrics.density).toDouble()
+  }
+
+  /**
+   * Which of this Form's own rows holds the focused view, or -1 when none does (a field in a Form
+   * nested in a row answers -1): the premise a keyboard case needs.
+   */
+  fun focusedRowIndex(): Int {
+    var node: View? = findFocus()
+    while (node != null && node !is NitroUiFormRowView) {
+      node = node.parent as? View
+    }
+    val row = node as? NitroUiFormRowView ?: return -1
+    return rowViews().indexOf(row)
+  }
+
   /** A field focused while the keyboard is already up is revealed the same way. */
   override fun requestChildFocus(
     child: View,
@@ -387,8 +421,9 @@ internal class NitroUiFormView(
   }
 
   /**
-   * `ReactScrollView` only scrolls to a rectangle its direct child asks for, so a request
-   * from a descendant is passed up with the rectangle moved into this view's coordinates.
+   * Handing a descendant's ask to show a rectangle to the scroll ancestor, with the rectangle
+   * moved into this view's coordinates. Android's own walk up the ancestors carries the same
+   * ask to every view above it, so this is one route to the scroller rather than the only one.
    */
   override fun requestChildRectangleOnScreen(
     child: View,
@@ -446,6 +481,50 @@ internal class NitroUiFormView(
         else -> {}
       }
     }
+  }
+
+  // MARK: The test commands
+
+  /** How many `rect:` commands have asked this Form's scroller to show a row. */
+  var rectRequests = 0
+    private set
+
+  /** Whether the last `rect:` named a row the scroller has to move to show. */
+  var rectAskedBelow = false
+    private set
+
+  /** A test command, read on the UI thread: an `ime` inset, or a row to show. */
+  fun runTestCommand(command: String) {
+    val argument = command.substringAfter(':', "").toIntOrNull() ?: return
+    when {
+      command.startsWith("ime:") ->
+        noteImeInsetPx((argument * resources.displayMetrics.density).toInt())
+      command.startsWith("rect:") -> {
+        val row = rowViews().getOrNull(argument) ?: return
+        val scroller = scrollableView()
+        rectRequests += 1
+        rectAskedBelow = scroller != null && hangsBelow(row, scroller)
+        row.requestRectangleOnScreen(Rect(0, 0, row.width, row.height), true)
+      }
+    }
+  }
+
+  /** Clearing the counters, so a recycled view cannot answer for its previous owner. */
+  fun resetTestRequests() {
+    rectRequests = 0
+    rectAskedBelow = false
+  }
+
+  /** Whether [row] stands below the visible bottom of [scroller], where showing it costs a scroll. */
+  private fun hangsBelow(
+    row: View,
+    scroller: View,
+  ): Boolean {
+    val here = IntArray(2)
+    row.getLocationInWindow(here)
+    val there = IntArray(2)
+    scroller.getLocationInWindow(there)
+    return here[1] + row.height > there[1] + scroller.height
   }
 }
 

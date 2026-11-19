@@ -191,12 +191,14 @@ the keyboard and scrolls the focused row in; Android reserves the IME inset in i
 scroll content and asks the scroll ancestor to make the focused row visible. A
 `TextField` or `SearchField` in a row near the bottom stays visible on both.
 
-`keyboardAvoidance={false}` means the Form does nothing for the keyboard at all: no
-bottom inset, no padding under its scroll content, no scroll for the focused row, and
-its content keeps the height and the offset it had before the keys appeared. The
-keyboard still comes up over the form, so a field near the bottom of a long one ends up
-behind it and moving it clear is yours: reserve the room in your own layout, or scroll
-the row yourself.
+`keyboardAvoidance={false}` means the Form does nothing for the keyboard itself: no
+bottom inset, no padding under its scroll content, and no scroll to clear the keys, so
+its content keeps the height it had before they appeared. Its scroll view still brings
+a focused row into its own viewport, as it does for any scroll view, and that viewport
+is the height the form was given and knows nothing about the keys. The keyboard still
+comes up over the form, so a field near the bottom of a long one ends up behind it and
+moving it clear is yours: keep the room for the keys in your own layout, and the scroll
+view has a viewport that ends above them.
 
 ## `measure()` is right once scrolling settles
 

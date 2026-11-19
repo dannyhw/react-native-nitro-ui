@@ -22,9 +22,22 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   2026-11-18 on the TextField merge run started 22:18 UTC (the first test of the run, the header's
   top 1391 before and after the drag), green on `--rerun-failed`; a third time 2026-11-19 on the
   ButtonGroup merge run started 03:21 UTC, the same reading, green on `--rerun-failed`. Seen three
-  times. Not quarantined: no
+  times. Cause found (FIX11, FIX12, FIX16; branches kept, PR #104 closed): Material 1.5 turns
+  the sheet's drag on only once its opening spring has settled, and the test drags inside the
+  spring's sub-pixel tail, after two reads 150 ms apart already agree. A library change that takes
+  such a drag was built but cannot be proven: the rise finishes inside the tap that opens the sheet,
+  so no injected gesture lands during it and every guard's mutation stays green. A test-only fix
+  needs a settle signal the app does not get today (`onDetentChange` reports drags only, never the
+  opening detent). Options: report the opening detent (an API change), or a test-only settle read
+  through the sheet's `nuiTest` seam. Until then a hit costs one `--rerun-failed`. Not quarantined: no
   log shows the driver at fault, so a drag the sheet ignored is treated as a bug with a low hit
   rate and gets a bugfix task.
+- `SearchField.harness.tsx` "takes no submit from a Return pressed on a query it has just cleared"
+  (Android), a stray `change:` event, 2026-11-19, `harness:android` on a merge run started 10:35
+  UTC, green on `--rerun-failed`, seen once.
+- `picker.e2e.ts` "a real tap picks one radio row" (Android), the driver answered a snapshot of
+  524277 bytes that did not parse (cut short near 512 KiB), 2026-11-19, `real-input:android` on a
+  merge run started 10:54 UTC, seen once. A driver fault, not the Picker's.
 - `BottomSheet.harness.tsx` (iOS), a chunk lost to "the native app crashed during test execution"
   with no crash log, 2026-11-18, `harness:ios` on a task branch while another task's run loaded the
   machine, seen once.
@@ -39,20 +52,20 @@ A line here blocks no merge. Its fix queues behind components, and one still her
 is raised with the owner once.
 
 - `form.e2e.ts` "opting out of keyboard avoidance leaves the content and its offset alone"
-  (Android), quarantined 2026-11-18. It failed twice in a row on the ButtonGroup merge tree
-  (`merge/FIX7`, full run and its `--rerun-failed`) with the Note field focused, no keyboard on
-  screen and the field's box gone from the tree, and passed alone on that tree and on `main`; it
-  also failed repeatedly while its own task was written. The Form's state read correctly at the
-  failure (`avoid no`, `keyboardAvoidance: off`), so the keyboard or the tree read is at fault, not
-  the Form's offset. One fix was tried and judged not to apply: blocking the Form's
-  `requestChildRectangleOnScreen` forward does nothing, because the ScrollView's content container
-  never passes it on and Compose's `requestRectangleOnScreen` walks every ancestor anyway. Fix
-  task: read `form-avoid-echo`, the report's `keyboard=` and `scroll=` before the focus tap and at
-  the failure, and add a deterministic Android harness case (an `ime:<dp>` and a `rect:<row>` test
-  command through `nuiTestCommand`, then assert `scroll=` holds while opted out and moves while
-  not). iOS's opt-out case still runs. The Android real-input runner counts a skipped test as a failure,
-  so the case was taken out of `form.e2e.ts` rather than skipped; it is on `main` at `49b84b9d`
-  (`git show 49b84b9d:example/e2e/real-input/form.e2e.ts`) for the fix task to restore.
+  (Android), quarantined 2026-11-18 and left out by FIX15 (2026-11-19), which moved the proof
+  rather than repair the read. Both recorded failures had the Note field focused, the Form's state reading `avoid no` /
+  `keyboardAvoidance: off`, no keyboard on screen, and the field's box gone from the dump.
+  Nothing in the records explains the missing node: a row parked at y 1954 in a viewport ending
+  at 2424 px is on screen when no keyboard is up, so "a keyboard standing over its node" does
+  not fit what was recorded, and the cause stays unknown. The Android proof is now the "Form
+  keyboard opt-out (Android)" cases in `Form.harness.tsx`: they park a Form with a focused
+  field at a non-zero offset, report an `ime` inset through `nuiTestCommand`, read `scroll=`,
+  `contentH=` and `focus=` back, and go red when an opted-out Form grows its content or lifts
+  that field. Bringing the real-input case back starts with finding why that node was missing;
+  echoing the Form's own `scroll=` and `ime=` into `form-list-geometry` on Android - which
+  `FormScreen` polls on iOS only today - is where to look first, not a known fix. Then three
+  filtered `--control form` runs and one after the `bottom-sheet` to `dialog` sequence. Its
+  last version is `49b84b9d`, in `example/e2e/real-input/form.e2e.ts`.
 
 Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into tasks F1–F6:
 
@@ -393,3 +406,4 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - `ButtonGroup.harness.tsx`: the "disabled drawn in the tint" check is a share of the box and cannot fire for `text`; the ink ratio is coarse for an item that draws few pixels; the `titleOnly` overflow read has no positive check that rows were drawn; the hidden capsule copy's accessibility is not read. `RealInputTests.swift`'s toggle check has its own 3 s state poll beside the shared wait helper.
   - iOS `HybridNitroUiButtonGroup.swift`: `inControlGroup ? nil : model.tint` is dead for a toggle.
   - Android: each overflow row reports its painted colour (`overflowIcons=`) on every composition, as `Menu` does; the report can go stale across reopenings, and a `Pending` glyph's tint is not reported.
+- Form harness, the Android keyboard opt-out cases: the default-path checks accept a 2 dp lift and a 1 dp scroll; asserting that the focused field ends above the keyboard by the reveal margin, and that the requested row ends inside the viewport, would make them prove the default behaviour too (CodeRabbit on #106).
