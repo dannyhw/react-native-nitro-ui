@@ -132,7 +132,8 @@ export interface FormProps extends ViewProps {
    * Keeps the focused row visible while the keyboard is up. Default `true`.
    *
    * iOS grows the list's bottom inset and scrolls the row into view; Android pads the scroll
-   * content by the keyboard's height and scrolls the focused row into view.
+   * content by the keyboard's height and scrolls the focused row into view. With `false`,
+   * Android's own scroll view stops scrolling a focused row into view as well, keyboard or not.
    */
   keyboardAvoidance?: boolean | undefined;
   /**
@@ -222,6 +223,9 @@ function FormRoot({
           ? [styles.fill, { paddingBottom: imeInset }]
           : styles.fill
       }
+      // A focus or rectangle request reaches this scroll view from the platform whatever the
+      // Form's own view answers, so this is the only switch for a Form that must not move.
+      scrollsChildToFocus={keyboardAvoidance}
       // A tap outside a focused field should reach the control under it, not merely dismiss
       // the keyboard.
       keyboardShouldPersistTaps="handled"
