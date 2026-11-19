@@ -6,7 +6,6 @@ import {
   expect,
   it,
   render,
-  screen,
 } from 'react-native-harness';
 import { Button, nitroUiCore } from 'react-native-nitro-ui';
 
@@ -50,6 +49,26 @@ const SPACED_ASSET = require('../src/assets/icons with a space/star_24px.xml');
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Polls the native view tree until the control has a box of its own. */
+async function waitForBox(
+  testId: string,
+  timeoutMs = 10000
+): Promise<ViewInfo> {
+  const deadline = nitroUiCore.now() + timeoutMs;
+  for (;;) {
+    const box = harnessUi.queryByTestId(testId);
+    if (box != null) {
+      return box;
+    }
+    if (nitroUiCore.now() > deadline) {
+      throw new Error(
+        `testID "${testId}" never had a box within ${timeoutMs}ms.`
+      );
+    }
+    await sleep(25);
+  }
 }
 
 function probeHits(report: string): number {
@@ -97,7 +116,7 @@ describe('androidIcon · a Metro path that needs escaping', () => {
       </View>,
       { timeout: 20000 }
     );
-    await screen.findByTestId(TEST_ID);
+    const box = await waitForBox(TEST_ID);
     const handle = await waitForHandle(() => handles.get(TEST_ID), {
       what: 'the Button holding the spaced icon',
     });
@@ -126,7 +145,8 @@ describe('androidIcon · a Metro path that needs escaping', () => {
       );
     }
     expect(hits).toBeGreaterThan(0);
-    // The slot is drawn where the control is, not somewhere else on the screen.
-    expect(harnessUi.queryByTestId(TEST_ID)).not.toBeNull();
+    // The control the glyph was probed in is the one that was asked for.
+    expect(box.width).toBeGreaterThan(0);
+    expect(box.height).toBeGreaterThan(0);
   });
 });
