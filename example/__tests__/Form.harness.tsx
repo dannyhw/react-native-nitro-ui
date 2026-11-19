@@ -561,7 +561,7 @@ const REPORTED_IME_DP = 300;
 /**
  * The offset a case parks the tall Form at before it asks anything: low enough that the field's
  * box ends well below where a keyboard of `REPORTED_IME_DP` would reach - the harness emulator
- * gives the Form some 910 dp of viewport, and the eighth row's box ends near 800 dp at this
+ * gives the Form some 910 dp of viewport, and the ninth row's box ends near 800 dp at this
  * offset - and far enough from the end of the content that a reveal has room to move. The
  * offset a case measures from is not 0 either, which is what makes "it did not move" a claim.
  */
@@ -2677,7 +2677,7 @@ describe('Form keyboard opt-out (Android)', () => {
     field.focus();
     await formReport(
       (r) => num(r, 'focus') === FOCUSED_ROW,
-      'the Form holding focus on the field in its eighth row',
+      'the Form holding focus on the field in its ninth row',
       'tall'
     );
     need(forms.tall).nuiTestScrollTo(PARK_DP);

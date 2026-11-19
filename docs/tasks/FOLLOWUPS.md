@@ -40,8 +40,7 @@ is raised with the owner once.
 
 - `form.e2e.ts` "opting out of keyboard avoidance leaves the content and its offset alone"
   (Android), quarantined 2026-11-18 and left out by FIX15 (2026-11-19), which moved the proof
-  rather than repair the read. Both recorded failures - and the repeats while its own task was
-  written - had the Note field focused, the Form's state reading `avoid no` /
+  rather than repair the read. Both recorded failures had the Note field focused, the Form's state reading `avoid no` /
   `keyboardAvoidance: off`, no keyboard on screen, and the field's box gone from the dump.
   Nothing in the records explains the missing node: a row parked at y 1954 in a viewport ending
   at 2424 px is on screen when no keyboard is up, so "a keyboard standing over its node" does

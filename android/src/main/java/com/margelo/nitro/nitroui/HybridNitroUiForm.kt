@@ -376,8 +376,8 @@ internal class NitroUiFormView(
   }
 
   /**
-   * Which row holds the view that has focus, or -1 when nothing below here does: the premise a
-   * keyboard case needs, since a reveal that had nothing focused does nothing anyway.
+   * Which of this Form's own rows holds the focused view, or -1 when none does (a field in a Form
+   * nested in a row answers -1): the premise a keyboard case needs.
    */
   fun focusedRowIndex(): Int {
     var node: View? = findFocus()
