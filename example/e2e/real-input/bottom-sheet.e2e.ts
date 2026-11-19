@@ -535,8 +535,6 @@ test('a sideways fling on the sheet list during the rise neither expands the she
   );
   await app.back();
   await screen.getByText(FIT).waitFor({ state: 'detached' });
-  // The brief decided this case's log: a close reports the dismissal, which is why the case that
-  // ends by closing the sheet expects it too.
   await expect(log).toHaveText('press:1 > presented:false > dismiss');
 });
 
