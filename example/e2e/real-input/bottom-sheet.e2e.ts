@@ -693,19 +693,29 @@ test("a drag that starts beside the sheet's list during the rise is the sheet's 
 });
 
 /**
- * How far above the field's resting place a rising sheet has to still be for the case below to aim
- * at it. A box read names where the field was when the read walked past it, and the sheet carries
- * on rising while the press is on its way, so the field is always higher than the read says. Within
- * this much of where the sheet is going, the rest of its travel is shorter than the field itself,
- * so a press aimed at the top of the read cannot arrive below the field however long it takes.
+ * How far below the top of a read the press lands, clear of the edge it is aimed at.
  */
-const AIM_ABOVE_REST_PX = 135;
-
-/** How far below the top of that read the press lands, clear of the edge it is aimed at. */
 const AIM_INSET_PX = 8;
 
 /** The least the field still has to travel for its sheet to be called rising. */
-const STILL_RISING_PX = 24;
+const STILL_RISING_PX = 12;
+
+/**
+ * Whether a read of the field is one to aim a rising sheet's drag at.
+ *
+ * A box read names where the field was when the read walked past it, and the sheet carries on
+ * rising while the press is on its way, so the field is always higher than the read says, never
+ * lower. The field never rises past the place its sheet settles at either, so the whole of the
+ * travel left at the read bounds how far the aim can have fallen behind: read close enough to
+ * the destination that the field is taller than all of it, and a press at the top of the read is
+ * inside the field whatever the lag turns out to be.
+ */
+function aimableField(box: Box, restY: number): boolean {
+  const travelLeft = box.y - restY;
+  return (
+    travelLeft >= STILL_RISING_PX && travelLeft + AIM_INSET_PX <= box.height
+  );
+}
 
 /**
  * A `TextInput` takes the gesture from its touch-down, so a drag that starts on one is the
@@ -740,8 +750,7 @@ test('a drag down that starts on the sheet TextInput during the rise is the fiel
   const rising = await boxWhileRising(
     input,
     (box) =>
-      box.y - rest.y >= STILL_RISING_PX &&
-      box.y - rest.y <= AIM_ABOVE_REST_PX &&
+      aimableField(box, rest.y) &&
       box.y + AIM_INSET_PX + room <= window.y + window.height - 2
   );
   if (rising == null) {
