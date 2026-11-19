@@ -173,9 +173,9 @@ item takes the same room as its neighbours whatever mix of them the row holds. A
 no toggle, or whose toggles have all moved into the overflow menu, keeps the size of a label.
 
 The room is a capsule's, and a checked item fills it edge to edge while a label leaves the capsule's
-padding at each side. The space you see between a checked item and its neighbour is that padding
-narrower than the space between two unchecked ones: what the row keeps even is the room every item
-was measured at, not the whitespace between the drawings.
+padding at each side. So the space you see is narrower by one padding for each checked item beside
+it: what the row keeps even is the room every item was measured at, not the whitespace between the
+drawings.
 
 ## Overflow
 
