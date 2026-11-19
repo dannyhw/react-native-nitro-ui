@@ -179,6 +179,109 @@ function reportOf(testId: string): Record<string, string> {
   return fields;
 }
 
+/**
+ * Ask `testId` for the pixels it is drawing, and wait for that probe's own answer. A chip
+ * refuses to sample a box too small to read; a test that wants a colour checks the line it
+ * got with `sampleOf` rather than accepting anything back.
+ */
+async function pixelProbe(testId: string, color: number, what: string) {
+  const handle = handles.get(testId);
+  if (handle == null) {
+    throw new Error(
+      `testID "${testId}" has no handle - it was never rendered.`
+    );
+  }
+  const before = handle.nuiTestPixelReport();
+  handle.nuiTestPixelProbe(color);
+  const report = await pollUntil(
+    () => {
+      const next = handle.nuiTestPixelReport();
+      return next === '' || next === before ? null : next;
+    },
+    () =>
+      new Error(
+        `the pixel probe for "${testId}" (${what}) never reported. Last: ` +
+          `"${handle.nuiTestPixelReport()}".`
+      ),
+    8000
+  );
+  if (
+    !/ hits=\d+ mean=#[0-9A-F]{6}/.test(report) &&
+    !/no pixels/.test(report) &&
+    !/size=\d+x\d+ no pixels/.test(report)
+  ) {
+    throw new Error(
+      `the pixel probe for "${testId}" (${what}) reported a line that is neither a ` +
+        `sample nor a refusal: ${report}`
+    );
+  }
+  return report;
+}
+
+/** A probe's line, or a failed read: a refusal to sample says nothing about a colour. */
+function sampleOf(report: string, testId: string): string {
+  if (!/ hits=\d+ mean=#[0-9A-F]{6}/.test(report)) {
+    throw new Error(
+      `the pixel probe for "${testId}" refused to sample: ${report}`
+    );
+  }
+  return report;
+}
+
+/** The area a probe found in the colour it asked for. */
+function probeHits(report: string): number {
+  const hits = / hits=(\d+)/.exec(report);
+  return hits == null ? 0 : Number(hits[1]);
+}
+
+/** The colour a probe says the whole box averages at, as `#RRGGBB`. */
+function probeMean(report: string): string {
+  const mean = / mean=(#[0-9A-F]{6})/.exec(report);
+  if (mean == null) {
+    throw new Error(`the pixel probe report carries no mean colour: ${report}`);
+  }
+  return mean[1] ?? '';
+}
+
+/** The colour of the pixel a probe found nearest the one it asked for: for black, the ink. */
+function probeClosest(report: string): string {
+  const closest = / closest=(#[0-9A-F]{6})/.exec(report);
+  if (closest == null) {
+    throw new Error(
+      `the pixel probe report carries no closest colour: ${report}`
+    );
+  }
+  return closest[1] ?? '';
+}
+
+/** The red, green and blue of a `#RRGGBB` colour. */
+function channels(colour: string): number[] {
+  return [1, 3, 5].map((offset) =>
+    Number.parseInt(colour.slice(offset, offset + 2), 16)
+  );
+}
+
+/** Per-channel-sum distance between two `#RRGGBB` colours. */
+function colourDistance(a: string, b: string): number {
+  const first = channels(a);
+  const second = channels(b);
+  return first.reduce(
+    (total, channel, index) => total + Math.abs(channel - second[index]!),
+    0
+  );
+}
+
+/** How far a colour's widest channel sits above its narrowest: how coloured it is. */
+function chroma(colour: string): number {
+  const sorted = channels(colour).sort((a, b) => a - b);
+  return (sorted[2] ?? 0) - (sorted[0] ?? 0);
+}
+
+/** How light a colour is, as the sum of its channels: the strength a dimmed chip gives up. */
+function lightness(colour: string): number {
+  return channels(colour).reduce((total, channel) => total + channel, 0);
+}
+
 /** Poll until the chip is drawing `displayed` (`1`, `0` or `none`). */
 async function waitForDisplayed(testId: string, displayed: string) {
   return pollUntil(
@@ -922,45 +1025,8 @@ describe('Chip · the androidIcon (G21)', () => {
   /** Material's icon size for both the assist and the filter chip. */
   const ICON_DP = 18;
 
-  /** Ask `testId` for its pixels, and wait for that probe's own answer. */
-  async function pixelProbe(testId: string, color: number, what: string) {
-    const handle = handles.get(testId);
-    if (handle == null) {
-      throw new Error(
-        `testID "${testId}" has no handle - it was never rendered.`
-      );
-    }
-    const before = handle.nuiTestPixelReport();
-    handle.nuiTestPixelProbe(color);
-    const report = await pollUntil(
-      () => {
-        const next = handle.nuiTestPixelReport();
-        return next === '' || next === before ? null : next;
-      },
-      () =>
-        new Error(
-          `the pixel probe for "${testId}" (${what}) never reported. Last: ` +
-            `"${handle.nuiTestPixelReport()}".`
-        ),
-      8000
-    );
-    if (
-      !/ hits=\d+ mean=#[0-9A-F]{6}/.test(report) &&
-      !/no pixels/.test(report) &&
-      !/size=\d+x\d+ no pixels/.test(report)
-    ) {
-      throw new Error(
-        `the pixel probe for "${testId}" (${what}) reported a line that is neither a ` +
-          `sample nor a refusal: ${report}`
-      );
-    }
-    return report;
-  }
-
-  function probeHits(report: string): number {
-    const hits = / hits=(\d+)/.exec(report);
-    return hits == null ? 0 : Number(hits[1]);
-  }
+  /** How far two chips of one drawing may read apart: the noise floor of the pixel read. */
+  const NOISE_PAINT = 8;
 
   /** The colour the chip tinted its glyph with, or `null` when none drew. */
   function iconTintOf(testId: string): string | null {
@@ -1058,13 +1124,31 @@ describe('Chip · the androidIcon (G21)', () => {
     ]);
     console.log(`chip glyph boxes: ${logged(boxes)}`);
     if (Platform.OS !== 'android') {
-      // iOS ignores `androidIcon`: the chip with the prop is the chip without it, and
-      // the probe refuses rather than answering zero.
+      // iOS ignores `androidIcon`, and says so with pixels: the chip with the prop paints
+      // what the chip without it paints, box for box.
       expect(sameSize(boxes.get('asset')!, boxes.get('plain')!)).toBe(true);
       expect(reportOf('asset').iconTint).toBe('-');
-      expect(await pixelProbe('asset', 0x000000, 'the iOS refusal')).toContain(
-        'no pixels'
+      const asset = probeMean(
+        sampleOf(
+          await pixelProbe('asset', 0x000000, 'the chip with a drawable'),
+          'asset'
+        )
       );
+      const plain = probeMean(
+        sampleOf(
+          await pixelProbe('plain', 0x000000, 'the chip without one'),
+          'plain'
+        )
+      );
+      console.log(
+        `chip glyph iOS paints: asset=${asset} plain=${plain} ` +
+          `apart=${colourDistance(asset, plain)}`
+      );
+      expect(
+        colourDistance(asset, plain) <= NOISE_PAINT,
+        `iOS painted the chip with \`androidIcon\` at ${asset} and the one without it at ` +
+          `${plain}: the prop drew something on a platform that ignores it.`
+      ).toBe(true);
       return;
     }
 
@@ -1247,4 +1331,248 @@ describe('Chip · the androidIcon (G21)', () => {
     expect(probeHits(report)).toBe(0);
     expect(/ n=1 |^n=1 /.test(report) || report.startsWith('n=1')).toBe(true);
   });
+});
+
+/**
+ * The chip's fill and its label, read back off the screen. Every number is one chip's own box,
+ * so a state that never reaches the display cannot pass: the run's enabled pair is the yardstick,
+ * and two chips mounted the same way say what the read itself costs in noise.
+ */
+describe('Chip · the selected fill in every state (G12)', () => {
+  /** One label for every chip, so only the paint can tell two of them apart. */
+  const LABEL = 'Filters';
+
+  /** What two chips of one drawing may read apart: the noise floor of the read itself. */
+  const NOISE = 8;
+
+  /** How much of the enabled pair's own separation a disabled pair has to keep. iOS draws a
+   *  bordered selection pale, so every claim is measured against this run's enabled pair. */
+  const KEPT = 3;
+
+  /** How much fainter a dimmed chip's label may read: two per channel, about how far the
+   *  anti-aliasing of one glyph edge can move a single pixel. */
+  const LABEL_INK = 6;
+
+  /** The tenths of an unselected chip's label ink that a selected one has to keep painted. */
+  const INK_KEPT = 9;
+
+  type Spec = { testId: string; selected: boolean; disabled?: boolean };
+
+  const SPECS: Spec[] = [
+    { testId: 'on', selected: true },
+    { testId: 'on-twin', selected: true },
+    { testId: 'off', selected: false },
+    { testId: 'disabled-on', selected: true, disabled: true },
+    { testId: 'disabled-off', selected: false, disabled: true },
+  ];
+
+  /** Every state at once: laid out, drawn, and settled at the size the control measured. */
+  async function renderEveryState(): Promise<Map<string, Size>> {
+    await render(
+      <View style={rowStyle}>
+        {SPECS.map((spec) => (
+          <Chip
+            key={spec.testId}
+            label={LABEL}
+            selected={spec.selected}
+            disabled={spec.disabled}
+            testID={spec.testId}
+            hybridRef={captureHybrid(spec.testId)}
+          />
+        ))}
+      </View>,
+      { timeout: 20000 }
+    );
+    const boxes = new Map<string, Size>();
+    for (const spec of SPECS) {
+      await waitForTestId(spec.testId);
+      const content = await waitForMeasured(spec.testId, spec.testId);
+      boxes.set(
+        spec.testId,
+        await waitForBox(spec.testId, content, spec.testId)
+      );
+      expect(sameSize(content, WRONG_SIZE)).toBe(false);
+      await waitForDisplayed(spec.testId, spec.selected ? '1' : '0');
+    }
+    return boxes;
+  }
+
+  /** What `testId` paints, as the mean colour of its own box. */
+  async function paintOf(testId: string): Promise<string> {
+    return probeMean(
+      sampleOf(await pixelProbe(testId, 0x000000, testId), testId)
+    );
+  }
+
+  /** The strongest ink `testId` draws: the pixel of its own box nearest black. */
+  async function inkOf(testId: string): Promise<string> {
+    return probeClosest(
+      sampleOf(
+        await pixelProbe(testId, 0x000000, `the label of ${testId}`),
+        testId
+      )
+    );
+  }
+
+  /** How much of `testId`'s box is painted within the probe's reach of `colour`. */
+  async function inkArea(testId: string, colour: string): Promise<number> {
+    return probeHits(
+      sampleOf(
+        await pixelProbe(
+          testId,
+          Number.parseInt(colour.slice(1), 16),
+          `the area of ${testId} painted ${colour}`
+        ),
+        testId
+      )
+    );
+  }
+
+  it('measures one size whether or not it is disabled', async () => {
+    const boxes = await renderEveryState();
+    const logged = [...boxes.entries()]
+      .map(([id, size]) => `${id}=${describeSize(size)}`)
+      .join(' ');
+    console.log(`chip disabled sizes: ${logged}`);
+    // `disabled` is in no sizing key: a chip that changed size when it was disabled would be
+    // laid out at an enabled chip's box and repaint nothing.
+    expect(
+      sameSize(boxes.get('disabled-on')!, boxes.get('on')!),
+      `a disabled selected chip measures ${describeSize(
+        boxes.get('disabled-on')!
+      )} where the enabled one is ${describeSize(boxes.get('on')!)} - ${logged}`
+    ).toBe(true);
+    expect(
+      sameSize(boxes.get('disabled-off')!, boxes.get('off')!),
+      `a disabled unselected chip measures ${describeSize(
+        boxes.get('disabled-off')!
+      )} where the enabled one is ${describeSize(boxes.get('off')!)} - ${logged}`
+    ).toBe(true);
+  });
+
+  const itIos = Platform.OS === 'ios' ? it : it.skip;
+
+  itIos(
+    'paints a disabled selected chip apart from an unselected one, and dimmer than an enabled one',
+    async () => {
+      await renderEveryState();
+      const on = await paintOf('on');
+      const twin = await paintOf('on-twin');
+      const off = await paintOf('off');
+      const dimOn = await paintOf('disabled-on');
+      const dimOff = await paintOf('disabled-off');
+      const seen =
+        `on=${on} twin=${twin} off=${off} ` +
+        `disabledOn=${dimOn} disabledOff=${dimOff}`;
+      console.log(`chip iOS fill: ${seen}`);
+
+      const noise = colourDistance(on, twin);
+      expect(
+        noise <= NOISE,
+        `two chips mounted the same way read ${on} and ${twin}, ${noise} apart: ` +
+          `the read is too unsteady to separate anything. ${seen}`
+      ).toBe(true);
+
+      // The yardstick: an enabled chip says "selected" with its fill, in pale colour.
+      const enabled = colourDistance(on, off);
+      expect(
+        enabled > KEPT * NOISE,
+        `the read cannot tell an enabled selected chip (${on}) from an unselected ` +
+          `one (${off}) - only ${enabled} apart. ${seen}`
+      ).toBe(true);
+      const kept = Math.max(NOISE + 2, Math.round(enabled / KEPT));
+      const keptColour = Math.max(
+        3,
+        Math.round((chroma(on) - chroma(off)) / KEPT)
+      );
+      const apart = colourDistance(dimOn, dimOff);
+      const lighter = lightness(dimOn) - lightness(on);
+      const paler = chroma(on) - chroma(dimOn);
+      const dimmedColour = chroma(dimOn) - chroma(dimOff);
+      console.log(
+        `chip iOS yardstick: enabled=${enabled} colour=${chroma(on) - chroma(off)} ` +
+          `so a disabled chip must keep ${kept} and ${keptColour}: apart=${apart} ` +
+          `lighter=${lighter} paler=${paler} colour=${dimmedColour}`
+      );
+
+      // The bug: once disabled, the same two chips drew one fill.
+      expect(
+        apart >= kept,
+        `a disabled chip paints ${dimOn} selected and ${dimOff} unselected, only ` +
+          `${apart} apart against an enabled pair ${enabled} ` +
+          `apart: the selection does not reach the screen once the chip is disabled. ` +
+          `${seen}`
+      ).toBe(true);
+
+      // Dimmed means weaker than the enabled chip, never merely a different colour: a chip
+      // painted darker or louder than its enabled self is not dimmed at all.
+      expect(
+        lighter >= kept,
+        `a disabled selected chip paints ${dimOn} where the enabled one is ${on}: the dimmed ` +
+          `chip is ${lighter} lighter and has to be at least ${kept} lighter - a dimmed ` +
+          `selection is lighter than the selection it dims. ${seen}`
+      ).toBe(true);
+      expect(
+        paler >= keptColour,
+        `a disabled selected chip paints ${dimOn} carrying ${chroma(dimOn)} of colour where ` +
+          `the enabled ${on} carries ${chroma(on)}: it is ${paler} paler and has to be at ` +
+          `least ${keptColour} paler. ${seen}`
+      ).toBe(true);
+
+      // And what separates the disabled pair is the selected colour, dimmed.
+      expect(
+        dimmedColour >= keptColour,
+        `the disabled pair differs, but not in a dimmed selected colour: ${dimOn} ` +
+          `carries ${chroma(dimOn)} of colour against ${dimOff}'s ${chroma(
+            dimOff
+          )}, and the enabled selected chip carries ${chroma(on)}. ${seen}`
+      ).toBe(true);
+    }
+  );
+
+  itIos(
+    'keeps the label of a disabled selected chip as strong as an unselected one',
+    async () => {
+      await renderEveryState();
+      // A dimming that covers the text as well as the fill leaves this chip with the faintest
+      // label in the row, and a box mean cannot see it: a fainter label only makes the box read
+      // lighter. The read is the ink - the darkest pixel each chip paints, and how much of its
+      // box is painted at that strength.
+      const inkOff = await inkOf('disabled-off');
+      const inkOn = await inkOf('disabled-on');
+      const areaOff = await inkArea('disabled-off', inkOff);
+      const areaOn = await inkArea('disabled-on', inkOff);
+      const seen = `off=${inkOff} on=${inkOn} areaOff=${areaOff} areaOn=${areaOn}`;
+      console.log(`chip iOS label ink: ${seen}`);
+
+      // Without ink to compare there is nothing to compare: a chip that paints no label says
+      // nothing about how strong a label has to be.
+      expect(
+        areaOff > 0,
+        `a disabled unselected chip paints no pixel at its own darkest colour ${inkOff}, ` +
+          `so there is no label strength to hold the selected one to. ${seen}`
+      ).toBe(true);
+      expect(
+        lightness(inkOn) <= lightness(inkOff) + LABEL_INK,
+        `the label of a disabled selected chip reads ${inkOn} at its strongest where a ` +
+          `disabled unselected one reads ${inkOff}: the dimmed fill is ${
+            lightness(inkOn) - lightness(inkOff)
+          } fainter than ${LABEL_INK} and washes the text it paints. ${seen}`
+      ).toBe(true);
+      // Nearly all of it, at that same strength. The fill goes under the label, so the glyphs
+      // are the chip's own and only the anti-aliasing differs; anything that fades or replaces
+      // the text keeps a fraction of it, because a wash lightens every pixel of a glyph rather
+      // than one pixel of its edge.
+      expect(
+        areaOn * 10 >= areaOff * INK_KEPT,
+        `a disabled selected chip paints ${areaOn} pixels at the ${inkOff} its unselected ` +
+          `twin paints ${areaOff} of - ${(
+            (areaOn / Math.max(areaOff, 1)) *
+            100
+          ).toFixed(
+            0
+          )}% - so its label is faded or redrawn, not merely sitting on a dimmed fill. ${seen}`
+      ).toBe(true);
+    }
+  );
 });

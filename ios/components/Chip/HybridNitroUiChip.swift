@@ -37,6 +37,10 @@ final class ChipModel: NitroUiModel {
   private var drawn = "none"
   private var probes = 0
   private var accessibilityReport = "none"
+  /// What the last pixel probe saw, as one line. Written on main, read from the JS thread.
+  private let pixelReportLock = NSLock()
+  private var pixelReport = ""
+  private var pixelProbes = 0
 
   override init() {
     super.init()
@@ -83,6 +87,20 @@ final class ChipModel: NitroUiModel {
     return "displayed=\(drawn);probes=\(probes);a11y=\(accessibilityReport);iconTint=-"
   }
 
+  /// Store one pixel probe's answer, numbered so a test can tell its own from the last one's.
+  func publishPixelReport(_ report: String) {
+    pixelReportLock.lock()
+    pixelProbes += 1
+    pixelReport = "n=\(pixelProbes) \(report)"
+    pixelReportLock.unlock()
+  }
+
+  func readPixelReport() -> String {
+    pixelReportLock.lock()
+    defer { pixelReportLock.unlock() }
+    return pixelReport
+  }
+
   /// For recycling, so a reused view does not report the previous chip's state.
   func clearReports() {
     reportLock.lock()
@@ -90,6 +108,10 @@ final class ChipModel: NitroUiModel {
     probes = 0
     accessibilityReport = "none"
     reportLock.unlock()
+    pixelReportLock.lock()
+    pixelReport = ""
+    pixelProbes = 0
+    pixelReportLock.unlock()
   }
 }
 
@@ -409,21 +431,95 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
     return host.model.stateReport()
   }
 
-  private let pixelProbesLock = NSLock()
-  private var pixelProbes = 0
-
-  /// iOS has no Android icon glyph to sample, so the report says `no pixels`, which the
-  /// tests treat as a failure.
+  /// Sample the pixels this chip is drawing, and store the answer for
+  /// `nuiTestPixelReport()`. Posted to main instead of blocking: reading pixels needs the layer
+  /// rendered, and a Nitro method must not block on main.
   func nuiTestPixelProbe(color: Double) throws {
-    pixelProbesLock.lock()
-    pixelProbes += 1
-    pixelProbesLock.unlock()
+    let run = { [weak self] in
+      guard let self else { return }
+      self.model.publishPixelReport(nitroUiSampleChipDrawing(of: self.host, for: color))
+    }
+    if Thread.isMainThread {
+      run()
+    } else {
+      DispatchQueue.main.async(execute: run)
+    }
   }
 
   func nuiTestPixelReport() throws -> String {
-    pixelProbesLock.lock()
-    let probes = pixelProbes
-    pixelProbesLock.unlock()
-    return "n=\(probes) no pixels platform=ios"
+    return host.model.readPixelReport()
   }
+}
+
+/// How far a drawn pixel may sit from the colour a probe asked for and still count as that
+/// colour. A chip's fill is translucent and its label is anti-aliased, so a drawn pixel is close
+/// to a colour, rarely exactly it.
+private let nitroUiChipPixelBudget = 30
+
+/// What the pixels `view` is drawing say about `color`, as one line: how many are painted in it,
+/// the mean colour of the box, and the pixel nearest the colour asked for. `afterScreenUpdates:
+/// true` reads what is on screen rather than the layer tree at the start of the transaction. The
+/// capture goes over a fixed white backdrop, which makes every pixel final and two chips
+/// comparable whichever page happens to be behind them.
+private func nitroUiSampleChipDrawing(of view: UIView, for color: Double) -> String {
+  let bounds = view.bounds
+  guard bounds.width >= 2, bounds.height >= 2 else {
+    return "size=\(Int(bounds.width))x\(Int(bounds.height)) no pixels"
+  }
+  let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
+    view.drawHierarchy(in: bounds, afterScreenUpdates: true)
+  }
+  guard let bitmap = image.cgImage else {
+    return "size=\(Int(bounds.width))x\(Int(bounds.height)) no image"
+  }
+  let width = bitmap.width, height = bitmap.height
+  let bytesPerRow = 4 * width
+  var data = [UInt8](repeating: 0, count: bytesPerRow * height)
+  guard
+    let space = CGColorSpace(name: CGColorSpace.sRGB),
+    let context = CGContext(
+      data: &data, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
+      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+  else {
+    return "size=\(Int(bounds.width))x\(Int(bounds.height)) no context"
+  }
+  context.setFillColor(UIColor.white.cgColor)
+  context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+  context.draw(bitmap, in: CGRect(x: 0, y: 0, width: width, height: height))
+  // The red/green/blue of an ARGB `processColor` int. Only the low 32 bits matter.
+  guard color.isFinite, color >= -2_147_483_648, color <= 4_294_967_295 else {
+    return "size=\(Int(bounds.width))x\(Int(bounds.height)) no colour"
+  }
+  let argb = UInt32(truncatingIfNeeded: Int64(color))
+  let wanted = (
+    red: Int((argb >> 16) & 0xff), green: Int((argb >> 8) & 0xff), blue: Int(argb & 0xff)
+  )
+  var hits = 0
+  var redSum = 0, greenSum = 0, blueSum = 0
+  var closest = (distance: Int.max, red: 0, green: 0, blue: 0)
+  for row in 0..<height {
+    for column in 0..<width {
+      let offset = row * bytesPerRow + column * 4
+      // Every pixel is opaque after the backdrop, so the channels are final.
+      let red = Int(data[offset]), green = Int(data[offset + 1]), blue = Int(data[offset + 2])
+      redSum += red
+      greenSum += green
+      blueSum += blue
+      let distance = abs(red - wanted.red) + abs(green - wanted.green) + abs(blue - wanted.blue)
+      if distance <= nitroUiChipPixelBudget {
+        hits += 1
+      }
+      if distance < closest.distance {
+        closest = (distance, red, green, blue)
+      }
+    }
+  }
+  let area = width * height
+  // Same arithmetic as Android's pixel probe, so `mean` is comparable across platforms.
+  let mean = (redSum / area) << 16 | (greenSum / area) << 8 | blueSum / area
+  return String(
+    format: "size=\(Int(bounds.width))x\(Int(bounds.height)) want=#%02X%02X%02X hits=\(hits) "
+      + "mean=#%06X closest=#%02X%02X%02X",
+    wanted.red, wanted.green, wanted.blue, mean, closest.red, closest.green, closest.blue
+  )
 }

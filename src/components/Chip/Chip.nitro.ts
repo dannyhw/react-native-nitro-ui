@@ -104,8 +104,9 @@ export interface NitroUiChipMethods extends HybridViewMethods {
 
   /**
    * Test-only: sample the pixels this chip is drawing, looking for `color`, and
-   * keep the answer for `nuiTestPixelReport`. Returns at once, because sampling
-   * needs the UI thread; poll the report.
+   * keep the answer for `nuiTestPixelReport` — Android the glyph slot, iOS the
+   * whole chip. Returns at once, because sampling needs the UI thread; poll the
+   * report.
    *
    * @internal Not app API. Remove once the test harness can read pixels.
    */
@@ -114,8 +115,9 @@ export interface NitroUiChipMethods extends HybridViewMethods {
   /**
    * Test-only: what the last `nuiTestPixelProbe` found:
    * `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
-   * closest=#<RRGGBB>`, or `n=<probes> no pixels` on iOS, which has no Android
-   * glyph to sample. Empty before the first probe.
+   * closest=#<RRGGBB>`. Android samples the glyph slot and iOS the whole chip, so
+   * `mean` is what the sampled box settles at. `no pixels` is the refusal for a
+   * box too small to read. Empty before the first probe.
    *
    * @internal Not app API.
    */
