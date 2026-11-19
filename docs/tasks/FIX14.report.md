@@ -35,52 +35,38 @@ per URL. Release builds, drawable names and named Material Symbols are untouched
 
 ## Gates
 
+Round 1's own runs are in the ledger. The table that stands is the generated one at the end of this
+report, under `## Fix round 1`, which covers the branch's final code tree.
+
+## Fix round 1
+
+The provenance check and the Material Symbols lock live under `scripts/`, which this task may not
+change, so no folder beside `icons/` can be shown official from here. The device fixture, the harness
+case that used it and the README row naming it are gone. The library fix and its JVM test stay; the
+device check is a follow-up.
+
+An escaped query value, a raw `+`, a `localhost` host and a pathless URL joined `NitroUiIconUrlTest`
+(14 tests). The path-start search is now `indexOfAny`, and the lone-surrogate comment says the encoder
+gives a `?`, sent as `%3F`. The changeset and `docs/components/button.md` now say a `#` in a
+development path belongs to the file's name, and that a folder already named like an escape
+(`icons/a%41b/`) draws nothing; the changeset's `%` claim is narrowed to a `%` no escape starts with.
+
+Red proofs — one build each, one thing broken:
+
+- `anOrdinaryUrlIsRequestedExactlyAsMetroWroteIt`, `anEscapeMetroAlreadySentIsNotSentTwice` -> the
+  authority quoted like a path -> 13 of 14 red, `ComparisonFailure at NitroUiIconUrlTest.kt:24` and
+  `:52`; against `isEscape(part, at) = false` -> `my%2[]0icons` over as `my%2[52]0icons`.
+- `aPlusInTheQueryIsSentAsItWasWritten` -> `+` out of `SUB_DELIMS` -> `hash=a[%2B]b`.
+- `anUrlWithNoPathIsRequestedAsItStands` -> the pathless branch returns `"$raw/"` -> `8081[/]`.
+
+`need --for review` asked for `check` and `harness:android` alone; both are green here. The
+`MetroIconPath` row names a suite that no longer exists.
+
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `67bec96aa336` | 1 m 01 s | start 23.5 / med 18.1 / max 23.5 |
-| `harness:ios` | **PASS** | 611 tests / 30 suites + isolated 6 tests / 3 suites | `67bec96aa336` (harness:ios digest) | 14 m 30 s | start 5.9 / med 8.1 / max 30.0 |
-| `harness:android` | **PASS** | 670 tests / 32 suites + isolated 6 tests / 3 suites | `67bec96aa336` (harness:android digest) | 18 m 10 s | start 3.7 / med 4.7 / max 12.7 |
-| `real-input:ios` | missing | — | — | — | — |
+| `check` | **PASS** | 2178 tests / 96 suites | `201ffc08b8f5` | 1 m 02 s | start 7.5 / med 8.4 / max 9.3 |
+| `harness:ios` | **PASS** (from `task/FIX13-button-group-text-spacing`) | 611 tests / 30 suites + isolated 6 tests / 3 suites | `85cf285d0ecf` (harness:ios digest) | 14 m 26 s | start 11.2 / med 5.8 / max 11.2 |
+| `harness:android` | **PASS** | 669 tests / 31 suites + isolated 6 tests / 3 suites | `201ffc08b8f5` (harness:android digest) | 20 m 18 s | start 4.6 / med 5.8 / max 19.4 |
+| `real-input:ios` | **PASS** (from `merge/FIX13`) | — | `85cf285d0ecf` (real-input:ios digest) | 44 m 12 s | start 3.8 / med 6.0 / max 17.5 |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:android:MetroIconPath` | **PASS** | 1 tests / 1 suites | `af7fe4d940b2` (harness:android digest) | 7.1 s | start 5.8 / med 6.1 / max 6.4 |
-
-`need --for review`: ✓ check — green · ✓ harness:ios — green on its own digest · ✓ harness:android —
-green on its own digest · note: treated as both platforms (outside the known prefixes):
-`example/__tests__/MetroIconPath.android.harness.tsx`,
-`example/src/assets/icons with a space/star_24px.xml` · need: review is satisfied on this code tree.
-`real-input:*` is left for merge, as the brief says.
-
-## Red proofs
-
-- `NitroUiIconUrlTest` (10 tests) -> `requestUri(raw) = URI(raw)`, the behaviour before this change ->
-  8 of 10 red, e.g. `aSpaceInThePathIsQuotedAndTheFileIsStillReached FAILED
-  java.net.URISyntaxException at NitroUiIconUrlTest.kt:35`; green with the fix, `tests="10"
-  failures="0"`.
-- Withdrawn in fix round 1: `MetroIconPath.android.harness.tsx › draws an icon whose folder name
-  holds a space` did go red against the same mutation built into the APK, but the case and its
-  fixture are gone (see `## Fix round 1`), so that proof stands for nothing here.
-
-## Files changed
-
-- `android/src/main/java/com/margelo/nitro/nitroui/NitroUiIconUrl.kt`: the quoter, free of Android
-  imports so the JVM test reaches it.
-- `android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt`: `parse` opens
-  `NitroUiIconUrl.requestUri(url)`.
-- `android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconUrlTest.kt`: the request URL for a
-  space, a `#`, a stray `%`, non-ASCII, an already-escaped path, an IPv6 authority and a `file://`.
-- Added in round 1 and removed again in fix round 1:
-  `example/__tests__/MetroIconPath.android.harness.tsx`, its fixture in a sibling folder named
-  `icons with a space`, and the `example/src/assets/icons/README.md` row that pointed at it.
-- `.changeset/android-icon-url-spaces.md`, `etc/package-files.txt`.
-
-## Follow-ups
-
-- A device case drawing a `require`d icon from a folder with a space, once
-  `scripts/__tests__/android-icons.test.js` reads that folder and
-  `scripts/icons/material-symbols.lock.json` records the file. The provenance scan reads
-  `example/src/assets/icons` one level deep and the lock knows no sibling folder, so such a fixture
-  cannot be shown to be an official file from inside this task.
-- FOLLOWUPS G19, second half (`/assets/../..` sent as-is): not settled by this change — `..` is
-  legal inside a segment, so the quoter leaves it exactly as `URI` did. Out of scope per the brief.
-- The Gradle daemon this round started is left running: `gradlew --stop` is machine-wide and another
-  task is building on this machine.
+| `harness:android:MetroIconPath` | stale | 1 tests / 1 suites | af7fe4d940b2 (not this tree) | 7.1 s | start 5.8 / med 6.1 / max 6.4 |
