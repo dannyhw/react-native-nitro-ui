@@ -733,28 +733,26 @@ describe('ButtonGroup · G20', () => {
 
     /**
      * Disable or enable the group and read the row once its overflow control has answered for
-     * that state. A probe lays the row out before answering, so probing again is what carries the
-     * row into the state the prop asked for.
+     * that state. The control answers from the row's own placement, so the answer arriving is the
+     * row having laid itself out in that state; only then is the row probed, because a probe
+     * publishes the placement of the moment it runs.
      */
     async function rowWhenDisabled(
       disabled: boolean
     ): Promise<Record<string, string>> {
       const wanted = disabled ? 'none' : 'composed';
       disabledSetters.get('bg-keep-row')!(disabled);
-      let row = await probeRow('bg-keep-row');
-      for (let attempt = 0; attempt < 30 && row.menu !== wanted; attempt += 1) {
-        await sleep(100);
-        row = await probeRow('bg-keep-row');
-      }
-      if (row.menu !== wanted) {
-        throw new Error(
-          `"bg-keep-row" never reported its overflow control "${wanted}" with the group ` +
-            `${disabled ? 'disabled' : 'enabled'} - it reports "${handleOf(
-              'bg-keep-row'
-            ).nuiTestStateReport()}".`
-        );
-      }
-      return row;
+      const state = `the group ${disabled ? 'disabled' : 'enabled'}`;
+      await pollUntil(
+        () => (reportOf('bg-keep-row').menu === wanted ? true : null),
+        () =>
+          new Error(
+            `"bg-keep-row" never reported its overflow control "${wanted}" with ${state} ` +
+              `- it reports "${handleOf('bg-keep-row').nuiTestStateReport()}".`
+          ),
+        8000
+      );
+      return await probeRow('bg-keep-row');
     }
 
     const enabled = await probeRow('bg-keep-row');
