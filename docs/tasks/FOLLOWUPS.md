@@ -221,7 +221,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - real-input Android (G17): the clear button is located by geometry (the one clickable node in the field's right half) because Material 3 gives it no stable `resource-id`; a tree change would make it report "two candidates" rather than mis-tap, but a named route would be better.
 - gate.mjs (G17): `wait --gate <g>` prints "last log line" from the newest log for the gate name, so in the seconds before a re-run writes its own log it shows the *previous* run's failure line — reads as if the new run were already red.
 - G17 review: move Android SearchField to material3 1.5's stateful `InputField` in a plain `Surface`, not `SearchBar`, which wraps the field in `DisableSoftKeyboard`. Keyboard props come with it.
-- G17 review: `SearchFieldStrings` reads `Resources.getSystem()` once per process, so it ignores an app's own language setting.
 - G17 review: the declared-fallback constants aren't checked against the native constants (the harness poisons the cache).
 - G17 review: Android `hasText` uses `derivedStateOf` without `remember`; there's no SearchField IME composition test on Android.
 - G18 review: iOS Tooltip's own window calls `makeKeyAndVisible`, which may close the keyboard beside a focused field. Measure it.
