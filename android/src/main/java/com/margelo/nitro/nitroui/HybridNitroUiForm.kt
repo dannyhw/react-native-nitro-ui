@@ -421,8 +421,9 @@ internal class NitroUiFormView(
   }
 
   /**
-   * `ReactScrollView` only scrolls to a rectangle its direct child asks for, so a request
-   * from a descendant is passed up with the rectangle moved into this view's coordinates.
+   * Handing a descendant's ask to show a rectangle to the scroll ancestor, with the rectangle
+   * moved into this view's coordinates. Android's own walk up the ancestors carries the same
+   * ask to every view above it, so this is one route to the scroller rather than the only one.
    */
   override fun requestChildRectangleOnScreen(
     child: View,
