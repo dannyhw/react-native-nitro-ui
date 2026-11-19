@@ -188,14 +188,22 @@ final class ButtonGroupModel: NitroUiModel {
   /// Never `@Published`: publishing from the body would ask for the update that has just happened.
   private var placedVisible = -1
   private var placedOverflow = false
+  /// Whether that control can present its menu, which the group's `disabled` decides.
+  private var placedOverflowPresents = false
   /// Which row the placed candidate drew: `controlGroup` or `standard`.
   private var placedRow = "none"
 
   /// Record what the row laid out. Safe from any thread.
-  func recordPlacement(visible: Int, overflow: Bool, controlGroup: Bool) {
+  func recordPlacement(
+    visible: Int,
+    overflow: Bool,
+    overflowPresents: Bool,
+    controlGroup: Bool
+  ) {
     reportLock.lock()
     placedVisible = visible
     placedOverflow = overflow
+    placedOverflowPresents = overflowPresents
     placedRow = controlGroup ? "controlGroup" : "standard"
     reportLock.unlock()
   }
@@ -245,13 +253,14 @@ final class ButtonGroupModel: NitroUiModel {
   }
 
   /// What the control is showing, as one line. Safe from any thread. `menu` says whether the row
-  /// composes the overflow control: a presented SwiftUI `Menu` cannot be read before iOS 18's
-  /// `isExpanded`.
+  /// composes an overflow control that can present its menu: a presented SwiftUI `Menu` cannot be
+  /// read before iOS 18's `isExpanded`, and a disabled group draws a control that cannot present.
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
     return
-      "checked=\(checkedReport);\(rowReport);menu=\(placedOverflow ? "composed" : "none");"
+      "checked=\(checkedReport);\(rowReport);"
+      + "menu=\(placedOverflow && placedOverflowPresents ? "composed" : "none");"
       + "drawing=\(drawingReport);ink=\(inkReport);probes=\(probes);"
       + "a11y=\(accessibilityReport)"
   }
@@ -281,6 +290,7 @@ final class ButtonGroupModel: NitroUiModel {
     probes = 0
     placedVisible = -1
     placedOverflow = false
+    placedOverflowPresents = false
     placedRow = "none"
     checkedReport = "none"
     reportLock.unlock()
@@ -376,22 +386,26 @@ struct ButtonGroupContent: NitroUIContent {
     overflow: [ButtonGroupItemState],
     useControlGroup: Bool
   ) -> some View {
-    PlacementWitness(
-      // What the row composed: a disabled group composes no overflow control.
+    let overflowing = !overflow.isEmpty
+    return PlacementWitness(
+      // What the row composed, and whether that control can present its menu: a disabled group
+      // draws the control and cannot open it.
       onPlace: {
         model.recordPlacement(
           visible: items.count,
-          overflow: !overflow.isEmpty && !model.disabled,
+          overflow: overflowing,
+          overflowPresents: overflowing && !model.disabled,
           controlGroup: useControlGroup
         )
       }
     ) {
       HStack(spacing: ButtonGroupContent.spacing) {
         row(items, useControlGroup: useControlGroup, reservesFootprint: reservesFootprint(items))
-        // A disabled group must not own a live popup, so the overflow control is left out of the
-        // row.
-        if !overflow.isEmpty, !model.disabled {
-          overflowMenu(overflow)
+        // The control keeps its room in the row whatever the group's state: leaving it out while
+        // the group is disabled measures that candidate narrower, and a disabled row then fits
+        // items the enabled one cannot.
+        if overflowing {
+          overflowControl(overflow)
         }
       }
     }
@@ -408,6 +422,7 @@ struct ButtonGroupContent: NitroUIContent {
     model.recordPlacement(
       visible: items.count,
       overflow: false,
+      overflowPresents: false,
       controlGroup: useControlGroup
     )
     return AnyView(
@@ -523,6 +538,26 @@ struct ButtonGroupContent: NitroUIContent {
 
   // MARK: - The overflow control
 
+  /// The row's overflow control. A disabled group draws the same label in a control with nothing
+  /// to present: a `Menu` kept in the row would hold an open popup its group can no longer close,
+  /// and no control at all would measure the row narrower than it is enabled.
+  @ViewBuilder private func overflowControl(
+    _ items: [ButtonGroupItemState]
+  ) -> some View {
+    if model.disabled {
+      Button(action: {}) { overflowLabel() }
+        .disabled(true)
+    } else {
+      overflowMenu(items)
+    }
+  }
+
+  /// The control's label, shared by the `Menu` and by the control a disabled group draws, so that
+  /// both take the same room in the row.
+  private func overflowLabel() -> some View {
+    Label(model.overflowAccessibilityLabel ?? "More", systemImage: "ellipsis")
+  }
+
   /// The "More" `Menu`, composed beside the group, never inside it: as a segment inside a
   /// `ControlGroup` it draws disabled and a tap does nothing. The host's `needsContainment` is what
   /// lets it present.
@@ -535,18 +570,17 @@ struct ButtonGroupContent: NitroUIContent {
           Toggle(isOn: toggleBinding(item)) {
             Text(item.title)
           }
-          .disabled(model.disabled || item.disabled)
+          .disabled(item.disabled)
         } else {
           Button(action: { model.press(item.id) }) {
             Text(item.title)
           }
-          .disabled(model.disabled || item.disabled)
+          .disabled(item.disabled)
         }
       }
     } label: {
-      Label(model.overflowAccessibilityLabel ?? "More", systemImage: "ellipsis")
+      overflowLabel()
     }
-    .disabled(model.disabled)
   }
 
   /// The binding a toggle reads and writes. The setter ignores the value SwiftUI asked for: the
@@ -827,7 +861,7 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     set {
       guard newValue != model.disabled else { return }
       model.disabled = newValue
-      // Repaints only: a disabled row is the same size. It also drops the overflow control.
+      // Repaints only: a disabled row keeps its size and the items it laid out.
       host.markDirty()
     }
   }

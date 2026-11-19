@@ -683,6 +683,168 @@ describe('ButtonGroup · G20', () => {
     );
   });
 
+  it('keeps the same items in its row when it is disabled', async () => {
+    // Android's overflow indicator belongs to Material's `ButtonGroup` and is drawn whatever
+    // the group's state. On iOS this library composes the row itself, so a disabled group has
+    // to keep the control's room in it to fit what it fits enabled.
+    if (Platform.OS !== 'ios') return;
+    poison([sizingKey('standard', 'filled', 'medium', 'automatic', MANY)]);
+    await render(
+      <View style={WELL}>
+        <Controlled testId="bg-keep-row" items={MANY} initialChecked={[]} />
+      </View>
+    );
+    await waitForTestId('bg-keep-row');
+    await waitForMeasured('bg-keep-row', 'the overflowing group, enabled');
+
+    /** The furthest right anything was drawn inside the group's box, in points. */
+    function rightmostInk(row: Record<string, string>): number {
+      let right = 0;
+      for (const run of (row.ink ?? 'none').split('|')) {
+        const bounds = /^([\d.]+)~([\d.]+)$/.exec(run);
+        if (bounds != null) right = Math.max(right, Number(bounds[2]));
+      }
+      return right;
+    }
+
+    function describeRow(row: Record<string, string>): string {
+      return (
+        `visible=${row.visible ?? 'none'} shown=${row.shown ?? 'none'} ` +
+        `overflow=${row.overflow ?? 'none'} ink=${row.ink ?? 'none'}`
+      );
+    }
+
+    /** Probe until the row has placed something: a host mounted moments ago may not have
+     * laid its own row out yet. */
+    async function probePlacedRow(
+      testId: string
+    ): Promise<Record<string, string>> {
+      let row = await probeRow(testId);
+      for (
+        let attempt = 0;
+        attempt < 30 && (row.visible ?? 'none') === 'none';
+        attempt += 1
+      ) {
+        await sleep(100);
+        row = await probeRow(testId);
+      }
+      return row;
+    }
+
+    /**
+     * Disable or enable the group and read the row once its overflow control has answered for
+     * that state. The control answers from the row's own placement, so the answer arriving is the
+     * row having laid itself out in that state; only then is the row probed, because a probe
+     * publishes the placement of the moment it runs.
+     */
+    async function rowWhenDisabled(
+      disabled: boolean
+    ): Promise<Record<string, string>> {
+      const wanted = disabled ? 'none' : 'composed';
+      disabledSetters.get('bg-keep-row')!(disabled);
+      const state = `the group ${disabled ? 'disabled' : 'enabled'}`;
+      await pollUntil(
+        () => (reportOf('bg-keep-row').menu === wanted ? true : null),
+        () =>
+          new Error(
+            `"bg-keep-row" never reported its overflow control "${wanted}" with ${state} ` +
+              `- it reports "${handleOf('bg-keep-row').nuiTestStateReport()}".`
+          ),
+        8000
+      );
+      return await probeRow('bg-keep-row');
+    }
+
+    const enabled = await probeRow('bg-keep-row');
+    expect(Number(enabled.visible)).toBeGreaterThan(0);
+    expect(Number(enabled.visible)).toBeLessThan(MANY.length);
+    expect(enabled.overflow).toBe('1');
+    expect(enabled.menu).toBe('composed');
+
+    const disabled = await rowWhenDisabled(true);
+    expect(
+      disabled.overflow,
+      `disabling the group took its overflow control out of the row, which is how the row ` +
+        `below fits more items - enabled "${describeRow(enabled)}", disabled ` +
+        `"${describeRow(disabled)}".`
+    ).toBe('1');
+    expect(
+      disabled.visible,
+      `disabling the group changed which items fit its row - enabled ` +
+        `"${describeRow(enabled)}", disabled "${describeRow(disabled)}".`
+    ).toBe(enabled.visible);
+    expect(
+      disabled.shown,
+      `the same items must be drawn in the same order.`
+    ).toBe(enabled.shown);
+    expect(
+      disabled.menu,
+      `a disabled group must keep no control that can present a menu - it reports ` +
+        `"${describeRow(disabled)}".`
+    ).toBe('none');
+
+    // Every id, drawn or overflowed: a disabled group answers to none of them.
+    const from = events.length;
+    for (const item of MANY) {
+      handleOf('bg-keep-row').nuiTestPressItem(item.id);
+    }
+    await sleep(EVENT_QUIET_MS);
+    expect(events.slice(from)).toEqual([]);
+
+    const enabledAgain = await rowWhenDisabled(false);
+    expect(
+      enabledAgain.visible,
+      `enabling the group again did not give back the row it started with - ` +
+        `"${describeRow(enabled)}" before, "${describeRow(enabledAgain)}" after.`
+    ).toBe(enabled.visible);
+    expect(enabledAgain.shown, `and the same items in the same order.`).toBe(
+      enabled.shown
+    );
+
+    // The row is not only reported the same: its drawing ends where it ended, so the overflow
+    // control is drawn in the disabled row too, and not merely counted. A dimmed glyph is
+    // anti-aliased a hair narrower than a live one.
+    const drift = Math.abs(rightmostInk(disabled) - rightmostInk(enabled));
+    expect(
+      drift,
+      `the disabled row draws its furthest ink ${drift.toFixed(2)} pt away from the enabled ` +
+        `row's - enabled "${describeRow(enabled)}", disabled "${describeRow(disabled)}".`
+    ).toBeLessThanOrEqual(2);
+
+    // The same row reached two ways: mounted disabled beside the group that was enabled
+    // throughout, rather than only flipped into that state.
+    await render(
+      <View style={WELL}>
+        <Controlled testId="bg-twin-on" items={MANY} initialChecked={[]} />
+        <Controlled
+          testId="bg-twin-off"
+          items={MANY}
+          initialChecked={[]}
+          initialDisabled
+        />
+      </View>
+    );
+    await waitForTestId('bg-twin-on');
+    await waitForTestId('bg-twin-off');
+    await waitForMeasured('bg-twin-on', 'the enabled twin');
+    await waitForMeasured('bg-twin-off', 'the disabled twin');
+    const twinOn = await probePlacedRow('bg-twin-on');
+    const twinOff = await probePlacedRow('bg-twin-off');
+    expect(
+      twinOff.visible,
+      `a group mounted disabled holds a different row from its enabled twin - enabled ` +
+        `"${describeRow(twinOn)}", disabled "${describeRow(twinOff)}".`
+    ).toBe(twinOn.visible);
+    expect(twinOff.shown, `and the same items in the same order.`).toBe(
+      twinOn.shown
+    );
+    expect(
+      twinOff.overflow,
+      `and an overflow control drawn where it is drawn.`
+    ).toBe('1');
+    expect(twinOff.menu, `and nothing that can present a menu.`).toBe('none');
+  });
+
   it('names every item kind, and an icon-only item by its title', async () => {
     const items: ButtonGroupItem[] = [
       // Has a glyph: drawn icon-only, the title becomes the description.
@@ -835,8 +997,8 @@ describe('ButtonGroup · G20', () => {
     expect(fresh.checked).toBe('none');
     expect(fresh.shown).toBe('day,week');
     expect(fresh.overflow).toBe('0');
-    // `menu` is the menu's open state on Android; on iOS it is whether the row
-    // composes an overflow control.
+    // `menu` is the menu's open state on Android; on iOS it is whether the row composes an
+    // overflow control that can present its menu.
     expect(fresh.menu).toBe(Platform.OS === 'android' ? 'closed' : 'none');
     await sleep(EVENT_QUIET_MS);
     expect(events).toEqual([]);

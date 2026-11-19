@@ -303,7 +303,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G20: `useNativeItems` rebuilds the `items` array on every `checked` change, so one item's flip re-sends the whole row across the bridge.
 - G20: Android's per-item icon slots and interaction sources are positional — key them by `item.id` so an item inserted mid-row cannot inherit another's glyph or handler.
 - G20: Android's overflow rows draw no icon; wire them in with G21's `MenuRowIcons` rather than a second icon path.
-- G20: disabling a group on iOS refits more items into the row, because the candidate that composes no overflow control measures narrower; the row's item count should not depend on `disabled`.
 - G20: `useControlledCheckedIds` has no Jest test — the JS half of the per-item controlled/uncontrolled split is only proved through native.
 - G20: the `mount.button-group` bench is unmeasured on this machine (no merge-mint number yet).
 - G24 fix round 2: `refreshChrome` publishes `gap=0` before the section's layer has composed, so every Section takes one extra render at mount before the real gap arrives. Publish only a measured gap, or hold the first frame.
@@ -406,6 +405,7 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - No cut-caret test covers the multi-line field or SearchField, and the `insertText` path has no caret test.
   - Android: the `suggestions` read-back runs through the same interceptor, so it cannot show that a prop change reaches the keyboard (Compose 1.12.1 restarts the session, read from its bytecode). Every edit builds a small string production never needs.
 - ButtonGroup, open after overflow-row icons and iOS toggle styles:
+  - iOS disabled group: the overflow control's placeholder width equals the `Menu` label's by construction and is measured in one configuration only; no test taps the dimmed control or reads what VoiceOver calls it; the `menu=` report field is worked out from the `disabled` prop, not from what was drawn, so its checks cannot fail.
   - iOS `text` group with a toggle: every item composes a hidden `.bordered` copy of its label to reserve its room, and the reserved padding is not the item's tap area; no accessibility read covers it.
   - A disabled *checked* iOS toggle is not measured; in four of the five variants it may draw like a disabled unchecked one.
   - `ButtonGroup.harness.tsx`: the "disabled drawn in the tint" check is a share of the box and cannot fire for `text`; the ink ratio is coarse for an item that draws few pixels; the `titleOnly` overflow read has no positive check that rows were drawn; the hidden capsule copy's accessibility is not read. `RealInputTests.swift`'s toggle check has its own 3 s state poll beside the shared wait helper.

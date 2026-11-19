@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-19 A disabled iOS ButtonGroup keeps the items its row showed while enabled, with its overflow
+  control dimmed in place, instead of fitting one more item (FIX18, #109).
 - 11-19 On iOS, a `BottomSheet` that UIKit silently refused to present reports
   `onIsPresentedChange(false)` and presents the next time it is asked, instead of staying closed
   for the rest of its mount (FIX17, #108).
