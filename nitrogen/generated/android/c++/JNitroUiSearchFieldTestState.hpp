@@ -63,6 +63,8 @@ namespace margelo::nitro::nitroui {
       jboolean expanded = this->getFieldValue(fieldExpanded);
       static const auto fieldCanClear = clazz->getField<jboolean>("canClear");
       jboolean canClear = this->getFieldValue(fieldCanClear);
+      static const auto fieldSuggestions = clazz->getField<jni::JString>("suggestions");
+      jni::local_ref<jni::JString> suggestions = this->getFieldValue(fieldSuggestions);
       return NitroUiSearchFieldTestState(
         text->toStdString(),
         static_cast<bool>(focused),
@@ -79,7 +81,8 @@ namespace margelo::nitro::nitroui {
         autoCapitalize->toStdString(),
         static_cast<bool>(autoCorrect),
         static_cast<bool>(expanded),
-        static_cast<bool>(canClear)
+        static_cast<bool>(canClear),
+        suggestions->toStdString()
       );
     }
 
@@ -89,7 +92,7 @@ namespace margelo::nitro::nitroui {
      */
     [[maybe_unused]]
     static jni::local_ref<JNitroUiSearchFieldTestState::javaobject> fromCpp(const NitroUiSearchFieldTestState& value) {
-      using JSignature = JNitroUiSearchFieldTestState(jni::alias_ref<jni::JString>, jboolean, jboolean, double, double, jni::alias_ref<jni::JString>, jboolean, double, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jboolean, jboolean, jboolean);
+      using JSignature = JNitroUiSearchFieldTestState(jni::alias_ref<jni::JString>, jboolean, jboolean, double, double, jni::alias_ref<jni::JString>, jboolean, double, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jboolean, jboolean, jboolean, jni::alias_ref<jni::JString>);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
@@ -109,7 +112,8 @@ namespace margelo::nitro::nitroui {
         jni::make_jstring(value.autoCapitalize),
         value.autoCorrect,
         value.expanded,
-        value.canClear
+        value.canClear,
+        jni::make_jstring(value.suggestions)
       );
     }
   };

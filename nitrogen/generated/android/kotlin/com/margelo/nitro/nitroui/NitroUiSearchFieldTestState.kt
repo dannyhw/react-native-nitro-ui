@@ -65,7 +65,10 @@ data class NitroUiSearchFieldTestState(
   val expanded: Boolean,
   @DoNotStrip
   @Keep
-  val canClear: Boolean
+  val canClear: Boolean,
+  @DoNotStrip
+  @Keep
+  val suggestions: String
 ) {
   /* primary constructor */
 
@@ -88,6 +91,7 @@ data class NitroUiSearchFieldTestState(
       && Objects.deepEquals(this.autoCorrect, other.autoCorrect)
       && Objects.deepEquals(this.expanded, other.expanded)
       && Objects.deepEquals(this.canClear, other.canClear)
+      && Objects.deepEquals(this.suggestions, other.suggestions)
   }
 
   override fun hashCode(): Int {
@@ -107,7 +111,8 @@ data class NitroUiSearchFieldTestState(
       autoCapitalize,
       autoCorrect,
       expanded,
-      canClear
+      canClear,
+      suggestions
     ).contentDeepHashCode()
   }
 
@@ -119,8 +124,8 @@ data class NitroUiSearchFieldTestState(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(text: String, focused: Boolean, composing: Boolean, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Boolean, maxLength: Double, placeholder: String, accessibilityLabel: String, returnKeyType: String, keyboardType: String, autoCapitalize: String, autoCorrect: Boolean, expanded: Boolean, canClear: Boolean): NitroUiSearchFieldTestState {
-      return NitroUiSearchFieldTestState(text, focused, composing, nativeEvents, jsEvents, lastWrite, editable, maxLength, placeholder, accessibilityLabel, returnKeyType, keyboardType, autoCapitalize, autoCorrect, expanded, canClear)
+    private fun fromCpp(text: String, focused: Boolean, composing: Boolean, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Boolean, maxLength: Double, placeholder: String, accessibilityLabel: String, returnKeyType: String, keyboardType: String, autoCapitalize: String, autoCorrect: Boolean, expanded: Boolean, canClear: Boolean, suggestions: String): NitroUiSearchFieldTestState {
+      return NitroUiSearchFieldTestState(text, focused, composing, nativeEvents, jsEvents, lastWrite, editable, maxLength, placeholder, accessibilityLabel, returnKeyType, keyboardType, autoCapitalize, autoCorrect, expanded, canClear, suggestions)
     }
   }
 }
