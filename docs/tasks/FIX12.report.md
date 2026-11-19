@@ -144,12 +144,40 @@ Red proofs, three in one run and the last alone, each narrowed with `--a11y swit
 
 ### Gates
 
+`gate.mjs table` prints one row per gate, so the report carries one table: the current one is under
+Fix round 2.
+## Fix round 2
+
+**M1**: the rising drag is measured on the screen (`rawX`/`rawY`; tracker fed a screen-space copy of
+each event) — the measuring view rides the sheet's animation. **M2**: `scrollsUnderneath` compares the
+point with a child's own `width`/`height`, not its parent-relative `right`/`bottom`. **N8**: a release
+after Back or JS has closed the sheet decides nothing. **N4/N7**: changeset narrowed, brief-citing
+comment gone. The 85% sheet's list overflows a fixed height, so the strip beside it is the sheet's own.
+
+Red proofs, each the only red of 14 (runs 08:42, 08:49 — the ledger takes its tree from HEAD, so those
+two FAIL rows sit against this tree's digest):
+
+- beside the list -> `childX > child.right || childY > child.bottom` back -> `:690` the detent never
+  detached.
+- drift-down fling -> `abs(vertical) > abs(sideways)` removed -> `:790` "closed the sheet: expected 0
+  to be 1".
+
+Not done: M1's red proof — no press lands on the header inside the rise, so those cases pin
+behaviour, not the fix. And no green gate: `claimedByChild`'s case is red at 08:22, 08:53 and 09:11
+with no mutation, its `from` a box read that lags the rise, so the down lands below the field — the
+bug M2 fixed had hidden that. Re-aim it, or leave an editable child alone during the rise.
+`harness:android`, the full `real-input:android` and `real-input:ios` are owed too. Hygiene: a live
+earlier run's Metro was killed as an orphan, losing that run.
+
+### Gates
+
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | stale | 2178 tests / 96 suites | ff2ce00a76a6 (not this tree) | 1 m 02 s | start 6.4 / med 8.7 / max 9.7 |
+| `check` | **PASS** | 2178 tests / 96 suites | `7dba540e15b2` | 1 m 13 s | start 9.3 / med 24.0 / max 30.0 |
 | `harness:ios` | **PASS** (from `merge/FIX7`) | 610 tests / 30 suites + isolated 6 tests / 3 suites | `e40fef38d309` (harness:ios digest) | 14 m 21 s | start 7.7 / med 7.0 / max 15.2 |
-| `harness:android` | **PASS** | 668 tests / 31 suites + isolated 6 tests / 3 suites | `ff2ce00a76a6` (harness:android digest) | 18 m 21 s | start 6.1 / med 5.0 / max 19.8 |
+| `harness:android` | stale | 668 tests / 31 suites + isolated 6 tests / 3 suites | ff2ce00a76a6 (not this tree) | 18 m 21 s | start 6.1 / med 5.0 / max 19.8 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
-| `real-input:android:--control:bottom-sheet` | **PASS** | 9 tests / 1 suites | `adf924dbded9` (real-input:android digest) | 12 m 33 s | start 7.1 / med 4.8 / max 15.6 |
-| `real-input:android:--control:bottom-sheet:--a11y:switch` | **PASS** | 9 tests / 1 suites | `adf924dbded9` (real-input:android digest) | 3 m 46 s | start 4.7 / med 6.6 / max 14.1 |
+| `real-input:android:--control:bottom-sheet` | **FAIL** | 1 failed of 14 tests / 1 suites | `7dba540e15b2` (real-input:android digest) | 14 m 09 s | start 8.8 / med 4.7 / max 15.4 |
+| `real-input:android:--control:bottom-sheet:--a11y:bottom-sheet` | stale | — | b6fefb3f1754 (not this tree) | 0.5 s | start 7.6 / med 7.6 / max 7.6 |
+| `real-input:android:--control:bottom-sheet:--a11y:switch` | **FAIL** | 1 failed of 14 tests / 1 suites | `7dba540e15b2` (real-input:android digest) | 5 m 01 s | start 3.7 / med 8.5 / max 12.7 |
