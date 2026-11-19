@@ -181,10 +181,8 @@ struct ChipContent: NitroUIContent {
 }
 
 /// The selected fill SwiftUI's disabled bordered style drops, laid between that style's opaque
-/// container and the label, so the label stays the chip's own and keeps an unselected dimmed
-/// chip's strength. It is a background on the label pushed out to the chip's box, which is the
-/// only place between the two: behind the control the container hides it, over it the fill fades
-/// the text it paints.
+/// container and the label: behind the control the container hides it, over the label the fill
+/// fades the text. A background on the label is the only place left between the two.
 private struct ChipDisabledFill: View {
   var body: some View {
     // The strength sits on the shapes: `Color.opacity(_:)` reaches a UIKit host without its hue.
@@ -494,11 +492,21 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
 /// glyph reads a little differently on two chips that differ only in that fill.
 private let nitroUiChipPixelBudget = 48
 
-/// What the pixels `view` is drawing say about `color`, as one line: how many are painted in it,
-/// the mean colour of the box, and the pixel nearest the colour asked for. `afterScreenUpdates:
-/// true` reads what is on screen rather than the layer tree at the start of the transaction. The
-/// capture goes over a fixed white backdrop, which makes every pixel final and two chips
-/// comparable whichever page happens to be behind them.
+/// How far a pixel may sit from a colour and still be filed at its edge: the anti-aliasing of one
+/// pixel, tighter than `nitroUiChipPixelBudget`, which also has to reach ink painted over a fill.
+private let nitroUiChipShapeBudget = 6
+
+/// How far a pixel may sit from the white the probe composites over and still be that backdrop.
+private let nitroUiChipBackdropBudget = 12
+
+/// One row of a sampled chip: the first and last pixel it paints over the backdrop, and the first
+/// and last it paints in the probed colour. -1 is a row with none of that kind.
+private typealias ChipRowEdges =
+  (paintedLeft: Int, paintedRight: Int, colourLeft: Int, colourRight: Int)
+
+/// What the pixels `view` is drawing say about `color`: how many are painted in it, the mean of
+/// the box, the pixel nearest the colour asked for, and where each row's paint and that colour
+/// begin and end. The capture goes over a fixed white backdrop, so every pixel is final.
 private func nitroUiSampleChipDrawing(of view: UIView, for color: Double) -> String {
   let bounds = view.bounds
   guard bounds.width >= 2, bounds.height >= 2 else {
@@ -535,7 +543,12 @@ private func nitroUiSampleChipDrawing(of view: UIView, for color: Double) -> Str
   var hits = 0
   var redSum = 0, greenSum = 0, blueSum = 0
   var closest = (distance: Int.max, red: 0, green: 0, blue: 0)
+  // TEMPORARY instrumentation for the ink-budget measurement: pixels by distance from `wanted`.
+  var histogram = [Int](repeating: 0, count: 25)
+  var rows: [ChipRowEdges] = []
+  rows.reserveCapacity(height)
   for row in 0..<height {
+    var paintedLeft = -1, paintedRight = -1, colourLeft = -1, colourRight = -1
     for column in 0..<width {
       let offset = row * bytesPerRow + column * 4
       // Every pixel is opaque after the backdrop, so the channels are final.
@@ -550,14 +563,47 @@ private func nitroUiSampleChipDrawing(of view: UIView, for color: Double) -> Str
       if distance < closest.distance {
         closest = (distance, red, green, blue)
       }
+      // TEMPORARY instrumentation for the ink-budget measurement.
+      histogram[min(distance / 4, histogram.count - 1)] += 1
+      if abs(red - 0xff) + abs(green - 0xff) + abs(blue - 0xff) > nitroUiChipBackdropBudget {
+        if paintedLeft < 0 { paintedLeft = column }
+        paintedRight = column
+      }
+      if distance <= nitroUiChipShapeBudget {
+        if colourLeft < 0 { colourLeft = column }
+        colourRight = column
+      }
     }
+    rows.append((paintedLeft, paintedRight, colourLeft, colourRight))
   }
   let area = width * height
   // Same arithmetic as Android's pixel probe, so `mean` is comparable across platforms.
   let mean = (redSum / area) << 16 | (greenSum / area) << 8 | blueSum / area
-  return String(
+  let line = String(
     format: "size=\(Int(bounds.width))x\(Int(bounds.height)) want=#%02X%02X%02X hits=\(hits) "
-      + "mean=#%06X closest=#%02X%02X%02X",
+      + "mean=#%06X closest=#%02X%02X%02X edges=\(nitroUiChipRowEdges(rows))",
     wanted.red, wanted.green, wanted.blue, mean, closest.red, closest.green, closest.blue
   )
+  // TEMPORARY instrumentation for the ink-budget measurement.
+  return line + " hist=" + histogram.map(String.init).joined(separator: ".")
+}
+
+/// The rows in order, each as `painted,painted,colour,colour` column numbers, folded into
+/// `<row>x<count>` when consecutive rows are the same. Every row is counted, so a reader can
+/// index one: the shape of a fill only shows along its edges, row by row.
+private func nitroUiChipRowEdges(_ rows: [ChipRowEdges]) -> String {
+  var encoded = ""
+  var row = 0
+  while row < rows.count {
+    let edges = rows[row]
+    var repeated = 1
+    while row + repeated < rows.count, rows[row + repeated] == edges {
+      repeated += 1
+    }
+    if !encoded.isEmpty { encoded += ";" }
+    let text = "\(edges.paintedLeft),\(edges.paintedRight),\(edges.colourLeft),\(edges.colourRight)"
+    encoded += repeated > 1 ? "\(text)x\(repeated)" : text
+    row += repeated
+  }
+  return encoded
 }

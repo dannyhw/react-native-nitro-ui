@@ -254,6 +254,62 @@ function probeClosest(report: string): string {
   return closest[1] ?? '';
 }
 
+/** One row of a probe's `edges`: where the box paints, and where the probed colour reaches. */
+type RowEdges = {
+  painted: readonly [number, number] | null;
+  colour: readonly [number, number] | null;
+};
+
+/**
+ * The `edges` of a probe line: one entry per row of the sampled box, in order, where that row
+ * paints and where the probed colour reaches. `-1` is a row with none of that kind, and a run of
+ * identical rows arrives folded as `<row>x<count>`.
+ */
+function edgesOf(report: string): RowEdges[] {
+  const field = / edges=([^ ]*)/.exec(report);
+  if (field == null) {
+    throw new Error(`the pixel probe report carries no row edges: ${report}`);
+  }
+  const rows: RowEdges[] = [];
+  for (const entry of (field[1] ?? '').split(';')) {
+    const folded = /^(.+?)(?:x(\d+))?$/.exec(entry);
+    const columns = (folded?.[1] ?? '').split(',').map(Number);
+    if (
+      columns.length !== 4 ||
+      columns.some((column) => !Number.isFinite(column))
+    ) {
+      throw new Error(
+        `the pixel probe report has an unreadable row edge "${entry}": ${report}`
+      );
+    }
+    const [paintedLeft, paintedRight, colourLeft, colourRight] =
+      columns as number[];
+    rows.push(
+      ...Array.from({ length: Number(folded?.[2] ?? 1) }, (): RowEdges => ({
+        painted: paintedLeft! < 0 ? null : [paintedLeft!, paintedRight!],
+        colour: colourLeft! < 0 ? null : [colourLeft!, colourRight!],
+      }))
+    );
+  }
+  return rows;
+}
+
+/** TEMPORARY: the sampler's pixels by distance from the probed colour, four to a bucket. */
+function histogramOf(report: string): string {
+  const field = / hist=([^ ]*)/.exec(report);
+  return field?.[1] ?? 'none';
+}
+
+/** A row's edge, as a person reads it. */
+function describeEdge(run: readonly [number, number] | null): string {
+  return run == null ? 'nothing' : `columns ${run[0]}-${run[1]}`;
+}
+
+/** The `#RRGGBB` colour a probe takes as an integer. */
+function argbOf(colour: string): number {
+  return Number.parseInt(colour.slice(1), 16);
+}
+
 /** The red, green and blue of a `#RRGGBB` colour. */
 function channels(colour: string): number[] {
   return [1, 3, 5].map((offset) =>
@@ -1356,6 +1412,15 @@ describe('Chip · the selected fill in every state (G12)', () => {
   /** The tenths of an unselected chip's label ink that a selected one has to keep painted. */
   const INK_KEPT = 9;
 
+  /** How far the shape read files a pixel from the colour it asks for: the iOS sampler's own. */
+  const SHAPE_REACH = 6;
+
+  /** How far one chip's edge may sit from another's: anti-aliasing along the capsule's curve. */
+  const EDGE_TOLERANCE = 2;
+
+  /** Columns narrower than this are one anti-aliased dot, where no edge can be read. */
+  const READABLE_ROW = 3;
+
   type Spec = { testId: string; selected: boolean; disabled?: boolean };
 
   const SPECS: Spec[] = [
@@ -1420,7 +1485,7 @@ describe('Chip · the selected fill in every state (G12)', () => {
       sampleOf(
         await pixelProbe(
           testId,
-          Number.parseInt(colour.slice(1), 16),
+          argbOf(colour),
           `the area of ${testId} painted ${colour}`
         ),
         testId
@@ -1534,16 +1599,29 @@ describe('Chip · the selected fill in every state (G12)', () => {
     'keeps the label of a disabled selected chip as strong as an unselected one',
     async () => {
       await renderEveryState();
-      // A dimming that covers the text as well as the fill leaves this chip with the faintest
-      // label in the row, and a box mean cannot see it: a fainter label only makes the box read
-      // lighter. The read is the ink - the darkest pixel each chip paints, and how much of its
-      // box is painted at that strength.
+      // A dimming over the text as well as the fill leaves this chip the faintest label in
+      // the row, and a box mean cannot see it: a fainter label only makes the box read
+      // lighter. The read is the ink: the darkest pixel, and how much of the box is that.
       const inkOff = await inkOf('disabled-off');
       const inkOn = await inkOf('disabled-on');
       const areaOff = await inkArea('disabled-off', inkOff);
       const areaOn = await inkArea('disabled-on', inkOff);
       const seen = `off=${inkOff} on=${inkOn} areaOff=${areaOff} areaOn=${areaOn}`;
       console.log(`chip iOS label ink: ${seen}`);
+      // TEMPORARY: the coverage every budget would give, from the sampler's histogram.
+      console.log(
+        `chip iOS ink histogram: off=[${histogramOf(
+          sampleOf(
+            await pixelProbe('disabled-off', argbOf(inkOff), 'TEMP ink off'),
+            'disabled-off'
+          )
+        )}] on=[${histogramOf(
+          sampleOf(
+            await pixelProbe('disabled-on', argbOf(inkOff), 'TEMP ink on'),
+            'disabled-on'
+          )
+        )}]`
+      );
 
       // Without ink to compare there is nothing to compare: a chip that paints no label says
       // nothing about how strong a label has to be.
@@ -1559,10 +1637,9 @@ describe('Chip · the selected fill in every state (G12)', () => {
             lightness(inkOn) - lightness(inkOff)
           } fainter than ${LABEL_INK} and washes the text it paints. ${seen}`
       ).toBe(true);
-      // Nearly all of it, at that same strength. The fill goes under the label, so the glyphs
-      // are the chip's own and only the anti-aliasing differs; anything that fades or replaces
-      // the text keeps a fraction of it, because a wash lightens every pixel of a glyph rather
-      // than one pixel of its edge.
+      // Nearly all of it, at that same strength: the fill sits under the chip's own
+      // glyphs, so only the anti-aliasing differs, while a wash lightens every pixel of a
+      // glyph rather than one pixel of its edge.
       expect(
         areaOn * 10 >= areaOff * INK_KEPT,
         `a disabled selected chip paints ${areaOn} pixels at the ${inkOff} its unselected ` +
@@ -1572,6 +1649,143 @@ describe('Chip · the selected fill in every state (G12)', () => {
           ).toFixed(
             0
           )}% - so its label is faded or redrawn, not merely sitting on a dimmed fill. ${seen}`
+      ).toBe(true);
+    }
+  );
+
+  /**
+   * The row where two chips' edges sit furthest apart, and how far. A row with one edge and not
+   * the other is a whole edge missing, so it counts as the worst gap there is; a row narrower
+   * than `minSpan` is one anti-aliased dot, where no edge can be read.
+   */
+  function widestEdgeGap(
+    rows: RowEdges[],
+    others: RowEdges[],
+    pickOwn: (row: RowEdges) => readonly [number, number] | null,
+    pickOther: (row: RowEdges) => readonly [number, number] | null,
+    minSpan = 0
+  ): { row: number; gap: number; seen: string } {
+    let worst = { row: -1, gap: 0, seen: 'no row was wide enough to read' };
+    for (const [row, edges] of rows.entries()) {
+      const own = pickOwn(edges);
+      const other = pickOther(others[row] ?? edges);
+      if (own == null && other == null) continue;
+      if (own != null && own[1] - own[0] + 1 < minSpan) continue;
+      const gap =
+        own == null || other == null
+          ? Number.MAX_SAFE_INTEGER
+          : Math.max(Math.abs(own[0] - other[0]), Math.abs(own[1] - other[1]));
+      if (gap > worst.gap) {
+        worst = {
+          row,
+          gap,
+          seen: `at row ${row} the one paints ${describeEdge(own)} where the other paints ${describeEdge(other)}`,
+        };
+      }
+    }
+    return worst;
+  }
+
+  itIos(
+    'lays the dimmed fill exactly inside the capsule the unselected chip draws',
+    async () => {
+      const boxes = await renderEveryState();
+      const dimOff = await paintOf('disabled-off');
+      const dimOn = await paintOf('disabled-on');
+      // The mean of a box carries its label's ink, so it is not the fill: the nearest pixel is.
+      const fill = probeClosest(
+        sampleOf(
+          await pixelProbe(
+            'disabled-on',
+            argbOf(dimOn),
+            'the fill the dimmed selected chip paints'
+          ),
+          'disabled-on'
+        )
+      );
+      const onProbe = sampleOf(
+        await pixelProbe('disabled-on', argbOf(fill), 'the shape of that fill'),
+        'disabled-on'
+      );
+      const on = edgesOf(onProbe);
+      const offProbe = sampleOf(
+        await pixelProbe(
+          'disabled-off',
+          argbOf(fill),
+          'the shape of the chip with no fill'
+        ),
+        'disabled-off'
+      );
+      const off = edgesOf(offProbe);
+      const shape = widestEdgeGap(
+        on,
+        off,
+        (row) => row.painted,
+        (row) => row.painted
+      );
+      const covered = widestEdgeGap(
+        on,
+        on,
+        (row) => row.painted,
+        (row) => row.colour,
+        READABLE_ROW
+      );
+      const seen =
+        `fill=${fill} container=${dimOff} apart=${colourDistance(fill, dimOff)} ` +
+        `box=${describeSize(boxes.get('disabled-on')!)} rows=${on.length}/${off.length} ` +
+        `shape=${shape.gap}@${shape.row} covered=${covered.gap}@${covered.row} ` +
+        `stray=${off.filter((row) => row.colour != null).length}`;
+      console.log(
+        `chip iOS shape: ${seen}\nchip iOS shape seen: ${shape.seen} | ${covered.seen}\n` +
+          `chip iOS shape histogram: on=[${histogramOf(onProbe)}] off=[${histogramOf(
+            offProbe
+          )}]`
+      );
+      // TEMPORARY: the whole edge read, for the fix's arithmetic.
+      console.log(
+        `chip iOS rows on: ${/ edges=([^ ]*)/.exec(onProbe)?.[1] ?? 'none'}\n` +
+          `chip iOS rows off: ${/ edges=([^ ]*)/.exec(offProbe)?.[1] ?? 'none'}`
+      );
+
+      // The read has to tell the fill from the container it lies on, or an edge between the two
+      // is not a thing this probe could find at all.
+      const apart = colourDistance(fill, dimOff);
+      expect(
+        apart >= 2 * SHAPE_REACH,
+        `the dimmed fill ${fill} sits only ${apart} from the ${dimOff} its unselected chip ` +
+          `paints, and the shape read reaches ${SHAPE_REACH}: nothing here can tell a fill from ` +
+          `the chip it covers. ${seen}`
+      ).toBe(true);
+      expect(
+        on.length,
+        `the dimmed selected chip's box has ${on.length} rows and the unselected one ` +
+          `${off.length}: two chips of one label and one control size do not measure the same ` +
+          `height, so their edges cannot be compared. ${seen}`
+      ).toBe(off.length);
+
+      // The control: what the read files as the fill must be the fill and nothing else, or an
+      // edge of it is an edge of something else.
+      const stray = off.filter((row) => row.colour != null).length;
+      expect(
+        stray,
+        `the dimmed unselected chip has ${fill} - the fill only a selected chip draws - on ` +
+          `${stray} of its ${off.length} rows: the read is filing something else as the fill, so ` +
+          `where it ends says nothing about the fill. ${seen}`
+      ).toBe(0);
+
+      // Edge by edge: the dimmed fill may not paint outside the capsule the system draws, and
+      // may not stop short of it either. One column of the capture is a third of a point.
+      expect(
+        shape.gap <= EDGE_TOLERANCE,
+        `the dimmed selected chip paints outside the capsule its unselected twin draws: ` +
+          `${shape.seen}, ${shape.gap} columns apart against a tolerance of ` +
+          `${EDGE_TOLERANCE}. ${seen}`
+      ).toBe(true);
+      expect(
+        covered.gap <= EDGE_TOLERANCE,
+        `the dimmed fill stops short of the chip it is inside: ${covered.seen}, ` +
+          `${covered.gap} columns of the chip's own grey left showing against a tolerance of ` +
+          `${EDGE_TOLERANCE}. ${seen}`
       ).toBe(true);
     }
   );
