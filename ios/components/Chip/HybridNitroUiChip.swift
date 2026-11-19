@@ -151,7 +151,9 @@ struct ChipContent: NitroUIContent {
       }
       .toggleStyle(.button)
       .modifier(
-        ChipDisabledFill(selected: model.state.displayed, disabled: model.disabled)
+        ChipDisabledFill(
+          selected: model.state.displayed, disabled: model.disabled, label: label
+        )
       )
     case .assist:
       Button(action: { model.press() }) { label }
@@ -190,34 +192,50 @@ private struct ChipOptionalAccessibility: ViewModifier {
   }
 }
 
-/// SwiftUI's disabled bordered style drops a toggle's selected fill, so a disabled chip draws the
-/// same whether or not it is selected. A dimmed control fades toward the page it sits on, so the
-/// fill comes back as that fade plus a little of the tint the bordered style fills with: lighter
-/// and paler than the enabled fill, and never the grey of a disabled unselected chip. Both shapes
-/// stay mounted and only their opacity moves, so a chip that becomes disabled keeps one view and
-/// its VoiceOver focus with it.
-private struct ChipDisabledFill: ViewModifier {
-  /// How far a disabled selected chip fades toward the page, and how much of the tint survives
-  /// the fade. A stronger tint than this paints the chip darker than the enabled one.
-  private static let fadeToPage = 0.45
-  private static let survivingTint = 0.09
+/// How far a disabled selected chip fades, and how much of the tint survives the fade. More tint
+/// than this paints the chip darker than the enabled one.
+private let nitroUiChipDisabledFade = 0.55
+private let nitroUiChipDisabledTint = 0.09
 
+/// SwiftUI's disabled bordered style drops a toggle's selected fill, so a dimmed selected chip lays
+/// one back: the bordered style's tint faded toward the system background colour, which is lighter
+/// and paler than the enabled fill and never the grey of a disabled unselected chip.
+private struct ChipDisabledFill<Label: View>: ViewModifier {
   let selected: Bool
   let disabled: Bool
+  let label: Label
 
   func body(content: Content) -> some View {
-    // The strength is on the shapes: `Color.opacity(_:)` reaches a UIKit host without its hue.
-    let dimmedSelection: Double = selected && disabled ? 1 : 0
+    // The modifier's shape around the control is the same in every state, so a chip that becomes
+    // disabled keeps one view and its VoiceOver focus with it.
     content.overlay {
-      ZStack {
-        Capsule()
-          .fill(Color(uiColor: .systemBackground))
-          .opacity(Self.fadeToPage * dimmedSelection)
-        Capsule()
-          .fill(.tint)
-          .opacity(Self.survivingTint * dimmedSelection)
+      if selected && disabled {
+        // The strength is on the shapes: `Color.opacity(_:)` reaches a UIKit host without its hue.
+        ZStack {
+          Capsule()
+            .fill(Color(uiColor: .systemBackground))
+            .opacity(nitroUiChipDisabledFade)
+          Capsule()
+            .fill(.tint)
+            .opacity(nitroUiChipDisabledTint)
+        }
+        // The fade stops at the label, so a dimmed chip's text keeps the strength of an unselected
+        // one's. The cut is the label's own shape at full strength, so the disabled style's faded
+        // ink cannot cut a faded hole.
+        .mask(alignment: .center) {
+          Rectangle()
+            .fill(.white)
+            .overlay(alignment: .center) {
+              label
+                .foregroundStyle(.white)
+                .environment(\.isEnabled, true)
+                .blendMode(.destinationOut)
+            }
+            .compositingGroup()
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
       }
-      .allowsHitTesting(false)
     }
   }
 }
