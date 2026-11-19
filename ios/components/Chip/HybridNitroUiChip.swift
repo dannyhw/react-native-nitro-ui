@@ -202,7 +202,7 @@ private struct ChipDisabledFill: View {
 
 /// The bordered `.small` capsule's content inset, negated: the label plus this is the chip's box.
 /// Half points, because the style's own padding is not a round number: measured off the control's
-/// drawn edges at the default and an accessibility text size, and the fill's shape misses by row.
+/// drawn edges at the small and the regular control size, where the shape still misses by a row.
 private let nitroUiChipContentInset = EdgeInsets(
   top: -4.5, leading: -11, bottom: -4.5, trailing: -11
 )
@@ -492,10 +492,8 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
 }
 
 /// How far a drawn pixel may sit from the colour a probe asked for and still count as that
-/// colour. A chip's fill is translucent and a dimmed chip's label is painted over it, so the same
-/// colour. A dimmed chip's label is translucent, so one glyph over the dimmed fill reads 12 away
-/// from the same glyph over the grey beside it: this is two of those steps, and no further. A
-/// wash that lightens a stroke by more than a quarter of its own strength then falls off the floor.
+/// colour. One glyph over the dimmed fill reads 12 from the same glyph over the container beside
+/// it: this is two of those steps, so a wash over a stroke drops it out of the ink it reports.
 private let nitroUiChipPixelBudget = 24
 
 /// How far a pixel may sit from a colour and still be filed at its edge: the anti-aliasing of one
