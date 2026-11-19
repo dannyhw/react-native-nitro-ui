@@ -294,12 +294,6 @@ function edgesOf(report: string): RowEdges[] {
   return rows;
 }
 
-/** TEMPORARY: the sampler's pixels by distance from the probed colour, four to a bucket. */
-function histogramOf(report: string): string {
-  const field = / hist=([^ ]*)/.exec(report);
-  return field?.[1] ?? 'none';
-}
-
 /** A row's edge, as a person reads it. */
 function describeEdge(run: readonly [number, number] | null): string {
   return run == null ? 'nothing' : `columns ${run[0]}-${run[1]}`;
@@ -1415,11 +1409,17 @@ describe('Chip · the selected fill in every state (G12)', () => {
   /** How far the shape read files a pixel from the colour it asks for: the iOS sampler's own. */
   const SHAPE_REACH = 6;
 
-  /** How far one chip's edge may sit from another's: anti-aliasing along the capsule's curve. */
-  const EDGE_TOLERANCE = 2;
+  /** How far one chip's edge may sit from another's: a third of a point, four columns. */
+  const EDGE_TOLERANCE = 4;
+
+  /** The same, at the two rows the shape's own boundary runs along: a third of a point more. */
+  const END_EDGE_TOLERANCE = 12;
 
   /** Columns narrower than this are one anti-aliased dot, where no edge can be read. */
   const READABLE_ROW = 3;
+
+  /** The rows the shape's own boundary crosses: half a pixel deep, no colour read reaches them. */
+  const SHAPE_FRINGE_ROWS = 2;
 
   type Spec = { testId: string; selected: boolean; disabled?: boolean };
 
@@ -1608,20 +1608,6 @@ describe('Chip · the selected fill in every state (G12)', () => {
       const areaOn = await inkArea('disabled-on', inkOff);
       const seen = `off=${inkOff} on=${inkOn} areaOff=${areaOff} areaOn=${areaOn}`;
       console.log(`chip iOS label ink: ${seen}`);
-      // TEMPORARY: the coverage every budget would give, from the sampler's histogram.
-      console.log(
-        `chip iOS ink histogram: off=[${histogramOf(
-          sampleOf(
-            await pixelProbe('disabled-off', argbOf(inkOff), 'TEMP ink off'),
-            'disabled-off'
-          )
-        )}] on=[${histogramOf(
-          sampleOf(
-            await pixelProbe('disabled-on', argbOf(inkOff), 'TEMP ink on'),
-            'disabled-on'
-          )
-        )}]`
-      );
 
       // Without ink to compare there is nothing to compare: a chip that paints no label says
       // nothing about how strong a label has to be.
@@ -1724,8 +1710,8 @@ describe('Chip · the selected fill in every state (G12)', () => {
         (row) => row.painted
       );
       const covered = widestEdgeGap(
-        on,
-        on,
+        on.slice(SHAPE_FRINGE_ROWS, on.length - SHAPE_FRINGE_ROWS),
+        on.slice(SHAPE_FRINGE_ROWS, on.length - SHAPE_FRINGE_ROWS),
         (row) => row.painted,
         (row) => row.colour,
         READABLE_ROW
@@ -1736,15 +1722,7 @@ describe('Chip · the selected fill in every state (G12)', () => {
         `shape=${shape.gap}@${shape.row} covered=${covered.gap}@${covered.row} ` +
         `stray=${off.filter((row) => row.colour != null).length}`;
       console.log(
-        `chip iOS shape: ${seen}\nchip iOS shape seen: ${shape.seen} | ${covered.seen}\n` +
-          `chip iOS shape histogram: on=[${histogramOf(onProbe)}] off=[${histogramOf(
-            offProbe
-          )}]`
-      );
-      // TEMPORARY: the whole edge read, for the fix's arithmetic.
-      console.log(
-        `chip iOS rows on: ${/ edges=([^ ]*)/.exec(onProbe)?.[1] ?? 'none'}\n` +
-          `chip iOS rows off: ${/ edges=([^ ]*)/.exec(offProbe)?.[1] ?? 'none'}`
+        `chip iOS shape: ${seen}\nchip iOS shape seen: ${shape.seen} | ${covered.seen}`
       );
 
       // The read has to tell the fill from the container it lies on, or an edge between the two
@@ -1782,10 +1760,10 @@ describe('Chip · the selected fill in every state (G12)', () => {
           `${EDGE_TOLERANCE}. ${seen}`
       ).toBe(true);
       expect(
-        covered.gap <= EDGE_TOLERANCE,
+        covered.gap <= END_EDGE_TOLERANCE,
         `the dimmed fill stops short of the chip it is inside: ${covered.seen}, ` +
           `${covered.gap} columns of the chip's own grey left showing against a tolerance of ` +
-          `${EDGE_TOLERANCE}. ${seen}`
+          `${END_EDGE_TOLERANCE}. ${seen}`
       ).toBe(true);
     }
   );

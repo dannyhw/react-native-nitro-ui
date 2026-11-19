@@ -201,7 +201,11 @@ private struct ChipDisabledFill: View {
 }
 
 /// The bordered `.small` capsule's content inset, negated: the label plus this is the chip's box.
-private let nitroUiChipContentInset = EdgeInsets(top: -6, leading: -12, bottom: -6, trailing: -12)
+/// Half points, because the style's own padding is not a round number: measured off the control's
+/// drawn edges at the default and an accessibility text size, and the fill's shape misses by row.
+private let nitroUiChipContentInset = EdgeInsets(
+  top: -4.5, leading: -11, bottom: -4.5, trailing: -11
+)
 
 /// How far a dimmed selected chip fades toward the system background colour, and how much of the
 /// bordered style's tint survives that fade. More tint reads as the enabled chip's own fill.
@@ -489,8 +493,10 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
 
 /// How far a drawn pixel may sit from the colour a probe asked for and still count as that
 /// colour. A chip's fill is translucent and a dimmed chip's label is painted over it, so the same
-/// glyph reads a little differently on two chips that differ only in that fill.
-private let nitroUiChipPixelBudget = 48
+/// colour. A dimmed chip's label is translucent, so one glyph over the dimmed fill reads 12 away
+/// from the same glyph over the grey beside it: this is two of those steps, and no further. A
+/// wash that lightens a stroke by more than a quarter of its own strength then falls off the floor.
+private let nitroUiChipPixelBudget = 24
 
 /// How far a pixel may sit from a colour and still be filed at its edge: the anti-aliasing of one
 /// pixel, tighter than `nitroUiChipPixelBudget`, which also has to reach ink painted over a fill.
@@ -543,8 +549,6 @@ private func nitroUiSampleChipDrawing(of view: UIView, for color: Double) -> Str
   var hits = 0
   var redSum = 0, greenSum = 0, blueSum = 0
   var closest = (distance: Int.max, red: 0, green: 0, blue: 0)
-  // TEMPORARY instrumentation for the ink-budget measurement: pixels by distance from `wanted`.
-  var histogram = [Int](repeating: 0, count: 25)
   var rows: [ChipRowEdges] = []
   rows.reserveCapacity(height)
   for row in 0..<height {
@@ -563,8 +567,6 @@ private func nitroUiSampleChipDrawing(of view: UIView, for color: Double) -> Str
       if distance < closest.distance {
         closest = (distance, red, green, blue)
       }
-      // TEMPORARY instrumentation for the ink-budget measurement.
-      histogram[min(distance / 4, histogram.count - 1)] += 1
       if abs(red - 0xff) + abs(green - 0xff) + abs(blue - 0xff) > nitroUiChipBackdropBudget {
         if paintedLeft < 0 { paintedLeft = column }
         paintedRight = column
@@ -584,8 +586,7 @@ private func nitroUiSampleChipDrawing(of view: UIView, for color: Double) -> Str
       + "mean=#%06X closest=#%02X%02X%02X edges=\(nitroUiChipRowEdges(rows))",
     wanted.red, wanted.green, wanted.blue, mean, closest.red, closest.green, closest.blue
   )
-  // TEMPORARY instrumentation for the ink-budget measurement.
-  return line + " hist=" + histogram.map(String.init).joined(separator: ".")
+  return line
 }
 
 /// The rows in order, each as `painted,painted,colour,colour` column numbers, folded into
