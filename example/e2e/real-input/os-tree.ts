@@ -20,7 +20,7 @@ import { tightestFlaggedNode } from '../../../scripts/real-input/android-tree.mj
 export type TreeNode = UiautomatorNode & { hittable?: 'true' | 'false' };
 
 /** One node of the driver's snapshot, as its JSON prints it. */
-interface DriverNode {
+export interface DriverNode {
   index: number;
   type?: string;
   label?: string;
@@ -130,7 +130,7 @@ export function tree(options: { unmerged?: boolean } = {}): TreeNode[] {
  * own (a `Spinner` naming itself while it shows its choice) printed its text as `label`.
  * A flag the driver left out stays empty, as a dump leaves an attribute it did not write.
  */
-function asTreeNode(node: DriverNode): TreeNode {
+export function asTreeNode(node: DriverNode): TreeNode {
   const hasText = node.value !== undefined;
   const textInLabel = !hasText && node.contentDescription !== undefined;
   const rect = node.rect ?? { x: 0, y: 0, width: 0, height: 0 };
@@ -152,7 +152,13 @@ function asTreeNode(node: DriverNode): TreeNode {
     checkable: node.checked === undefined ? 'false' : 'true',
     checked: node.checked === undefined ? '' : node.checked ? 'true' : 'false',
     selected: node.selected === true ? 'true' : 'false',
-    scrollable: flag(node.scrollable),
+    // The driver prints the flag on the unmerged tree only. Without it, a class that
+    // cannot be anything else stands in: the rule this serves is the one that refuses a
+    // control's name sitting on the page's own scroller.
+    scrollable:
+      node.scrollable === undefined
+        ? String(SCROLLER_CLASS.test(node.type ?? ''))
+        : String(node.scrollable),
     bounds: {
       x1: rect.x,
       y1: rect.y,
@@ -165,6 +171,8 @@ function asTreeNode(node: DriverNode): TreeNode {
     },
   };
 }
+
+const SCROLLER_CLASS = /scroll|recycler|listview|gridview|collection/i;
 
 function flag(value: boolean | undefined): string {
   return value === undefined ? '' : String(value);
