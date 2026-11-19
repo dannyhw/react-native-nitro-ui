@@ -896,8 +896,8 @@ internal class BottomSheetHost(
           // The detent a sheet opens at is not a change. One the person dragged to is, even when
           // the drag cancelled the opening animation and its settle is the presentation's first.
           val owed = model.consumeDetentReport()
-          opening = false
           val report = !opening || owed
+          opening = false
           if (report) {
             model.selected = index
             model.onDetentChange?.invoke(index.toDouble())
