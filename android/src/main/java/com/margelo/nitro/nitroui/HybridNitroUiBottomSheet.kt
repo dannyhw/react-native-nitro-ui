@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
@@ -300,7 +302,7 @@ internal class NitroUiSheetRootView(
       jsTouchDispatcher.handleTouchEvent(event, dispatcher, context as ReactContext)
       jsPointerDispatcher?.handleMotionEvent(event, dispatcher, true)
     }
-    measureDragUntilSettled(event)
+    drag.onEvent(event)
     return super.onInterceptTouchEvent(event)
   }
 
@@ -316,63 +318,51 @@ internal class NitroUiSheetRootView(
   }
 
   /**
-   * Hand over a drag that passes through this root while Material has not settled the sheet at a
-   * value: Material's own drag on the sheet is switched off until that settle, and the opening
-   * animation is what settles it, so a drag that starts while the sheet is opening is dropped -
-   * and it stays dropped when the sheet settles partway through it, as a drag is only looked for
-   * where a gesture begins. The travel and the release velocity are px and px per second, positive
-   * for a drag upward. It is measured on the way in, where every gesture of the sheet's content
-   * passes whether or not a child view ends up holding it. The composition sets it per
-   * presentation stage, and it is latched at the down, so a sheet that settles mid-drag does not
-   * lose the drag already under way.
+   * Hand over a rising-sheet drag, measured here because this root sees every gesture of the
+   * sheet's content on the way in. It is latched at the down, so a sheet that settles mid-drag
+   * does not lose the drag already under way.
    */
   var dragUntilSettled: ((travelPx: Int, velocityPxPerSecond: Float) -> Unit)? = null
 
-  private val dragSlopPx = ViewConfiguration.get(context).scaledTouchSlop
-  private var dragHandler: ((travelPx: Int, velocityPxPerSecond: Float) -> Unit)? = null
-  private var dragVelocity: VelocityTracker? = null
-  private var dragFromY = 0f
-  private var dragTravelPx = 0
-
-  /** Measure the gesture a [dragUntilSettled] handler may need. Nothing moves before the slop. */
-  private fun measureDragUntilSettled(event: MotionEvent) {
-    when (event.actionMasked) {
-      MotionEvent.ACTION_DOWN -> {
-        dragFromY = event.y
-        dragTravelPx = 0
-        dragHandler = dragUntilSettled
-        dragVelocity =
-          dragHandler?.let { VelocityTracker.obtain().apply { addMovement(event) } }
-      }
-
-      MotionEvent.ACTION_MOVE -> {
-        val tracker = dragVelocity ?: return
-        tracker.addMovement(event)
-        dragTravelPx = (dragFromY - event.y).roundToInt()
-      }
-
-      MotionEvent.ACTION_UP -> {
-        // A cancelled gesture belongs to whatever took it, so only an up hands the drag over.
-        val tracker = dragVelocity
-        val handler = dragHandler
-        dragVelocity = null
-        dragHandler = null
-        if (handler != null && abs(dragTravelPx) >= dragSlopPx) {
-          tracker?.computeCurrentVelocity(1000)
-          // Android reads a finger moving up as a negative velocity.
-          handler(dragTravelPx, -(tracker?.yVelocity ?: 0f))
-        }
-        tracker?.recycle()
-      }
+  private val drag =
+    RisingDragMeasurement(ViewConfiguration.get(context).scaledTouchSlop) { event ->
+      // A gesture that starts on content that scrolls or edits is that content's, not the sheet's.
+      val handler = dragUntilSettled
+      if (handler == null || scrollsUnderneath(event.x, event.y)) null else handler
     }
-  }
 
   /** The gesture is over because this root is: forget a drag left half-measured. */
   fun forgetDrag() {
-    dragVelocity?.recycle()
-    dragVelocity = null
-    dragHandler = null
+    drag.stop()
     dragUntilSettled = null
+  }
+
+  /** Whether the view under this point, or one of its parents, scrolls or edits on its own. */
+  private fun scrollsUnderneath(
+    x: Float,
+    y: Float,
+  ): Boolean = scrollsUnderneath(this, x, y)
+
+  private fun scrollsUnderneath(
+    group: ViewGroup,
+    x: Float,
+    y: Float,
+  ): Boolean {
+    for (index in group.childCount - 1 downTo 0) {
+      val child = group.getChildAt(index)
+      val childX = x - child.left
+      val childY = y - child.top
+      if (child.visibility != View.VISIBLE ||
+        childX < 0f || childY < 0f || childX > child.right || childY > child.bottom
+      ) {
+        continue
+      }
+      if (child.scrollsWithItsOwnTouch()) {
+        return true
+      }
+      return child is ViewGroup && scrollsUnderneath(child, childX, childY)
+    }
+    return false
   }
 
   /**
@@ -380,6 +370,9 @@ internal class NitroUiSheetRootView(
    * must not stop [onInterceptTouchEvent], which is where JS gets the gesture's MOVE and UP.
    */
   override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+    if (disallowIntercept) {
+      drag.claimByChild()
+    }
     parent?.requestDisallowInterceptTouchEvent(disallowIntercept)
   }
 
@@ -403,6 +396,7 @@ internal class NitroUiSheetRootView(
     childView: View?,
     ev: MotionEvent,
   ) {
+    drag.claimByChild()
     eventDispatcher?.let { jsTouchDispatcher.onChildStartedNativeGesture(ev, it) }
   }
 
@@ -417,6 +411,174 @@ internal class NitroUiSheetRootView(
     eventDispatcher?.let { jsTouchDispatcher.onChildEndedNativeGesture(ev, it) }
   }
 }
+
+/**
+ * The band under Material's grabber that watches for a drag: the grabber is Compose's own, outside
+ * the sheet's `AndroidView`, so nothing there sees a gesture that starts on it.
+ */
+@Composable
+private fun RisingDragGrabber(
+  onDrag: ((travelPx: Int, velocityPxPerSecond: Float) -> Unit)?,
+  handle: @Composable () -> Unit,
+) {
+  Box(
+    modifier = Modifier.fillMaxWidth(),
+    contentAlignment = Alignment.Center,
+  ) {
+    AndroidView(
+      factory = { RisingDragGrabberView(it) },
+      update = { view -> view.drag = onDrag },
+      modifier = Modifier.matchParentSize(),
+    )
+    handle()
+  }
+}
+
+/**
+ * Takes a rising-sheet drag that starts on the grabber. Consuming the down is what keeps the
+ * gesture's moves arriving after the finger has left this band, which Android's dispatch promises
+ * and Compose's gesture does not.
+ */
+internal class RisingDragGrabberView(
+  context: Context,
+) : View(context) {
+  /** What a down here hands over while the sheet is rising; null at every other time. */
+  var drag: ((travelPx: Int, velocityPxPerSecond: Float) -> Unit)? = null
+
+  private val measurement =
+    RisingDragMeasurement(ViewConfiguration.get(context).scaledTouchSlop) { drag }
+
+  /** Leave the gesture to Material's own drag while there is no rising drag to follow. */
+  override fun onTouchEvent(event: MotionEvent): Boolean {
+    if (event.actionMasked == MotionEvent.ACTION_DOWN && drag == null) {
+      return false
+    }
+    measurement.onEvent(event)
+    return true
+  }
+}
+
+/**
+ * Measures the one drag a rising sheet should follow: mostly vertical, past the touch slop, and not
+ * one a child view has claimed - the drag Material's own drag would have taken once the sheet had
+ * settled. It reports at the end of the gesture: travel and release velocity in px and px a
+ * second, positive for a drag upward.
+ */
+internal class RisingDragMeasurement(
+  private val slopPx: Int,
+  private val handlerAtDown:
+    (MotionEvent) -> ((travelPx: Int, velocityPxPerSecond: Float) -> Unit)?,
+) {
+  private var handler: ((travelPx: Int, velocityPxPerSecond: Float) -> Unit)? = null
+  private var tracker: VelocityTracker? = null
+  private var pointerId = NO_POINTER
+  private var fromX = 0f
+  private var fromY = 0f
+  private var travelPx = 0
+  private var travelX = 0
+  private var claimedByChild = false
+
+  /** Feed every event of a gesture that reaches the view. */
+  fun onEvent(event: MotionEvent) {
+    when (event.actionMasked) {
+      MotionEvent.ACTION_DOWN -> begin(event)
+      MotionEvent.ACTION_POINTER_DOWN -> tracker?.addMovement(event)
+      MotionEvent.ACTION_MOVE -> move(event)
+      MotionEvent.ACTION_UP -> end(event, handOver = true)
+      // The finger that began the drag owns it: when it lifts, the drag ends with it.
+      MotionEvent.ACTION_POINTER_UP ->
+        if (event.getPointerId(event.actionIndex) == pointerId) {
+          end(event, handOver = true)
+        } else {
+          tracker?.addMovement(event)
+        }
+      MotionEvent.ACTION_CANCEL -> stop()
+    }
+  }
+
+  /** A child took the gesture: its scroll or selection owns it now, not the sheet. */
+  fun claimByChild() {
+    claimedByChild = true
+  }
+
+  /** Forget a gesture left half-measured, as when the view that measured it goes away. */
+  fun stop() {
+    clear()
+    tracker?.recycle()
+    tracker = null
+  }
+
+  private fun begin(event: MotionEvent) {
+    stop()
+    claimedByChild = false
+    handler = handlerAtDown(event)
+    pointerId = event.getPointerId(0)
+    fromX = event.getX(0)
+    fromY = event.getY(0)
+    tracker =
+      handler?.let { VelocityTracker.obtain().apply { addMovement(event) } }
+  }
+
+  private fun move(event: MotionEvent) {
+    val active = tracker ?: return
+    val index = event.findPointerIndex(pointerId)
+    if (index < 0) {
+      return
+    }
+    active.addMovement(event)
+    travelPx = (fromY - event.getY(index)).roundToInt()
+    travelX = (event.getX(index) - fromX).roundToInt()
+  }
+
+  private fun end(event: MotionEvent, handOver: Boolean) {
+    val ending = handler
+    val kept = tracker
+    val started = pointerId
+    val vertical = travelPx
+    val sideways = travelX
+    clear()
+    this.tracker = null
+    if (ending != null && handOver && !claimedByChild) {
+      if (abs(vertical) >= slopPx && abs(vertical) > abs(sideways)) {
+        // Only an up is a final position: the tracker drops a pointer a lift took away.
+        if (event.actionMasked == MotionEvent.ACTION_UP) {
+          kept?.addMovement(event)
+        }
+        ending(vertical, releaseVelocity(kept, started))
+      }
+    }
+    kept?.recycle()
+  }
+
+  private fun clear() {
+    handler = null
+    pointerId = NO_POINTER
+    travelPx = 0
+    travelX = 0
+  }
+
+  /** px a second, positive upward: Android reads a finger moving up as a negative velocity. */
+  private fun releaseVelocity(tracker: VelocityTracker?, pointerId: Int): Float {
+    if (tracker == null || pointerId == NO_POINTER) {
+      return 0f
+    }
+    tracker.computeCurrentVelocity(1000)
+    val y = tracker.getYVelocity(pointerId)
+    return if (y.isFinite()) -y else 0f
+  }
+
+  private companion object {
+    const val NO_POINTER = -1
+  }
+}
+
+/** Whether this view moves on the touch it is given, so a drag on it is not the sheet's. */
+private fun View.scrollsWithItsOwnTouch(): Boolean =
+  isScrollContainer ||
+    canScrollVertically(-1) ||
+    canScrollVertically(1) ||
+    canScrollHorizontally(-1) ||
+    canScrollHorizontally(1)
 
 /**
  * Draws nothing itself: its composition composes the sheet. It is the logical parent of
@@ -629,20 +791,24 @@ internal class BottomSheetHost(
     TestSeam(sheetState, detents, canPartiallyExpand = !skipPartiallyExpanded)
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    // Material3 decides a sheet's detent change from 56.dp of travel or a fling over 125.dp a
-    // second, so a drag followed below is measured the same way. It cannot be followed by handing
-    // over its deltas: while the opening animation still carries the sheet, a raw delta is
-    // overwritten by the next frame of that animation.
+    // Material3 asks a fling over 125.dp a second first and 56.dp of travel second, so a followed
+    // drag is decided the same way. It cannot be followed by handing over its deltas: while the
+    // opening animation still carries the sheet, a raw delta is overwritten by its next frame.
     val detentTravelPx = with(density) { 56.dp.toPx() }
     val detentVelocityPxPerSecond = with(density) { 125.dp.toPx() }
     val dragUntilSettled: (Int, Float) -> Unit =
       remember(model, sheetState, scope, detentTravelPx, detentVelocityPxPerSecond) {
         { travelPx, velocity ->
-          val upward = travelPx > 0 || velocity > 0f
-          val decisive =
-            abs(travelPx) >= detentTravelPx || abs(velocity) >= detentVelocityPxPerSecond
+          // The fling is asked first, as Material asks it: a drag that ends in a flick the other
+          // way goes where that flick points.
+          val upward =
+            when {
+              abs(velocity) >= detentVelocityPxPerSecond -> velocity > 0f
+              abs(travelPx) >= detentTravelPx -> travelPx > 0
+              else -> null
+            }
           when {
-            !decisive -> Unit
+            upward == null -> Unit
             // The detent above the one the sheet is opening to, where there is one to reach.
             upward &&
               sheetState.targetValue != SheetValue.Expanded &&
@@ -650,13 +816,17 @@ internal class BottomSheetHost(
               model.oweDetentReport = true
               scope.launch { sheetState.expand() }
             }
-            // A drag back down means the sheet was not wanted: what a swipe down does already.
-            // Material has not hidden the sheet, so this one still has to slide out.
-            !upward && model.dismissible -> model.userDismissed(animate = true)
+            // A drag back down means the sheet was not wanted, and Material has not hidden it.
+            !upward -> model.userDismissed(animate = true)
             else -> Unit
           }
         }
       }
+    // Material switches its own drag on the sheet off until the sheet has settled at a value, and
+    // the opening animation is what settles it. During that window a drag is followed from the
+    // sheet's root and from the grabber, the two places a person's drag can start.
+    val followsDrag = presented && sheetState.currentValue == SheetValue.Hidden
+    val onRisingDrag: ((Int, Float) -> Unit)? = if (followsDrag) dragUntilSettled else null
     val radius = model.cornerRadius
     val color = model.containerColor
     ModalBottomSheet(
@@ -671,7 +841,7 @@ internal class BottomSheetHost(
       containerColor = color?.let { ComposeColor(it) } ?: BottomSheetDefaults.ContainerColor,
       dragHandle =
         if (model.showsGrabber) {
-          { BottomSheetDefaults.DragHandle() }
+          { RisingDragGrabber(onRisingDrag) { BottomSheetDefaults.DragHandle() } }
         } else {
           null
         },
@@ -691,17 +861,10 @@ internal class BottomSheetHost(
           expanded.kind == "fraction" -> Modifier.fillMaxHeight(expanded.value.toFloat().coerceIn(0.01f, 1f))
           else -> Modifier.fillMaxHeight()
         }
-      // Material switches its own drag on the sheet off until the sheet has settled at a value,
-      // and the opening animation is what settles it: a drag that starts while the sheet is still
-      // opening is measured by the root and followed here.
-      val followsDrag = presented && sheetState.currentValue == SheetValue.Hidden
       AndroidView(
         factory = { obtainSheetRoot() },
         onRelease = { root -> releaseSheetRoot(root) },
-        update = {
-          root ->
-          root.dragUntilSettled = if (followsDrag) dragUntilSettled else null
-        },
+        update = { root -> root.dragUntilSettled = onRisingDrag },
         modifier = Modifier.fillMaxWidth().then(sizing).nestedScroll(interop),
       )
     }
