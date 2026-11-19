@@ -73,6 +73,7 @@ export default function BottomSheetScreen() {
   const [twoOpen, setTwoOpen] = useState(false);
   const [twoDetent, setTwoDetent] = useState<number | null>(null);
   const [fractionOpen, setFractionOpen] = useState(false);
+  const [fractionDetent, setFractionDetent] = useState<number | null>(null);
   const [stickyOpen, setStickyOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [inModalOpen, setInModalOpen] = useState(false);
@@ -251,19 +252,51 @@ export default function BottomSheetScreen() {
         <Opener
           label="Open the 85% sheet"
           testID="sheet-open-fraction"
-          onPress={() => setFractionOpen(true)}
+          onPress={() => {
+            setFractionDetent(null);
+            setFractionOpen(true);
+          }}
         />
         <BottomSheet
+          testID="sheet-fraction"
           isPresented={fractionOpen}
           onIsPresentedChange={setFractionOpen}
-          onDetentChange={(index) => record(`fraction-detent:${index}`)}
+          onDetentChange={(index) => {
+            record(`fraction-detent:${index}`);
+            setFractionDetent(index);
+          }}
           detents={DETENTS_FRACTION}
           cornerRadius={28}
         >
-          <View style={styles.sheet}>
+          {/* `flex: 1`, and the list is the last child: the band under it is the sheet's
+              own space, so a drag that starts there is the sheet's and not the list's. */}
+          <View style={[styles.sheet, styles.tall]}>
             <Text style={[styles.title, { color: ink.ink }]}>
               Medium, then 85% of the largest height
             </Text>
+            <Text
+              testID="sheet-fraction-detent"
+              style={[styles.value, { color: ink.ink }]}
+            >
+              {fractionDetent == null
+                ? 'Rising detent none'
+                : `Rising detent ${fractionDetent}`}
+            </Text>
+            <View style={styles.gap} />
+            <ScrollView
+              horizontal
+              testID="sheet-fraction-list"
+              contentContainerStyle={styles.chips}
+            >
+              {CHIPS.slice(0, 3).map((chip) => (
+                <View
+                  key={chip}
+                  style={[styles.chip, { backgroundColor: ink.row }]}
+                >
+                  <Text style={{ color: ink.ink }}>{`Rising ${chip}`}</Text>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         </BottomSheet>
 
@@ -373,6 +406,8 @@ const styles = StyleSheet.create({
   value: { fontSize: 13, fontWeight: '600' },
   row: { padding: 14, borderRadius: 10 },
   chips: { gap: 8 },
+  tall: { flex: 1 },
+  gap: { height: 96 },
   input: { borderWidth: 1, borderRadius: 10, padding: 10, height: 56 },
   chip: { width: 110, padding: 12, borderRadius: 10 },
   opener: {

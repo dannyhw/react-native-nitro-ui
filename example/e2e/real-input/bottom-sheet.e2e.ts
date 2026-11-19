@@ -454,7 +454,9 @@ test('a drag down during the rise slides the sheet out and reports the dismissal
     );
   }
   await dragDown(screen, rising, window);
-  const wayOut = await readsBeforeItLeaves(screen.getByTestId('sheet-fit-sheet'));
+  const wayOut = await readsBeforeItLeaves(
+    screen.getByTestId('sheet-fit-sheet')
+  );
   expect(
     wayOut.length,
     'the sheet was gone before it could be read once after the drag ended, so it left the tree ' +
@@ -535,5 +537,264 @@ test('a sideways fling on the sheet list during the rise neither expands the she
   await screen.getByText(FIT).waitFor({ state: 'detached' });
   // The brief decided this case's log: a close reports the dismissal, which is why the case that
   // ends by closing the sheet expects it too.
+  await expect(log).toHaveText('press:1 > presented:false > dismiss');
+});
+
+/** How far a held press may drift, in px, and stay a press: well inside the touch slop. */
+const STILL_PX = 3;
+
+/**
+ * The box of a node in a sheet that is still rising, read until `aimable` accepts it: the point a
+ * case wants to touch has to be under the finger when the finger arrives, and a rising sheet is in
+ * the right place for it only once.
+ */
+async function boxWhileRising(
+  locator: Locator,
+  aimable: (box: Box) => boolean
+): Promise<Box | null> {
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const box = await boxOf(locator);
+    if (box != null && aimable(box)) return box;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return null;
+}
+
+/**
+ * A press that does not move is not a drag, however far the sheet rises under it. The travel and
+ * the release velocity of a rising-sheet drag are the finger's own, read on the screen, so the
+ * opening animation's travel belongs to no one: the sheet carries on to the detent it opened at
+ * and reports nothing, because nothing was dragged to.
+ */
+test('a press held still on the header of a rising sheet is no drag at all', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'sheet');
+  const log = screen.getByTestId('sheet-log');
+  const header = screen.getByTestId('sheet-two-header');
+  const detent = settledDetent(screen);
+  await expect(log).toHaveText('none');
+
+  await reveal(screen, screen.getByTestId('sheet-open-two'));
+  await screen.getByTestId('sheet-open-two').tap();
+  const rising = await boxOnceVisible(header);
+  if (rising == null) {
+    throw new Error(
+      'real-input: the rising two-detent sheet has no header to hold still on.'
+    );
+  }
+  const held = {
+    x: Math.round(rising.x + rising.width / 2),
+    y: Math.round(rising.y + Math.min(rising.height / 2, 40)),
+  };
+  await screen.swipe({
+    from: held,
+    to: { x: held.x, y: held.y + STILL_PX },
+    duration: 300,
+  });
+
+  await staysUp(screen, TWO, 'a press held still on its header');
+  await expect(log).toHaveText('none');
+  await expect(detent).toHaveText('Detent none');
+  await app.back();
+  await screen.getByText(TWO).waitFor({ state: 'detached' });
+  await expect(log).toHaveText('presented:false > dismiss');
+});
+
+/**
+ * The same held press on a control inside the rising sheet. A `Pressable` does not block the
+ * native responder, so this is the sheet's own gesture to measure, and it measures as nothing. The
+ * hold lands on the button's own box as read a moment before, so whether the lift answers as a
+ * press is the button's business: what may not happen is a dismissal.
+ */
+test('a press held still on a button inside a rising sheet closes nothing', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'sheet');
+  const log = screen.getByTestId('sheet-log');
+  const press = screen.getByTestId('sheet-press');
+  await expect(log).toHaveText('none');
+
+  await reveal(screen, screen.getByTestId('sheet-open-fit'));
+  await screen.getByTestId('sheet-open-fit').tap();
+  const rising = await boxOnceVisible(press);
+  if (rising == null) {
+    throw new Error(
+      'real-input: the rising fit sheet has no button to hold still on.'
+    );
+  }
+  const held = {
+    x: Math.round(rising.x + rising.width / 2),
+    y: Math.round(rising.y + rising.height / 2),
+  };
+  await screen.swipe({
+    from: held,
+    to: { x: held.x, y: held.y + STILL_PX },
+    duration: 300,
+  });
+
+  await staysUp(screen, FIT, 'a press held still on its own button');
+  await expect(log).toHaveText(/^(none|press:1)$/);
+  await app.back();
+  await screen.getByText(FIT).waitFor({ state: 'detached' });
+});
+
+/**
+ * The 85% sheet's list is its last child, so the band under it is the sheet's own space and a drag
+ * that starts there is the sheet's. Whether that band still is the sheet's is what decides this
+ * case: the drag has to be asked of the sheet's content, and not skipped because a point below the
+ * list reads as inside it. The drag is measured on the screen, so the sheet's rise is no part of
+ * it either.
+ */
+test('a drag that starts under the sheet list while the sheet rises expands it', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'sheet');
+  const log = screen.getByTestId('sheet-log');
+  const window = await windowBox(screen);
+  const list = screen.getByTestId('sheet-fraction-list');
+  const detent = screen.getByTestId('sheet-fraction-detent');
+  await expect(log).toHaveText('none');
+
+  await reveal(screen, screen.getByTestId('sheet-open-fraction'));
+  await screen.getByTestId('sheet-open-fraction').tap();
+  const below = Math.round(4 * displayDensity());
+  const rising = await boxWhileRising(
+    list,
+    (box) => box.y + box.height + below < window.y + window.height - below
+  );
+  if (rising == null) {
+    throw new Error(
+      'real-input: the rising 85% sheet never shows the space under its list.'
+    );
+  }
+  const from = {
+    x: Math.round(window.x + window.width / 2),
+    y: rising.y + rising.height + below,
+  };
+  await screen.swipe({
+    from,
+    to: { x: from.x, y: window.y + 2 },
+    duration: 400,
+  });
+
+  await expect(detent).toHaveText('Rising detent 1');
+  await app.back();
+  await expect(detent).toHaveText('Rising detent 0');
+  await app.back();
+  await detent.waitFor({ state: 'detached' });
+  await expect(log).toHaveText(
+    'fraction-detent:1 > fraction-detent:0 > presented:false > dismiss'
+  );
+});
+
+/**
+ * A `TextInput` takes the gesture from its touch-down, so a drag that starts on one is the
+ * field's own even while the sheet is rising: it is not asked of the sheet, and the sheet carries
+ * on rising.
+ */
+test('a drag down that starts on the sheet TextInput during the rise is the field’s, and the sheet stays up', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'sheet');
+  const log = screen.getByTestId('sheet-log');
+  const window = await windowBox(screen);
+  const input = screen.getByTestId('sheet-input');
+  await expect(log).toHaveText('none');
+
+  await reveal(screen, screen.getByTestId('sheet-open-fit'));
+  await screen.getByTestId('sheet-open-fit').tap();
+  const room = Math.round(80 * displayDensity());
+  const rising = await boxWhileRising(
+    input,
+    (box) => box.y + box.height / 2 + room < window.y + window.height
+  );
+  if (rising == null) {
+    throw new Error(
+      'real-input: the rising fit sheet never shows its TextInput with room to drag down.'
+    );
+  }
+  const from = {
+    x: Math.round(rising.x + rising.width / 2),
+    y: Math.round(rising.y + rising.height / 2),
+  };
+  await screen.swipe({
+    from,
+    to: {
+      x: from.x,
+      y: Math.min(from.y + room, window.y + window.height - 2),
+    },
+    duration: 250,
+  });
+
+  await staysUp(
+    screen,
+    FIT,
+    'a drag down that started on the sheet’s TextInput'
+  );
+  await screen.getByText(FIT).tap();
+  await expect(screen.getByTestId('sheet-presses')).toHaveText(
+    'Pressed 1 times'
+  );
+  await app.back();
+  await screen.getByText(FIT).waitFor({ state: 'detached' });
+  await expect(log).toHaveText('press:1 > presented:false > dismiss');
+});
+
+/**
+ * A fling that travels mostly sideways belongs to the gesture it crossed, not to the sheet, even
+ * one that drops far enough to pass the slop. Along the sheet's list the child takes that gesture;
+ * along the sheet's own title nothing claims it, and it is the sheet's to refuse by direction.
+ */
+test('a sideways fling that drifts down past the slop does not close a rising sheet', async ({
+  app,
+  screen,
+}) => {
+  await app.open();
+  await openScreen(screen, 'sheet');
+  const log = screen.getByTestId('sheet-log');
+  const window = await windowBox(screen);
+  const title = screen.getByTestId('sheet-fit-title');
+  await expect(log).toHaveText('none');
+
+  await reveal(screen, screen.getByTestId('sheet-open-fit'));
+  await screen.getByTestId('sheet-open-fit').tap();
+  const rising = await boxOnceVisible(title);
+  if (rising == null) {
+    throw new Error(
+      'real-input: the rising fit sheet has no title to fling along.'
+    );
+  }
+  const from = {
+    x: Math.round(rising.x + rising.width / 2),
+    y: Math.round(rising.y + Math.min(rising.height / 2, 40)),
+  };
+  await screen.swipe({
+    from,
+    to: {
+      x: Math.max(from.x - Math.round(650 * displayDensity()), window.x + 2),
+      y: Math.min(
+        from.y + Math.round(70 * displayDensity()),
+        window.y + window.height - 2
+      ),
+    },
+    duration: 250,
+  });
+
+  await staysUp(screen, FIT, 'a sideways fling along the rising sheet');
+  await screen.getByText(FIT).tap();
+  await expect(screen.getByTestId('sheet-presses')).toHaveText(
+    'Pressed 1 times'
+  );
+  await app.back();
+  await screen.getByText(FIT).waitFor({ state: 'detached' });
   await expect(log).toHaveText('press:1 > presented:false > dismiss');
 });
