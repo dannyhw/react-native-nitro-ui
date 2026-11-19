@@ -79,7 +79,7 @@ app API.
 | Filter   | `Toggle(isOn:) { label }.toggleStyle(.button)`                                    | `androidx.compose.material3.FilterChip`                                                  |
 | Assist   | `Button(action:) { label }`                                                       | `androidx.compose.material3.AssistChip`                                                  |
 | Shape    | `.buttonStyle(.bordered)`, `.buttonBorderShape(.capsule)`, `.controlSize(.small)` | M3 chip shape, 32 dp tall in a 48 dp touch target                                        |
-| Selected | the bordered style's selected fill; a disabled chip fades it toward the page      | M3 selected container plus a leading check mark                                          |
+| Selected | the bordered style's selected fill; a disabled chip fades it toward the system background | M3 selected container plus a leading check mark                                          |
 | Icon     | `systemImage` as a leading SF Symbol                                              | `androidIcon` in `FilterChipDefaults.IconSize`, or the selected filter chip's check mark |
 | Value    | `NitroUiControlledValue<Bool>` on `ChipModel`                                     | `NitroUiControlledValue<Boolean>` on `ChipModel`                                         |
 | Label    | `.accessibilityLabel(_:)` on the control                                          | `Modifier.semantics { contentDescription }` on the chip                                  |
@@ -161,16 +161,21 @@ tested by real input (`RealInputTests.testRealInputChip`).
 
 - **A disabled selected chip keeps its fill.** SwiftUI's disabled bordered style
   drops a toggle's selected fill, so the chip lays one back: the tint that style
-  fills with, faded toward the page the chip sits on. It is lighter and paler
+  fills with, faded toward the system background colour. It is lighter and paler
   than the enabled chip's fill, and never the grey of a disabled unselected
-  chip, so a dimmed row still says which filters were chosen. Android does this
-  on its own.
+  chip, so a dimmed row still says which filters were chosen. The fade stops at
+  the label, so a dimmed chip's text is as legible as any other dimmed chip's.
+  Android does this on its own.
 
 ## Limits
 
 - Two kinds only. Material's `input` and `suggestion` chips are not supported, and
   there is no trailing icon, avatar or close button.
 - No `tintColor`. Both platforms draw their own selected colours.
+- **The disabled selected fill follows the system background, not the surface
+  under the chip.** A disabled selected chip on a coloured card or a photo fades
+  toward the same white or black the system background is, so there its fill can
+  sit lighter or darker than the surface behind it.
 - `systemImage` is iOS only, like Button's. Android does not draw it — and `androidIcon`
   is Android-only, so a chip that wants a leading glyph on both platforms names both.
 - **No check mark slide-in on Android.** Material 3 animates the check mark's
