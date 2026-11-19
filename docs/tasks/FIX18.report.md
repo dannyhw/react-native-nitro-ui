@@ -32,8 +32,8 @@ screenshot.
 
 Android is untouched: its overflow indicator is Material's own, drawn whatever the group's state,
 and the case returns. The harness file is shared, so `harness:android` is owed and missing below:
-this lease is iOS-only and the machine's only Android pair was held elsewhere all round. A real tap
-on a disabled control, and what VoiceOver calls it, belong to `real-input:ios`, at merge.
+this lease is iOS-only and the machine's only Android pair was held elsewhere all round. No test
+taps the disabled control or reads what VoiceOver calls it; that is a follow-up.
 
 ## Gates
 
