@@ -36,7 +36,7 @@ internal object NitroUiIconUrl {
     if (schemeEnd < 0) {
       return raw
     }
-    val pathStart = indexOfAnyIn(raw, "/?", schemeEnd + 3)
+    val pathStart = raw.indexOfAny(charArrayOf('/', '?'), schemeEnd + 3)
     if (pathStart < 0) {
       return raw
     }
@@ -77,7 +77,8 @@ internal object NitroUiIconUrl {
         index++
         continue
       }
-      // A name outside ASCII travels as its UTF-8 bytes, and so does half a surrogate pair.
+      // A name outside ASCII travels as its UTF-8 bytes. Half a surrogate pair has none:
+      // `toByteArray` answers with `?`, which goes over as `%3F`.
       val isPair =
         char.isHighSurrogate() && index + 1 < part.length && part[index + 1].isLowSurrogate()
       val width = if (isPair) 2 else 1
@@ -113,11 +114,4 @@ internal object NitroUiIconUrl {
       char == ':' ||
       char == '@' ||
       extra.indexOf(char) >= 0
-
-  private fun indexOfAnyIn(
-    text: String,
-    chars: String,
-    startIndex: Int,
-  ): Int =
-    chars.map { text.indexOf(it, startIndex) }.filter { it >= 0 }.minOrNull() ?: -1
 }

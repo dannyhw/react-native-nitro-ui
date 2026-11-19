@@ -60,6 +60,23 @@ class NitroUiIconUrlTest {
   }
 
   @Test
+  fun anEscapeInTheQueryIsNotSentTwiceEither() {
+    assertEquals(
+      "$origin/assets/icons/star.xml?platform=android&hash=a%2Bb",
+      requestFor("/assets/icons/star.xml?platform=android&hash=a%2Bb"),
+    )
+  }
+
+  @Test
+  fun aPlusInTheQueryIsSentAsItWasWritten() {
+    // `+` is legal in a query and means something there, so it is not a space to be quoted.
+    assertEquals(
+      "$origin/assets/icons/star.xml?platform=android&hash=a+b",
+      requestFor("/assets/icons/star.xml?platform=android&hash=a+b"),
+    )
+  }
+
+  @Test
   fun aNameOutsideAsciiTravelsAsItsUtf8Bytes() {
     assertEquals(
       "$origin/assets/icons/%C3%BCn%C3%AFc%C3%B8d%C3%A9/star_24px.xml",
@@ -105,6 +122,22 @@ class NitroUiIconUrlTest {
     assertEquals(
       "http://[::1]:8081/assets/my%20icon.xml",
       NitroUiIconUrl.requestUri("http://[::1]:8081/assets/my icon.xml").toString(),
+    )
+  }
+
+  @Test
+  fun aLocalHostNameIsRequestedLikeAnAddressIs() {
+    assertEquals(
+      "http://localhost:8081/assets/my%20icon.xml",
+      NitroUiIconUrl.requestUri("http://localhost:8081/assets/my icon.xml").toString(),
+    )
+  }
+
+  @Test
+  fun anUrlWithNoPathIsRequestedAsItStands() {
+    assertEquals(
+      "http://localhost:8081",
+      NitroUiIconUrl.requestUri("http://localhost:8081").toString(),
     )
   }
 
