@@ -7,36 +7,39 @@
 
 A filter `Chip` that is `selected` and `disabled` on iOS now draws its selected fill, dimmed.
 `ChipDisabledFill` wraps the filter `Toggle`, which keeps SwiftUI's `.button` toggle style, and for
-`selected && disabled` only lays a capsule of `Color.accentColor` over the control at
-`opacity(0.2)`. Enabled chips, assist chips, sizes, the leading glyph, the check slot, hit testing,
-`isEnabled` and the announced value are SwiftUI's, untouched.
+`selected && disabled` only lays a wash over the control: the system background colour at `0.55`
+and `.tint` at `0.09`, cut out where the label draws. Enabled chips, assist chips, sizes, the
+leading glyph, the check slot, hit testing, `isEnabled` and the announced value are SwiftUI's,
+untouched.
 
-Two decisions worth reading before the diff. The capsule goes **over** the control, not behind it:
+Three decisions worth reading before the diff. The wash goes **over** the control, not behind it:
 SwiftUI's disabled bordered style paints an opaque grey container, so a wash behind it never
-reaches the screen (measured: a wash behind reads back as grey `#CCCCCD`). A dimmed selection laid
-over the control, label included, is also what iOS itself means by it. The strength sits on the
-shape rather than in `.colorMultiply` or `Color.accentColor.opacity(_:)` because both were wrong on
-this host: the multiply lightened the chip (`#F9F9F9`) and the colour reached the sampler without
-its hue. A custom `ToggleStyle` that draws the capsule was tried and dropped — it moved the enabled
-chip's look and split the control into separate accessibility elements.
+reaches the screen (measured: a wash behind reads back as grey `#CCCCCD`). It stops at the label: a
+wash pulls a fill and its text toward one colour, so a wash that dims the fill always faints the
+label past the strength of an unselected chip's, and no fade/tint pair satisfies the fill relations
+and leaves the label its strength (the best pair that keeps the label's ink no lighter is 4 short
+of the fill bounds). The strength sits on the shapes rather than in `.colorMultiply` or
+`Color.accentColor.opacity(_:)` because both were wrong on this host: the multiply lightened the
+chip (`#F9F9F9`) and the colour reached the sampler without its hue. A custom `ToggleStyle` that
+draws the capsule was tried and dropped — it moved the enabled chip's look and split the control
+into separate accessibility elements.
 
 `Chip.harness.tsx` gained a suite that reads the screen: five chips share one label, and each one's
 own box is sampled through `nuiTestPixelProbe` / `nuiTestPixelReport`. iOS draws a bordered
 selection pale, so no threshold quotes an absolute colour: the enabled pair of the same run is the
 yardstick, the twin says what the read costs in noise, and the disabled pair has to keep a third of
 the enabled pair's separation, stay apart from the enabled chip, and be separated by a dimmer
-version of the selected colour. One test also pins that a disabled chip measures what an enabled one
-does, on both platforms. The iOS `androidIcon` case from the first commit asserted that the probe
-refuses to sample iOS; iOS samples now, so it compares the drawn colour with and without
-`androidIcon`.
+version of the selected colour. The label is read as ink rather than as a box mean, which a fainter
+label only lightens: the darkest pixel each disabled chip draws, and how much of its box is painted
+at that strength. One test also pins that a disabled chip measures what an enabled one does, on both
+platforms. The iOS `androidIcon` case from the first commit asserted that the probe refuses to
+sample iOS; iOS samples now, so it compares the drawn colour with and without `androidIcon`.
 
 `docs/components/chip.md` drops the limit and says what a disabled selected chip draws; the
 FOLLOWUPS line is gone; a patch changeset ships with it.
 
-**Not done:** the two screenshots. The README's iOS pair (`docs/images/components/chip-ios.png`)
-has a changed "Disabled" row and needs the documented retake, and the brief's local four-state
-side-by-side was never shot — the device budget went into the first Android app build in this
-worktree and the two full harness gates.
+**Screenshots:** the README's iOS pair (`docs/images/components/chip-ios.png`) and the brief's
+local four-state side-by-side are both shot; see Fix round 2 for the paths of the uncommitted one.
 
 ## Gates
 
@@ -76,6 +79,8 @@ state.
 
 ## Follow-ups
 
+- ios: dark appearance is not measured. `nitroUiSampleChipDrawing` composites over white and the
+  harness runs in light appearance, so the disabled fill's dark relations rest on a screenshot.
 - ios: the sampler `nitroUiSampleChipDrawing` is now in `Chip` and `SegmentedControl`; it belongs in
   `ios/core` beside `NitroUiPixelProbe.kt`.
 - example: `ListItem.harness.tsx` > `a fast press reverts: the row settles back, reports the new
