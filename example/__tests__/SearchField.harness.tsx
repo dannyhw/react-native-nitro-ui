@@ -168,6 +168,24 @@ async function stateWhen(
   }
 }
 
+/**
+ * Wait until the app has been told everything the field published: `jsEvents` is the
+ * event count JS echoes back with the commit that ran its callbacks, so the counts
+ * agreeing means the log holds every event up to this report. A report can be readable
+ * a moment before the event that produced it reaches JS.
+ */
+async function reportedWhen(
+  id: string,
+  check: (state: FieldState) => boolean,
+  what: string
+): Promise<FieldState> {
+  return stateWhen(
+    id,
+    (state) => state.jsEvents === state.nativeEvents && check(state),
+    `${what}, and every event reported to JS`
+  );
+}
+
 /** Focus `id` through its `ref`-backed native method, and wait for it to land. */
 async function focusField(id: string) {
   const handle = await handleOf(id);
@@ -510,7 +528,7 @@ describe('SearchField', () => {
     const before = eventsOf('cleared').length;
     // The control's own clear handler, not a write into its state.
     (await handleOf('cleared')).nuiTestClear();
-    const cleared = await stateWhen(
+    const cleared = await reportedWhen(
       'cleared',
       (current) => current.text === '',
       'the clear'
@@ -579,7 +597,13 @@ describe('SearchField', () => {
     await focusField('recleared');
     await typeText('ru');
     (await handleOf('recleared')).nuiTestClear();
-    await stateWhen('recleared', (current) => current.text === '', 'the clear');
+    // The clear's own event has to be in the log before the count is taken, or a later
+    // event is mistaken for it.
+    await reportedWhen(
+      'recleared',
+      (current) => current.text === '',
+      'the clear'
+    );
     const before = eventsOf('recleared').length;
     (await handleOf('recleared')).nuiTestSubmit();
     await sleep(150);
