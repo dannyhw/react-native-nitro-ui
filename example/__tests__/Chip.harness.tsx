@@ -228,6 +228,17 @@ function probeMean(report: string): string {
   return mean[1] ?? '';
 }
 
+/** The colour of the darkest pixel a probe saw, which for a chip is its label's strongest ink. */
+function probeClosest(report: string): string {
+  const closest = / closest=(#[0-9A-F]{6})/.exec(report);
+  if (closest == null) {
+    throw new Error(
+      `the pixel probe report carries no closest colour: ${report}`
+    );
+  }
+  return closest[1] ?? '';
+}
+
 /** Per-channel-sum distance between two `#RRGGBB` colours. */
 function colourDistance(a: string, b: string): number {
   const first = channels(a);
@@ -1316,6 +1327,10 @@ describe('Chip · the selected fill in every state (G12)', () => {
    *  in the same run rather than against a colour this file could not know in advance. */
   const KEPT = 3;
 
+  /** How much fainter a dimmed chip's label may read than its unselected twin: two per channel,
+   *  about how far the anti-aliasing of one glyph edge can move a single pixel. */
+  const LABEL_INK = 6;
+
   type Spec = { testId: string; selected: boolean; disabled?: boolean };
 
   const SPECS: Spec[] = [
@@ -1360,6 +1375,24 @@ describe('Chip · the selected fill in every state (G12)', () => {
   /** What `testId` paints, as the mean colour of its own box. */
   async function paintOf(testId: string): Promise<string> {
     return probeMean(await pixelProbe(testId, 0x000000, testId));
+  }
+
+  /** The strongest ink `testId` draws: the darkest pixel inside its own box. */
+  async function inkOf(testId: string): Promise<string> {
+    return probeClosest(
+      await pixelProbe(testId, 0x000000, `the label of ${testId}`)
+    );
+  }
+
+  /** How much of `testId`'s box is painted within the probe's reach of `colour`. */
+  async function inkArea(testId: string, colour: string): Promise<number> {
+    return probeHits(
+      await pixelProbe(
+        testId,
+        Number.parseInt(colour.slice(1), 16),
+        `the area of ${testId} painted ${colour}`
+      )
+    );
   }
 
   it('measures one size whether or not it is disabled', async () => {
@@ -1462,6 +1495,46 @@ describe('Chip · the selected fill in every state (G12)', () => {
           `carries ${chroma(dimOn)} of colour against ${dimOff}'s ${chroma(
             dimOff
           )}, and the enabled selected chip carries ${chroma(on)}. ${seen}`
+      ).toBe(true);
+    }
+  );
+
+  itIos(
+    'keeps the label of a disabled selected chip as strong as an unselected one',
+    async () => {
+      await renderEveryState();
+      // A disabled selected chip dims its fill, and a dimming that also covers the text leaves
+      // it with the faintest label in the row. The box mean cannot see that - a fainter label
+      // only makes a box read lighter - so the read is the ink: the darkest pixel each chip
+      // draws, and how much of its box is painted at that strength.
+      const inkOff = await inkOf('disabled-off');
+      const inkOn = await inkOf('disabled-on');
+      const areaOff = await inkArea('disabled-off', inkOff);
+      const areaOn = await inkArea('disabled-on', inkOff);
+      const seen = `off=${inkOff} on=${inkOn} areaOff=${areaOff} areaOn=${areaOn}`;
+      console.log(`chip iOS label ink: ${seen}`);
+
+      // Without ink to compare there is nothing to compare: an unselected disabled chip that
+      // paints no label says nothing about how strong a label has to be.
+      expect(
+        areaOff > 0,
+        `a disabled unselected chip paints no pixel at its own darkest colour ${inkOff}, ` +
+          `so there is no label strength to hold the selected one to. ${seen}`
+      ).toBe(true);
+      expect(
+        lightness(inkOn) <= lightness(inkOff) + LABEL_INK,
+        `the label of a disabled selected chip reads ${inkOn} at its strongest where a ` +
+          `disabled unselected one reads ${inkOff}: the dimmed fill is ${
+            lightness(inkOn) - lightness(inkOff)
+          } fainter than ${LABEL_INK} and washes the text it paints. ${seen}`
+      ).toBe(true);
+      // Half the ink the unselected chip paints at that strength. The dimming reaches the text
+      // everywhere, so a washed label keeps almost none of it; a drawing that leaves the text
+      // alone keeps all but the pixels of one glyph edge, which anti-aliasing is free to move.
+      expect(
+        areaOn * 2 >= areaOff,
+        `a disabled selected chip paints ${areaOn} pixels at the ${inkOff} its unselected ` +
+          `twin paints ${areaOff} of: its label is faded away, not merely dimmed. ${seen}`
       ).toBe(true);
     }
   );
