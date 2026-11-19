@@ -360,6 +360,18 @@ jobs:
       - name: Run real input
         run: node scripts/real-input/android.mjs
 
+      - name: Capture the screen a failed run left
+        if: failure()
+        run: |
+          out="$RUNNER_TEMP/after-failure"
+          mkdir -p "$out"
+          adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' > "$out/focus.txt" || true
+          adb shell wm size > "$out/wm-size.txt" || true
+          adb shell wm density >> "$out/wm-size.txt" || true
+          adb exec-out screencap -p > "$out/screen.png" || true
+          adb shell uiautomator dump /sdcard/after-failure.xml && adb pull /sdcard/after-failure.xml "$out/tree.xml" || true
+          adb logcat -d -t 2000 > "$out/logcat.txt" || true
+
       - name: Upload real-input evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -370,6 +382,7 @@ jobs:
             .real-input/android
             example/e2e/.e2e/android
             ${{ runner.temp }}/emulator.log
+            ${{ runner.temp }}/after-failure
           if-no-files-found: warn
 
   # Xcode 27 because `rn-harness.config.mjs` asks for an iOS 27 simulator. Opt-in:
