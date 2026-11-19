@@ -264,11 +264,10 @@ describe('Android icons (D43)', () => {
       }
     }
     for (const dir of EXAMPLE_ICON_DIRS) {
-      for (const name of fs.readdirSync(path.join(root, dir))) {
-        if (!EXAMPLE_FIXTURE_PATTERN.test(name)) {
+      for (const relative of walk(dir)) {
+        if (!EXAMPLE_FIXTURE_PATTERN.test(relative)) {
           continue;
         }
-        const relative = `${dir}/${name}`;
         if (exampleFiles.has(relative) || relative in EXAMPLE_FIXTURES) {
           continue;
         }
