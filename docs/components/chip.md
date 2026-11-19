@@ -155,6 +155,12 @@ tested by real input (`RealInputTests.testRealInputChip`).
   toggle's event count, as a controlled chip's does: native holds the toggle's
   size report until a batch has seen every toggle, so two quick toggles cannot
   file one state's width under the other state's key.
+- **A dimmed selected chip keeps its selection on iOS.** SwiftUI's disabled
+  bordered style drops a toggle's selected fill, so for that one state the chip
+  lays one back: the bordered style's tint, faded toward the system background
+  colour, drawn under the label rather than over it. The label is still
+  SwiftUI's own, so it dims exactly as a disabled unselected chip's does.
+  Android's Material chip already kept the fill.
 - **Recycling resets everything.** `NitroUiChip` implements `RecyclableView`: a
   reused instance resets its model, the handshake's counters included, and
   re-seeds `defaultSelected`.
@@ -164,9 +170,9 @@ tested by real input (`RealInputTests.testRealInputChip`).
 - Two kinds only. Material's `input` and `suggestion` chips are not supported, and
   there is no trailing icon, avatar or close button.
 - No `tintColor`. Both platforms draw their own selected colours.
-- On iOS a disabled chip draws the same whether or not it is selected:
-  SwiftUI's disabled bordered style drops the selected fill (the "Disabled" row
-  of the README screenshot).
+- **On iOS a dimmed selected chip fades toward the system background colour**,
+  not toward whatever surface it happens to sit on. Off that background such a
+  chip can read lighter than the chips beside it.
 - `systemImage` is iOS only, like Button's. Android does not draw it — and `androidIcon`
   is Android-only, so a chip that wants a leading glyph on both platforms names both.
 - **No check mark slide-in on Android.** Material 3 animates the check mark's
