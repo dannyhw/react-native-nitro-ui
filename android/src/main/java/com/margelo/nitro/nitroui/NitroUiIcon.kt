@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.Dp
 import com.facebook.react.views.imagehelper.ResourceDrawableIdHelper
 import com.margelo.nitro.nitroui.core.NitroUiIcons
 import java.net.HttpURLConnection
-import java.net.URI
 import java.util.Collections
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.LinkedBlockingQueue
@@ -553,7 +552,7 @@ internal object NitroUiIconFiles {
   private fun parse(
     url: String,
   ): NitroUiIconRead {
-    val connection = URI(url).toURL().openConnection()
+    val connection = NitroUiIconUrl.requestUri(url).toURL().openConnection()
     var stream: java.io.InputStream? = null
     try {
       if (connection is HttpURLConnection) {

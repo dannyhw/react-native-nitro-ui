@@ -237,7 +237,17 @@ export function resolveAndroidIcon(
 /** A string is a URL if it has a scheme, and a drawable name if it has none. */
 function resolveAndroidIconString(value: string): string | null {
   if (SCHEME.test(value)) {
-    return markAndroidIconUrl(value);
+    return markAndroidIconUrl(withoutFragment(value));
   }
   return normalizeAndroidIconName(value);
+}
+
+/**
+ * A `#` an app writes into a source starts a fragment, which is not part of the file the
+ * request asks for. An asset URL from Metro does not come through here, and its `#` is a
+ * character in the file's name.
+ */
+function withoutFragment(url: string): string {
+  const fragmentStart = url.indexOf('#');
+  return fragmentStart < 0 ? url : url.slice(0, fragmentStart);
 }

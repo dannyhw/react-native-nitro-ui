@@ -15,6 +15,12 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-19 Nothing user-visible: Android harness cases prove a Form's `keyboardAvoidance={false}`
+  without a keyboard (no content growth, no lift of the focused field); the quarantined real-input
+  case stays out with its cause unknown (FIX15, #106).
+- 11-19 In development, an Android `androidIcon` from `require()` whose file path holds a space,
+  `#` or non-ASCII letters draws; a hand-written icon URL's `#fragment` is still not requested
+  (FIX14, #105).
 - 11-19 In an iOS `text` ButtonGroup that holds a toggle, every item reserves the same capsule room
   at the group's size, so an unchecked toggle no longer leaves a wider gap than an action item
   (FIX13, #103).
