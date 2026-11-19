@@ -810,14 +810,14 @@ internal class BottomSheetHost(
           when {
             upward == null -> Unit
             // The detent above the one the sheet is opening to, where there is one to reach.
-            upward &&
+            upward == true &&
               sheetState.targetValue != SheetValue.Expanded &&
               sheetState.hasExpandedState -> {
               model.oweDetentReport = true
               scope.launch { sheetState.expand() }
             }
             // A drag back down means the sheet was not wanted, and Material has not hidden it.
-            !upward -> model.userDismissed(animate = true)
+            upward == false -> model.userDismissed(animate = true)
             else -> Unit
           }
         }
