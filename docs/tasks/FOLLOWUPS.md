@@ -9,14 +9,25 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
 - `Menu · Split trigger › is two halves, and each one does only its own job`, 2026-11-15,
   `harness:ios` started 12:26 UTC, seen once.
 - App crash in the worklets runtime (SIGSEGV) during the BottomSheet and Popover suites,
-  2026-11-15, `harness:ios` on a merge run, seen once.
+  2026-11-15, `harness:ios` on a merge run; again 2026-11-18 as `worklets::cleanupRuntimeAware`
+  at teardown after `Popover.harness.tsx` on a task branch, green on `--rerun-failed`. Seen twice.
+  Not quarantined: the crash is in the worklets runtime's teardown, not in a test's read.
 - `Form.harness.tsx`, an accessory drawn 1.1 dp off its row, 2026-11-16, `harness:android`
   started 15:27 UTC, seen once.
 - `BottomSheetModalHazard` (isolated) "leaves no Modal host behind", render timeout 1000 ms,
   2026-11-16, `harness:android` started 21:46 UTC while an iOS test build loaded the machine,
   seen before at a load peak.
 - `bottom-sheet.e2e.ts` "a drag up on the two-detent header expands the sheet", the header did
-  not move, 2026-11-16, `real-input:android` started 18:45 UTC beside an iOS gate, seen once.
+  not move, 2026-11-16, `real-input:android` started 18:45 UTC beside an iOS gate; again
+  2026-11-18 on the TextField merge run started 22:18 UTC (the first test of the run, the header's
+  top 1391 before and after the drag), green on `--rerun-failed`; a third time 2026-11-19 on the
+  ButtonGroup merge run started 03:21 UTC, the same reading, green on `--rerun-failed`. Seen three
+  times. Not quarantined: no
+  log shows the driver at fault, so a drag the sheet ignored is treated as a bug with a low hit
+  rate and gets a bugfix task.
+- `BottomSheet.harness.tsx` (iOS), a chunk lost to "the native app crashed during test execution"
+  with no crash log, 2026-11-18, `harness:ios` on a task branch while another task's run loaded the
+  machine, seen once.
 - `a11y:hosted-date-picker`, the one node named "Hosted date picker" read with a zero-sized box,
   2026-11-17, `real-input:android` started 16:41 UTC at a load peak of 43 beside another merge
   run's app builds, seen twice (first on 2026-11-13 in a filtered `--control hosted-picker` run).
@@ -26,6 +37,22 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
 Tests skipped with a `QUARANTINED <date>` comment after a second sighting, each with its fix task.
 A line here blocks no merge. Its fix queues behind components, and one still here after two weeks
 is raised with the owner once.
+
+- `form.e2e.ts` "opting out of keyboard avoidance leaves the content and its offset alone"
+  (Android), quarantined 2026-11-18. It failed twice in a row on the ButtonGroup merge tree
+  (`merge/FIX7`, full run and its `--rerun-failed`) with the Note field focused, no keyboard on
+  screen and the field's box gone from the tree, and passed alone on that tree and on `main`; it
+  also failed repeatedly while its own task was written. The Form's state read correctly at the
+  failure (`avoid no`, `keyboardAvoidance: off`), so the keyboard or the tree read is at fault, not
+  the Form's offset. One fix was tried and judged not to apply: blocking the Form's
+  `requestChildRectangleOnScreen` forward does nothing, because the ScrollView's content container
+  never passes it on and Compose's `requestRectangleOnScreen` walks every ancestor anyway. Fix
+  task: read `form-avoid-echo`, the report's `keyboard=` and `scroll=` before the focus tap and at
+  the failure, and add a deterministic Android harness case (an `ime:<dp>` and a `rect:<row>` test
+  command through `nuiTestCommand`, then assert `scroll=` holds while opted out and moves while
+  not). iOS's opt-out case still runs. The Android real-input runner counts a skipped test as a failure,
+  so the case was taken out of `form.e2e.ts` rather than skipped; it is on `main` at `49b84b9d`
+  (`git show 49b84b9d:example/e2e/real-input/form.e2e.ts`) for the fix task to restore.
 
 Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into tasks F1–F6:
 
@@ -137,9 +164,8 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G14 (Q2, follow-up task): reproduce react-native-screens 4.30.1's Android `ScreenStack` mount crash (`addViewAt … child already has a parent`) in a fresh app instance without nitro-ui, and report it upstream; then measure BottomSheet in a native-stack screen and a `formSheet` on Android.
 - G14 (re-review): `BottomSheet.harness`'s "dropped 0 ms after presenting" is vacuous - the `isPresented` write and the unmount batch into one commit, so no sheet is ever asked for; drop between the commit and the present instead (a main-turn wait), or remove the case.
 - G14 (re-review): `NitroUiPresentation.controller` keeps a dialog's last `UIAlertController` alive in a pooled `NitroUiDialog` until it presents again; BottomSheet now calls `forgetController()` after its teardown and its sheet's exit, and the dialogs could do the same.
-- TextField (G13 merge review): iOS `nuiSetText` after the backstop cuts text in the middle of the field moves the caret to the end (`HybridNitroUiTextField.swift` ~874); keep the caret after the kept part of the edit.
-- TextField Android parity: Compose 1.12 maps `autoCorrect=false` to "no autocorrect" only, while RN also sets `TYPE_TEXT_FLAG_NO_SUGGESTIONS`, so the keyboard still shows suggestions (and may open a composing region over the word at the caret) on our field.
 - TextField Android: `observe` pays an owed `maxLength` cut before `settle`, so the cut's event makes a write held through the composition stale. Unreachable today (the input transformation already cuts composing text), but the order should be settle first.
+- SearchField Android: `autoCorrect={false}` still sends no `TYPE_TEXT_FLAG_NO_SUGGESTIONS`, so its keyboard keeps drawing a suggestion strip; TextField's `NitroUiAutoCorrectInterceptor` (`HybridNitroUiTextField.kt`) wraps the request and could be shared, and the field then wants the same read-back in its test state.
 - TextField Android harness: `commits a keystroke about as fast as RN TextInput` failed twice at load1 3-5 with `nitro: "ab" never committed` (G13 fix round 2). The merge makes the probe's `commit` finish any composing region first and prints the field's state on failure; if it recurs, the state says whether the key landed on a keyboard-opened composition (`b`) or never arrived (`a`).
 - `lease.mjs list` pairs the stale `x16_avd` record with `emulator-5574`, the serial pair-a's `nitroui_a` boots on, so one console reads as both an unowned pool device and a leased one (D4).
 - G14 (merge re-review): `BottomSheet.harness.tsx`'s comment at the 50-cycle block (~881-883) says the probe is never the cycling view handed back by the recycle pool; a probe mounted at the start of a round can still be a pooled view from an earlier round - say "never the view dropped in this round".
@@ -258,7 +284,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G20: `useNativeItems` rebuilds the `items` array on every `checked` change, so one item's flip re-sends the whole row across the bridge.
 - G20: Android's per-item icon slots and interaction sources are positional — key them by `item.id` so an item inserted mid-row cannot inherit another's glyph or handler.
 - G20: Android's overflow rows draw no icon; wire them in with G21's `MenuRowIcons` rather than a second icon path.
-- G20: an iOS toggle item ignores `variant` — the standard row paints a `Toggle(.button)` with the group's tint at best, so five variants draw two looks.
 - G20: disabling a group on iOS refits more items into the row, because the candidate that composes no overflow control measures narrower; the row's item count should not depend on `disabled`.
 - G20: `useControlledCheckedIds` has no Jest test — the JS half of the per-item controlled/uncontrolled split is only proved through native.
 - G20: the `mount.button-group` bench is unmeasured on this machine (no merge-mint number yet).
@@ -273,7 +298,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G21 review: the Chip's own `iconSlot.reset()` has no red proof; the ContextMenu recycle case covers `MenuRowIcons.reset()`, and the chip's single-slot equivalent is unmutated.
 - G21 review: `resolveRowIcons` allocates a filter and a map on every `afterUpdate`, including the updates no row cares about — one pass over `rawRows` with a reused list would do.
 - G21 merge: with the icon handed to `MenuRow` as a parameter, `MenuGroups` reads `MenuRowIcons.slots` in its own composition scope, so a glyph that lands late now invalidates the whole group rather than the one row that gained it.
-- G21 merge: ButtonGroup's overflow rows should pass their items' icons through `MenuRow`'s new `icon`/`onIconTint` parameters (the defaults mean it compiles and draws without them); `HybridNitroUiButtonGroup.kt:953` is the call.
 - G24 fix round 2: E4's iOS half is order-sensitive. `probe.log.pressable` read 10 — the number of taps aimed at the hosted `Switch` — in one full `harness:ios` run (12:48Z, 561/564) and 0 in the retry on the same code tree (13:10Z, 562/564) and in the filtered `Form` run on it (115/115). The case asserts that a tap at a row content's *drawn* point reaches nothing because React Native's hit-test walks the *unscrolled* shadow tree, so which element answers depends on where the list's offset has come to rest; a Form that inherits an offset from the suite before it can land the point on the very `Pressable` the case expects to miss. E1's settled `inCells` wobbled the same way once (5 against 6 at 03:55Z). Both want the list pinned at its own top inset before the taps and one repeat before a failure, not a wider tolerance.
 - G26 fix round 1: `harness:android` failed twice on G24's recycled-Form case at load1 15 and 11, green at 6-9 and alone at 5.5 (Form files unchanged). Load-sensitive timing in that case.
 - G25: the `mount.stepper` bench is unmeasured on this machine (no merge-mint number yet).
@@ -356,3 +380,13 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - A `Progress` (or any passive nitro-ui view) inside a pressing row takes the tap and answers nothing, on both platforms (documented); it could answer `pressOwnedByRow` as `ListItem` does.
   - No device test covers a `Form.Row onPress` around a `ListItem` without `onPress`, and Android checks the in-form item's ink but not its press count.
   - `src/components/Form/component.json`'s `form` title does not list the press rule or the keyboard opt-out; `FormScreen.tsx`'s `echoGrid` comment still says two lines of counters (now 18), and on iOS the taller bar shortens the Form's viewport.
+- TextField, open after the caret-after-a-cut and `autoCorrect` fixes:
+  - iOS multi-line field: `UITextView` reports a keystroke's caret move before the edit, so if an owed-caret claim ever outlives UIKit's late write there, the next-edit closer comes too late. No test has observed whether the multi-line field gets a late write. A guard of about five lines (store the kept text's length in the claim; restore only with no composition open and the length unchanged) closes it either way.
+  - No cut-caret test covers the multi-line field or SearchField, and the `insertText` path has no caret test.
+  - Android: the `suggestions` read-back runs through the same interceptor, so it cannot show that a prop change reaches the keyboard (Compose 1.12.1 restarts the session, read from its bytecode). Every edit builds a small string production never needs.
+- ButtonGroup, open after overflow-row icons and iOS toggle styles:
+  - iOS `text` group with a toggle: only the toggle reserves the bordered capsule's footprint, so the gap beside an unchecked toggle is about 12 pt wider than between action items (documented). Giving every item in such a group the footprint is about 15 lines in `HybridNitroUiButtonGroup.swift`.
+  - A disabled *checked* iOS toggle is not measured; in four of the five variants it may draw like a disabled unchecked one.
+  - `ButtonGroup.harness.tsx`: the "disabled drawn in the tint" check is a share of the box and cannot fire for `text`; the ink ratio is coarse for an item that draws few pixels; the `titleOnly` overflow read has no positive check that rows were drawn; the hidden capsule copy's accessibility is not read. `RealInputTests.swift`'s toggle check has its own 3 s state poll beside the shared wait helper.
+  - iOS `HybridNitroUiButtonGroup.swift`: `inControlGroup ? nil : model.tint` is dead for a toggle.
+  - Android: each overflow row reports its painted colour (`overflowIcons=`) on every composition, as `Menu` does; the report can go stale across reopenings, and a `Pending` glyph's tint is not reported.

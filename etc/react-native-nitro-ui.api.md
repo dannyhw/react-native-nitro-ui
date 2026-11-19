@@ -1048,6 +1048,8 @@ export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
             maxLength: number;
             placeholder: string;
             accessibilityLabel: string;
+            caret: number;
+            suggestions: string;
         };
         nuiTestSetMarkedText(text: string): void;
         nuiTestCancelMarkedText(): void;

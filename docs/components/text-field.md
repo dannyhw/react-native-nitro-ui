@@ -31,7 +31,7 @@ open (below).
 | `multiline`          | `boolean \| undefined`                                        | `false`       | `UITextView` instead of `UITextField` / `TextFieldLineLimits.MultiLine`. Grows with its text.                                      |
 | `keyboardType`       | `TextFieldKeyboardType \| undefined`                          | `'default'`   | `UIKeyboardType` / Compose `KeyboardType` (table below).                                                                           |
 | `autoCapitalize`     | `'none' \| 'sentences' \| 'words' \| 'characters'`            | `'sentences'` | `autocapitalizationType` / `KeyboardCapitalization`.                                                                               |
-| `autoCorrect`        | `boolean \| undefined`                                        | `true`        | `autocorrectionType` and `spellCheckingType` / `autoCorrectEnabled`.                                                               |
+| `autoCorrect`        | `boolean \| undefined`                                        | `true`        | `autocorrectionType` and `spellCheckingType` / `autoCorrectEnabled` and `TYPE_TEXT_FLAG_NO_SUGGESTIONS` (below).                   |
 | `secureTextEntry`    | `boolean \| undefined`                                        | `false`       | `isSecureTextEntry` / `BasicSecureTextField` (reveals the last typed character). Single-line only.                                 |
 | `maxLength`          | `number \| null \| undefined`                                 | none          | Enforced natively, in UTF-16 code units (see below).                                                                               |
 | `returnKeyType`      | `'default' \| 'done' \| 'go' \| 'next' \| 'search' \| 'send'` | `'default'`   | `returnKeyType` / `ImeAction`. Single-line only.                                                                                   |
@@ -63,6 +63,17 @@ A secure field gets Android's password keyboard (`KeyboardType.Password`), or it
 number-password keyboard (`KeyboardType.NumberPassword`) with `keyboardType="number-pad"`.
 On iOS a change to `keyboardType`, `returnKeyType`, `autoCapitalize`, `autoCorrect`
 or `secureTextEntry` while the field is focused reloads the keyboard that is up.
+
+`autoCorrect={false}` turns corrections and suggestions off in the way each platform's
+keyboard understands. iOS gets `autocorrectionType = .no` and `spellCheckingType = .no`.
+Android sends both `TYPE_TEXT_FLAG_NO_SUGGESTIONS` and no autocorrect flag, as React
+Native's `TextInput` does: the suggestion strip goes away with it, which leaving the
+autocorrect flag alone does not achieve. The flag belongs to Android's text keyboard, so
+`keyboardType="number-pad"` and `"phone-pad"` are sent what they are sent with the
+default, and so is a secure field that keeps `autoCorrect` on. Changing `autoCorrect` on
+a focused Android field restarts its input session, so the keyboard that is up takes the
+change; a secure field's session is not restarted, so there the change reaches the keyboard
+when the field is next focused.
 
 ### `ref`: `focus()` and `blur()`
 
@@ -162,6 +173,16 @@ the field without it (a committed composition, `insertText`). Only the first kee
 the text after a mid-text insertion: pasting `xyz` at the middle of `ab··cd` under a
 limit of 8 gives `ab xy cd`, where cutting the end would give `ab xyz c`
 (`scripts/native-tests/text-limit.test.swift`, and the harness's paste case).
+
+Either way the caret ends just after the part of the edit that was kept, between what the
+edit kept and the text after it, wherever in the field the edit was made. Pasting `xyz` at
+offset 3 of `ab··cd` under a limit of 8 leaves it at 5. A composition's commit is the same,
+although UIKit finishes such a commit by writing its own insertion point one past the part
+that was kept: the caret is written again after that, so committing `wxyz` with room for one
+unit leaves the caret at 4, not at 5. A cut at least as long as the text after it is no
+different - the caret follows what was kept instead of going to the end of the field. An
+edit at the end of the field leaves the caret at the end, where the field's own answer puts
+it anyway, and an edit that fitted nowhere is put back where it was asked for.
 
 ## Sizing
 

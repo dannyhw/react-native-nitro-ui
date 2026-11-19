@@ -93,6 +93,14 @@ enum NitroUiTextTraits {
   }
 }
 
+/// The caret a `maxLength` cut asked for while a composition was committing, and how far ahead of
+/// it UIKit's own end-of-commit insertion point can land - the edit it trimmed was that much longer
+/// than the part it kept. Further ahead, the caret is somebody else's choice.
+struct NitroUiOwedCaret {
+  let caret: Int
+  let upTo: Int
+}
+
 // MARK: - The control
 
 /// What the Hybrid View needs from either control.
@@ -111,11 +119,63 @@ protocol NitroUiTextControl: UIView {
   var nuiModel: TextFieldModel { get }
   /// Put the caret at a UTF-16 offset, after a partial insertion was applied here.
   func nuiSetCaret(at utf16Offset: Int)
+  /// The caret's UTF-16 offset in the text; the start of a selection. `-1` when the control has
+  /// no selection to read.
+  var nuiCaret: Int { get }
+  /// The UTF-16 offset an open composition began at; `nil` when none is open.
+  var nuiMarkedStart: Int? { get }
+  /// Whether the keyboard attached here is told that suggestions and autocorrections are
+  /// available. iOS hands a keyboard its `autocorrectionType` trait, so the trait is the answer.
+  var nuiSuggestionsOffered: Bool { get }
   /// Report that the user changed the text (each control's own edit signal).
   func nuiReportEdit()
 }
 
 extension NitroUiTextControl {
+  /// Both controls are `UITextInput`s, and both keep their caret in the selection.
+  var nuiCaret: Int {
+    guard let input = self as? UITextInput, let selection = input.selectedTextRange else {
+      return -1
+    }
+    return input.offset(from: input.beginningOfDocument, to: selection.start)
+  }
+
+  var nuiSuggestionsOffered: Bool {
+    (self as? UITextInputTraits)?.autocorrectionType != .no
+  }
+
+  /// The text before and after a composition does not always say where it was - `aaaa` with `aa`
+  /// committed at 1 reads as `aa` appended at the end. UIKit's marked range does.
+  var nuiMarkedStart: Int? {
+    guard let input = self as? UITextInput, let marked = input.markedTextRange else {
+      return nil
+    }
+    return input.offset(from: input.beginningOfDocument, to: marked.start)
+  }
+
+  /// The body of both controls' "selection changed" delegate methods.
+  func nuiSelectionChanged() {
+    // The cut's own writes move the selection on their way to the caret the cut asked for; where
+    // they leave it says nothing about the caret the field ends up with.
+    guard !nuiModel.applyingCut else { return }
+    nuiSettleCaret()
+  }
+
+  /// Write back the caret a `maxLength` cut asked for, once UIKit has moved the selection off it.
+  /// UIKit ends a composition's commit by writing its own insertion point, a few milliseconds
+  /// after the callback that reported the edit and after `unmarkText()` has returned. A selection
+  /// change further ahead of the cut than its trimmed edit can account for is not UIKit finishing
+  /// that commit, and ends the cut's claim on the caret instead.
+  func nuiSettleCaret() {
+    if let owed = nuiModel.owedCaret, nuiCaret != owed.caret {
+      nuiModel.owedCaret = nil
+      if nuiCaret > owed.caret && nuiCaret <= owed.upTo {
+        nuiSetCaret(at: owed.caret)
+      }
+    }
+    nuiModel.owner?.publishState()
+  }
+
   /// The body of both controls' "should change characters" delegate methods. Applies
   /// `maxLength` as React Native does: the inserted text is cut to what still fits, never
   /// the end of the field, and never inside a composed character.
@@ -198,6 +258,13 @@ protocol NitroUiTextOwner: AnyObject {
 extension NitroUiTextOwner {
   private var model: TextFieldModel { nuiTextModel }
 
+  /// A `maxLength` cut owns the caret only while UIKit can still end the commit that cut was made
+  /// in. Focus moving, a write from JS, another `maxLength` and the next edit each end that
+  /// moment; a claim kept past it would move a caret that is somebody else's.
+  func discardOwedCaret() {
+    nuiTextModel.owedCaret = nil
+  }
+
   /// Decide a pending `value` write: applied, stale, or held back by an open
   /// composition. Called from a commit, and when a composition that held one back ends.
   func applyWrite() {
@@ -220,6 +287,8 @@ extension NitroUiTextOwner {
   func syncText() {
     guard let control = model.control, !control.nuiComposing else { return }
     if NitroUiText(control.nuiText) != model.state.displayed {
+      // Text is being put in from outside the field: the commit a cut was waiting on is over.
+      discardOwedCaret()
       control.nuiSetText(model.state.displayed.string)
     }
   }
@@ -231,26 +300,46 @@ extension NitroUiTextOwner {
   /// back, even if the text is unchanged: otherwise nothing would decide that write again.
   func userEdited(_ control: NitroUiTextControl) {
     nitroUiAssertMainThread()
+    discardOwedCaret()
     let composing = control.nuiComposing
     let compositionEnded = model.wasComposing && !composing
     model.wasComposing = composing
+    let committedAt = model.markedStart
+    model.markedStart = composing ? control.nuiMarkedStart : nil
     guard !composing else {
       publishState()
       return
     }
     var text = control.nuiText
-    if let limit = model.maxLength, (text as NSString).length > limit {
+    let committedUnits = (text as NSString).length
+    if let limit = model.maxLength, committedUnits > limit {
       // A backstop for text that got past the delegate's cut (a composition's commit, or
       // `insertText`). It cuts the edit, not the tail of the field, so the text around a
       // mid-field insertion keeps its place.
-      let kept = NitroUiCommitDelta.clamped(
+      let kept = NitroUiCommitDelta.clamp(
         displayed: model.state.displayed.string,
         incoming: text,
-        limit: limit
+        limit: limit,
+        editLocation: committedAt
       )
-      if kept != text {
-        text = kept
+      if kept.text != text {
+        text = kept.text
+        let keptUnits = (kept.text as NSString).length
+        // Only a caret inside the text is one UIKit can still move under us. At the end of it
+        // there is no later offset for UIKit's own insertion point to arrive at, so nothing is
+        // owed and nothing is claimed.
+        if compositionEnded, let caret = kept.caret, caret < keptUnits {
+          model.owedCaret = NitroUiOwedCaret(
+            caret: caret, upTo: caret + committedUnits - keptUnits)
+        }
+        model.applyingCut = true
         control.nuiSetText(text)
+        // Writing the text moves the caret to the end; a cut made in the middle belongs where
+        // the person was typing.
+        if let caret = kept.caret {
+          control.nuiSetCaret(at: caret)
+        }
+        model.applyingCut = false
       }
     }
     let next = NitroUiText(text)
