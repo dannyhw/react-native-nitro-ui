@@ -9,7 +9,9 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
 - `Menu · Split trigger › is two halves, and each one does only its own job`, 2026-11-15,
   `harness:ios` started 12:26 UTC, seen once.
 - App crash in the worklets runtime (SIGSEGV) during the BottomSheet and Popover suites,
-  2026-11-15, `harness:ios` on a merge run, seen once.
+  2026-11-15, `harness:ios` on a merge run; again 2026-11-18 as `worklets::cleanupRuntimeAware`
+  at teardown after `Popover.harness.tsx` on a task branch, green on `--rerun-failed`. Seen twice.
+  Not quarantined: the crash is in the worklets runtime's teardown, not in a test's read.
 - `Form.harness.tsx`, an accessory drawn 1.1 dp off its row, 2026-11-16, `harness:android`
   started 15:27 UTC, seen once.
 - `BottomSheetModalHazard` (isolated) "leaves no Modal host behind", render timeout 1000 ms,
@@ -264,7 +266,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G20: `useNativeItems` rebuilds the `items` array on every `checked` change, so one item's flip re-sends the whole row across the bridge.
 - G20: Android's per-item icon slots and interaction sources are positional — key them by `item.id` so an item inserted mid-row cannot inherit another's glyph or handler.
 - G20: Android's overflow rows draw no icon; wire them in with G21's `MenuRowIcons` rather than a second icon path.
-- G20: an iOS toggle item ignores `variant` — the standard row paints a `Toggle(.button)` with the group's tint at best, so five variants draw two looks.
 - G20: disabling a group on iOS refits more items into the row, because the candidate that composes no overflow control measures narrower; the row's item count should not depend on `disabled`.
 - G20: `useControlledCheckedIds` has no Jest test — the JS half of the per-item controlled/uncontrolled split is only proved through native.
 - G20: the `mount.button-group` bench is unmeasured on this machine (no merge-mint number yet).
@@ -279,7 +280,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G21 review: the Chip's own `iconSlot.reset()` has no red proof; the ContextMenu recycle case covers `MenuRowIcons.reset()`, and the chip's single-slot equivalent is unmutated.
 - G21 review: `resolveRowIcons` allocates a filter and a map on every `afterUpdate`, including the updates no row cares about — one pass over `rawRows` with a reused list would do.
 - G21 merge: with the icon handed to `MenuRow` as a parameter, `MenuGroups` reads `MenuRowIcons.slots` in its own composition scope, so a glyph that lands late now invalidates the whole group rather than the one row that gained it.
-- G21 merge: ButtonGroup's overflow rows should pass their items' icons through `MenuRow`'s new `icon`/`onIconTint` parameters (the defaults mean it compiles and draws without them); `HybridNitroUiButtonGroup.kt:953` is the call.
 - G24 fix round 2: E4's iOS half is order-sensitive. `probe.log.pressable` read 10 — the number of taps aimed at the hosted `Switch` — in one full `harness:ios` run (12:48Z, 561/564) and 0 in the retry on the same code tree (13:10Z, 562/564) and in the filtered `Form` run on it (115/115). The case asserts that a tap at a row content's *drawn* point reaches nothing because React Native's hit-test walks the *unscrolled* shadow tree, so which element answers depends on where the list's offset has come to rest; a Form that inherits an offset from the suite before it can land the point on the very `Pressable` the case expects to miss. E1's settled `inCells` wobbled the same way once (5 against 6 at 03:55Z). Both want the list pinned at its own top inset before the taps and one repeat before a failure, not a wider tolerance.
 - G26 fix round 1: `harness:android` failed twice on G24's recycled-Form case at load1 15 and 11, green at 6-9 and alone at 5.5 (Form files unchanged). Load-sensitive timing in that case.
 - G25: the `mount.stepper` bench is unmeasured on this machine (no merge-mint number yet).
@@ -366,3 +366,9 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - iOS multi-line field: `UITextView` reports a keystroke's caret move before the edit, so if an owed-caret claim ever outlives UIKit's late write there, the next-edit closer comes too late. No test has observed whether the multi-line field gets a late write. A guard of about five lines (store the kept text's length in the claim; restore only with no composition open and the length unchanged) closes it either way.
   - No cut-caret test covers the multi-line field or SearchField, and the `insertText` path has no caret test.
   - Android: the `suggestions` read-back runs through the same interceptor, so it cannot show that a prop change reaches the keyboard (Compose 1.12.1 restarts the session, read from its bytecode). Every edit builds a small string production never needs.
+- ButtonGroup, open after overflow-row icons and iOS toggle styles:
+  - iOS `text` group with a toggle: only the toggle reserves the bordered capsule's footprint, so the gap beside an unchecked toggle is about 12 pt wider than between action items (documented). Giving every item in such a group the footprint is about 15 lines in `HybridNitroUiButtonGroup.swift`.
+  - A disabled *checked* iOS toggle is not measured; in four of the five variants it may draw like a disabled unchecked one.
+  - `ButtonGroup.harness.tsx`: the "disabled drawn in the tint" check is a share of the box and cannot fire for `text`; the ink ratio is coarse for an item that draws few pixels; the `titleOnly` overflow read has no positive check that rows were drawn; the hidden capsule copy's accessibility is not read. `RealInputTests.swift`'s toggle check has its own 3 s state poll beside the shared wait helper.
+  - iOS `HybridNitroUiButtonGroup.swift`: `inControlGroup ? nil : model.tint` is dead for a toggle.
+  - Android: each overflow row reports its painted colour (`overflowIcons=`) on every composition, as `Menu` does; the report can go stale across reopenings, and a `Pending` glyph's tint is not reported.

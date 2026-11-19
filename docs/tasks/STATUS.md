@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-19 An item that moves into a ButtonGroup's overflow menu keeps its `androidIcon` on Android,
+  and an iOS toggle item is drawn in the group's `variant` and `tintColor`, one step quieter while
+  unchecked and never grey; checking a toggle in a `text` group no longer clips it (FIX7, #98).
 - 11-18 On iOS, a `maxLength` cut made in the middle of a full `TextField` or `SearchField` keeps
   the caret by the kept text instead of the end of the field; on Android, `autoCorrect={false}`
   also hides the keyboard's suggestion strip, as `TextInput` does (FIX8, #100).

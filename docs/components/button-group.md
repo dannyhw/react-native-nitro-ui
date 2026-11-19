@@ -44,7 +44,7 @@ import { ButtonGroup } from 'react-native-nitro-ui';
 | `items`                      | `ButtonGroupItem[]`                                          | —             | The row, in render order. `[]` draws nothing.                                                  |
 | `appearance`                 | `'standard' \| 'connected'`                                  | `'standard'`  | Connected corners, or a gap between each item.                                                 |
 | `variant`                    | `ButtonVariant`                                              | `'filled'`    | `Button`'s five variants. Ignored by iOS `connected`.                                          |
-| `size`                       | `'small' \| 'medium' \| 'large' \| …`                        | `'medium'`    | `Button`'s sizes. Ignored by iOS `connected`.                                                  |
+| `size`                       | `'small' \| 'medium' \| 'large' \| …`                        | `'medium'`    | `Button`'s sizes. Ignored by iOS `connected` (a group with a toggle: applied).                  |
 | `labelStyle`                 | `'automatic' \| 'titleOnly' \| 'iconOnly' \| 'titleAndIcon'` | `'automatic'` | What each item draws. See [the table](#what-each-platform-draws).                              |
 | `disabled`                   | `boolean`                                                    | `false`       | No item is reachable and no event fires.                                                       |
 | `tintColor`                  | `ColorValue`                                                 | platform      | The variant's container / SwiftUI `.tint()`. Ignored by iOS `connected`.                       |
@@ -107,12 +107,12 @@ tap.
 | Prop          | Android                                                      | iOS `standard`                                    | iOS `connected`                |
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------- | ------------------------------ |
 | `appearance`  | 12 dp apart, each item its own corners · 2 dp joined         | an 8 pt row of bordered controls · `ControlGroup` |                                |
-| `variant`     | `NitroUiM3Button` / `NitroUiM3ToggleButton`, one per variant | `ButtonStyle` per variant (see below)             | ignored                        |
-| `size`        | `Button`'s sizes, floored at Material's 48 dp target         | `.controlSize`                                    | ignored (31 pt at every size)  |
-| `tintColor`   | the variant's container, and the checked container           | `.tint()`                                         | ignored                        |
+| `variant`     | `NitroUiM3Button` / `NitroUiM3ToggleButton`, one per variant | `ButtonStyle` per variant, toggle or action item  | ignored (a group with a toggle: as `standard`) |
+| `size`        | `Button`'s sizes, floored at Material's 48 dp target         | `.controlSize`                                    | ignored with no toggle (31 pt at every size); applied to a group with a toggle |
+| `tintColor`   | the variant's container, and the checked container           | `.tint()`, on every item, checked or not          | ignored (a group with a toggle: as `standard`) |
 | `labelStyle`  | icon and title; `automatic` = both                           | `automatic` = icon and title                      | `automatic` = icons only       |
 | `systemImage` | ignored                                                      | `Label`'s glyph                                   | `Label`'s glyph, usually alone |
-| `androidIcon` | `Icon` at the size's icon size                               | ignored                                           | ignored                        |
+| `androidIcon` | `Icon` at the size's icon size, and again in the overflow row | ignored                                           | ignored                        |
 | overflow      | Material's indicator + Material's group menu                 | a `Menu` beside the row                           | the same                       |
 | `disabled`    | `enabled = false` on each item and its menu row              | `.disabled`                                       | `.disabled`                    |
 
@@ -120,16 +120,34 @@ tap.
 measures 174.00 × 31.00 pt at every size, with every tint and with three different button styles.
 A connected iOS group therefore takes its look from `ControlGroup`.
 
-`variant` maps to the same iOS `ButtonStyle` table as [Button](button.md): `filled` and
-`elevated` to `.borderedProminent`, `tonal` and `outlined` to `.bordered`, `text` to
-`.borderless`. Unlike `Button`, a group does not stroke a hairline for `outlined`. A `text`
-toggle is drawn as the outlined toggle, because there is no text toggle.
+On Android a `text` toggle is drawn as the outlined toggle, because Material has no text toggle
+button; every other variant has its own toggle button, and each shows its checked state in its own
+way.
+
+On iOS `variant` maps to the same `ButtonStyle` table as [Button](button.md): `filled` and
+`elevated` to `.borderedProminent`, `tonal` and `outlined` to `.bordered`, `text` to `.borderless`.
+Unlike `Button`, a group does not stroke a hairline for `outlined`. A toggle item is drawn one
+step quieter while unchecked than while checked, always in `tintColor`: grey belongs to disabled
+items, and an unchecked toggle is not one.
+
+| `variant`       | iOS action item      | iOS toggle item, checked      | iOS toggle item, unchecked |
+| --------------- | -------------------- | ----------------------------- | -------------------------- |
+| `filled`        | `.borderedProminent` | the same                      | `.bordered`                |
+| `elevated`      | the same             | the same                      | `.bordered`                |
+| `tonal`         | `.bordered`          | `.borderedProminent`          | the same as the action item |
+| `outlined`      | the same             | the same                      | the same                   |
+| `text`          | `.borderless`        | `.bordered`                   | the same as the action item |
+
+So an unchecked toggle is the quiet item of the row — the action item's own look, except in a
+`filled` or `elevated` group, where it drops the prominent fill — and a checked one is the loudest.
+A `text` toggle has no louder label to move to, so its checked state takes the quiet capsule and
+keeps the tinted label.
 
 ### A connected iOS group with toggles
 
-`ControlGroup` draws no on state: `Toggle(…).toggleStyle(.button)`s inside one look identical on
-and off. A connected iOS group whose items include a toggle therefore draws the standard row,
-separate bordered toggles that each show their state, on iOS only. The props and events are the
+A `Toggle` inside `ControlGroup` draws no on state: checked and unchecked are the same pixels. A
+connected iOS group whose items include a toggle therefore draws the standard row, separate toggles
+in the group's `variant` that each show their state, on iOS only. The props and events are the
 same. Android keeps its connected toggles, because Material's `ToggleButton` has a checked
 container.
 
@@ -145,6 +163,14 @@ and 34.4 pt on iOS (`34.33 pt`, rounded up so a cold first frame is never short)
 group is 31 pt, cached after one measurement. `checked`, `disabled` and `tintColor` repaint and do
 not resize; `appearance`, `variant`, `size`, `labelStyle` and the items are the size
 configuration, so adding an item is a new configuration and a tap is not.
+
+An iOS `text` group that holds a toggle is measured at the height of a capsule while every toggle
+in it is still unchecked: `text` draws a label, which is shorter than the capsule a checked toggle
+takes, and checking one is a repaint rather than a new configuration. The unchecked item keeps that
+height and draws its label centred in it, so the checked capsule is inside the box the row was
+measured into. Only a toggle reserves the capsule, so the gap beside an unchecked toggle is wider
+than the gap between two action items. A `text` group with no toggle, or whose toggles have all
+moved into the overflow menu, keeps the height of a label.
 
 ## Overflow
 
@@ -164,6 +190,19 @@ overflow at 220 pt can be a full row across the screen.
 - On iOS 15 there is no `ViewThatFits`, so every item is drawn and the row clips to its box.
   Nothing moves into a menu there.
 
+### What an overflow row draws
+
+An overflowed item is drawn as one row of the same menu [Menu](menu.md) uses, by the same code.
+
+- Android draws the item's title and, when it has an `androidIcon`, that glyph in the row's leading
+  slot: Material's leading-icon size, in the colour Material gives a row's glyph. An item with no
+  `androidIcon` draws no glyph and keeps no space for one, so its title starts at the plain leading
+  edge; a row with a glyph indents its title by the slot, exactly as a `Menu` row with an icon does.
+- `labelStyle="titleOnly"` costs the rows their glyphs, as it costs the items in the row theirs.
+- On a toggle item the row is checked or unchecked, and while it is checked Material's check takes
+  the leading slot in place of the glyph.
+- iOS draws the title alone: neither `systemImage` nor a glyph reaches a row of its `Menu`.
+
 `overflowAccessibilityLabel` names the overflow control on both platforms. Without it the
 platforms differ:
 
@@ -180,7 +219,7 @@ Changing the label after mount updates the indicator on Android.
 | ----------------- | ------------------------------------------ | -------------------------------------------------------------- |
 | An action item    | "Copy, button"                             | "Copy, button"                                                 |
 | An icon-only item | still named by its `title`                 | `contentDescription` on the item, glyph itself silent          |
-| A toggle item     | `Toggle(…).toggleStyle(.button)`           | checkbox role with a checked state                             |
+| A toggle item     | a switch element with an on or off value   | checkbox role with a checked state                             |
 | The overflow      | `'More'` (or your label)                   | Material's own "More options", or your label, plus its tooltip |
 | The group         | one container holding one element per item | one traversal group, items still reachable inside it           |
 

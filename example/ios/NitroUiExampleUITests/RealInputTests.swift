@@ -2345,8 +2345,8 @@ final class RealInputTests: XCTestCase {
 
   /// One item of a ButtonGroup, found by title inside that group's own container, because
   /// several groups on this screen draw an item with the same title. `.any` rather than
-  /// `.button`: an action item is a `Button` and a toggle item is a `Toggle(.button)`, which
-  /// XCUITest reports as a switch.
+  /// `.button`: an action item is a `Button` and a toggle item is a `Toggle` drawn in the
+  /// library's own style, which XCUITest reports as a switch.
   private func buttonGroupItem(_ identifier: String, titled title: String) -> XCUIElement {
     app
       .descendants(matching: .any)[identifier].firstMatch
@@ -2374,10 +2374,89 @@ final class RealInputTests: XCTestCase {
     return item
   }
 
-  /// Whether one item's own element says it is checked, as "on"/"off".
-  private func nativeItemState(of identifier: String, _ title: String) -> String? {
-    let item = buttonGroupItem(identifier, titled: title)
-    guard item.exists else { return nil }
+  /// What one toggle item tells a screen reader: that the group offers exactly one element to act
+  /// on for it, that the element is a toggle, which state it is in, and that the state is told once
+  /// — a reader is given a switch's value, and a `selected` trait on top of it is the same word
+  /// twice. Type, value and state all come from that one element, so a row that draws a second one
+  /// for the item cannot answer the question through the first.
+  private func assertToggleElement(
+    _ identifier: String,
+    _ title: String,
+    state expected: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let items = actionableButtonGroupItems(identifier, titled: title)
+    if items.count != 1 {
+      dumpHierarchy(
+        "the group \"\(identifier)\" offers \(items.count) elements for the toggle item "
+          + "\"\(title)\""
+      )
+    }
+    XCTAssertEqual(
+      items.count,
+      1,
+      "the group \"\(identifier)\" offers \(items.count) elements to a reader for the toggle "
+        + "item \"\(title)\", which hears that item that many times and cannot say which one a "
+        + "tap reaches",
+      file: file,
+      line: line
+    )
+    guard let item = items.first else { return }
+    let said = "\(quoted(item.label)) type=\(item.elementType.rawValue) value=\(String(describing: item.value)) selected=\(item.isSelected)"
+    XCTAssertEqual(
+      item.elementType,
+      .switch,
+      "the toggle item \"\(title)\" is not a toggle to VoiceOver: \(said)",
+      file: file,
+      line: line
+    )
+    let deadline = Date().addingTimeInterval(3)
+    var shown = nativeState(of: item)
+    while shown != expected && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      shown = nativeState(of: item)
+    }
+    XCTAssertEqual(
+      shown,
+      expected,
+      "the toggle item \"\(title)\" does not say it is \(expected): \(said)",
+      file: file,
+      line: line
+    )
+    XCTAssertFalse(
+      item.isSelected,
+      "the toggle item \"\(title)\" also reports itself selected, so a reader hears its state "
+        + "twice: \(said)",
+      file: file,
+      line: line
+    )
+  }
+
+  /// The element types a reader can act on, which is every control shape an item of a group can
+  /// arrive as. A container or a stray label that repeats the item's name is not one: a reader is
+  /// not asked to do anything with it.
+  private static let actionableItemTypes: Set<XCUIElement.ElementType> = [
+    .button, .cell, .checkBox, .link, .menuItem, .radioButton, .switch, .toggle,
+  ]
+
+  /// The elements of one group that a reader can act on under one title. Two of them for one item
+  /// is the defect rather than a second thing to read: the reader hears that item twice, and a tap
+  /// cannot say which element it moves.
+  private func actionableButtonGroupItems(
+    _ identifier: String,
+    titled title: String
+  ) -> [XCUIElement] {
+    app
+      .descendants(matching: .any)[identifier].firstMatch
+      .descendants(matching: .any)
+      .matching(NSPredicate(format: "label == %@", title))
+      .allElementsBoundByIndex
+      .filter { RealInputTests.actionableItemTypes.contains($0.elementType) }
+  }
+
+  /// Whether one element says it is checked, as "on"/"off".
+  private func nativeState(of item: XCUIElement) -> String? {
     if item.isSelected { return "on" }
     let raw = item.value
     let text = (raw as? NSNumber)?.stringValue ?? (raw as? String) ?? ""
@@ -2386,6 +2465,13 @@ final class RealInputTests: XCTestCase {
     case "0", "0.0", "false": return "off"
     default: return nil
     }
+  }
+
+  /// Whether one item's own element says it is checked, as "on"/"off".
+  private func nativeItemState(of identifier: String, _ title: String) -> String? {
+    let item = buttonGroupItem(identifier, titled: title)
+    guard item.exists else { return nil }
+    return nativeState(of: item)
   }
 
   /// Tap one item until the echo it should move arrives.
@@ -2450,6 +2536,8 @@ final class RealInputTests: XCTestCase {
       nativeItemState(of: toggles, "Bold"), "on",
       "the checked toggle item's own element should report value 1"
     )
+    assertToggleElement(toggles, "Bold", state: "on")
+    assertToggleElement(toggles, "Italic", state: "off")
 
     for (title, id, count) in [("Copy", "copy", "1"), ("Cut", "cut", "2"), ("Paste", "paste", "3")] {
       XCTAssertEqual(
@@ -2490,6 +2578,7 @@ final class RealInputTests: XCTestCase {
       nativeItemState(of: toggles, "Italic"), "on",
       "the checked item's own element should report value 1"
     )
+    assertToggleElement(toggles, "Italic", state: "on")
     XCTAssertEqual(
       try read(Echo.buttonGroupToggleEvents), "1",
       "one tap should report exactly one change"
@@ -2511,6 +2600,7 @@ final class RealInputTests: XCTestCase {
       nativeItemState(of: toggles, "Italic"), "off",
       "the unchecked item's own element should report value 0 again"
     )
+    assertToggleElement(toggles, "Italic", state: "off")
     XCTAssertEqual(
       try read(Echo.buttonGroupToggleEvents), "2",
       "two taps should report two changes — a flip is not a one-way press"

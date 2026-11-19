@@ -176,6 +176,8 @@ final class ButtonGroupModel: NitroUiModel {
   /// report reads only strings published under the lock.
   private var checkedReport = "none"
   private var accessibilityReport = "none"
+  /// What the control's own box was drawing at the last row probe, or `none`.
+  private var drawingReport = "none"
   /// How many probes have answered, so a test can tell its own from the previous one's.
   private var probes = 0
   /// Whether the row composed an overflow control, and how many items it drew; `-1` before the
@@ -196,10 +198,15 @@ final class ButtonGroupModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// Answer a row probe from the last placement. Safe from any thread.
-  func publishRowReport(order: [String]) {
+  /// Answer a row probe from the last placement, and from what the box was drawing. Safe from any
+  /// thread. [drawing] is read from the rendered layer, so it arrives from the probe itself.
+  func publishRowReport(
+    order: [String],
+    drawing: String
+  ) {
     reportLock.lock()
     probes += 1
+    drawingReport = drawing
     if placedVisible < 0 {
       rowReport = "visible=none;overflow=none;row=none;shown=none"
     } else {
@@ -240,7 +247,7 @@ final class ButtonGroupModel: NitroUiModel {
     defer { reportLock.unlock() }
     return
       "checked=\(checkedReport);\(rowReport);menu=\(placedOverflow ? "composed" : "none");"
-      + "probes=\(probes);a11y=\(accessibilityReport)"
+      + "drawing=\(drawingReport);probes=\(probes);a11y=\(accessibilityReport)"
   }
 
   func resetAll() {
@@ -263,6 +270,7 @@ final class ButtonGroupModel: NitroUiModel {
     reportLock.lock()
     rowReport = "visible=none;overflow=none;row=none;shown=none"
     accessibilityReport = "none"
+    drawingReport = "none"
     probes = 0
     placedVisible = -1
     placedOverflow = false
@@ -435,15 +443,16 @@ struct ButtonGroupContent: NitroUIContent {
       Toggle(isOn: toggleBinding(item)) {
         itemLabel(item, inControlGroup: inControlGroup)
       }
-      .toggleStyle(.button)
+      .toggleStyle(
+        ItemToggleStyle(variant: model.variant, tint: inControlGroup ? nil : model.tint)
+      )
       .controlSize(model.scale.controlSize)
-      .modifier(OptionalItemTint(color: inControlGroup ? nil : model.tint))
       .disabled(model.disabled || item.disabled)
     } else {
       Button(action: { model.press(item.id) }) {
         itemLabel(item, inControlGroup: inControlGroup)
       }
-      .modifier(ItemButtonStyle(variant: model.variant))
+      .modifier(ItemButtonStyle(style: ItemStyle(variant: model.variant)))
       .controlSize(model.scale.controlSize)
       .modifier(OptionalItemTint(color: inControlGroup ? nil : model.tint))
       .disabled(model.disabled || item.disabled)
@@ -536,21 +545,97 @@ private struct AnyLabelStyle: LabelStyle {
   }
 }
 
-/// The variant's button style, one branch per variant.
+/// Which of iOS's three button-style families a control draws in. iOS has no elevated or outlined
+/// style, so those variants share a family with the nearest one. No hairline stroke is added for
+/// `outlined`: a row of stroked capsules reads as several borders.
+enum ItemStyle: Equatable {
+  case prominent
+  case bordered
+  case borderless
+
+  init(variant: ButtonVariant) {
+    switch variant {
+    case .filled, .elevated: self = .prominent
+    case .tonal, .outlined: self = .bordered
+    case .text: self = .borderless
+    }
+  }
+
+  /// What a toggle draws in one of its states.
+  func state(_ isOn: Bool) -> ItemStyle {
+    guard isOn else {
+      // Unchecked keeps the family and drops the prominent fill, so it is the quiet item of the
+      // row rather than the grey one.
+      return self == .prominent ? .bordered : self
+    }
+    // Checked is one step up: the fill carries the group's tint, which is more than any unchecked
+    // item in the same row shows of itself.
+    return self == .borderless ? .bordered : .prominent
+  }
+}
+
+/// The style family an item draws in.
 private struct ItemButtonStyle: ViewModifier {
-  let variant: ButtonVariant
+  let style: ItemStyle
 
   func body(content: Content) -> some View {
-    switch variant {
-    case .filled, .elevated:
-      // iOS has no elevated style; the prominent one is the nearest.
+    switch style {
+    case .prominent:
       content.buttonStyle(.borderedProminent)
-    case .tonal, .outlined:
-      // No outlined style either: `.bordered` is the nearest. No hairline stroke is added: a row of
-      // stroked capsules reads as several borders.
+    case .bordered:
       content.buttonStyle(.bordered)
-    case .text:
+    case .borderless:
       content.buttonStyle(.borderless)
+    }
+  }
+}
+
+/// A toggle item drawn in the group's `variant`, so it sits in the same style family as an action
+/// item beside it: the variant's own style while unchecked and one step up from it while checked,
+/// both in the group's tint. Grey belongs to disabled items, and an unchecked toggle is not one.
+///
+/// A `Toggle` with `.toggleStyle(.button)` ignores `buttonStyle` — iOS gives it one look — so this
+/// draws a `Button` in the state's style. A custom `ToggleStyle` changes only the drawing: the
+/// element stays the `Toggle`'s own, so it keeps the toggle's trait and its 0/1 value, and saying
+/// the state again here would have a reader announce it twice.
+private struct ItemToggleStyle: ToggleStyle {
+  let variant: ButtonVariant
+  let tint: UIColor?
+
+  func makeBody(configuration: Configuration) -> some View {
+    let style = ItemStyle(variant: variant).state(configuration.isOn)
+    Button(action: { configuration.isOn.toggle() }) {
+      configuration.label
+    }
+    .modifier(ItemButtonStyle(style: style))
+    .modifier(OptionalItemTint(color: tint))
+    .modifier(CheckedFootprint(style: style, label: configuration.label))
+  }
+}
+
+/// A `text` toggle is a label while unchecked and a capsule while checked, and the group measures
+/// its size once for a configuration: checking an item repaints it and re-measures nothing, so an
+/// item that grows only when checked is drawn outside the box the row was measured into. An
+/// unchecked `text` toggle keeps the footprint of the same label in `.bordered` - the style it
+/// takes while checked - and draws its own label centred inside it, so a `text` group holding a
+/// toggle is the height of a capsule in every state and one with no toggle keeps the height of a
+/// label. The other families measure the same in both states and need nothing.
+private struct CheckedFootprint: ViewModifier {
+  let style: ItemStyle
+  let label: ToggleStyleConfiguration.Label
+
+  func body(content: Content) -> some View {
+    if style == .borderless {
+      ZStack {
+        Button(action: {}) { label }
+          .buttonStyle(.bordered)
+          .hidden()
+          .allowsHitTesting(false)
+          .accessibilityHidden(true)
+        content
+      }
+    } else {
+      content
     }
   }
 }
@@ -885,7 +970,7 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
   func nuiTestOpenOverflow() throws {
   }
 
-  /// Read what the row laid out, on the main thread. Returns at once.
+  /// Read what the row laid out and what the box drew, on the main thread. Returns at once.
   func nuiTestProbeRow() throws {
     let host = self.host
     let model = self.model
@@ -894,7 +979,10 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
       // recycled host may not have laid out its new mount yet.
       host.setNeedsLayout()
       host.layoutIfNeeded()
-      model.publishRowReport(order: model.items.map(\.id))
+      model.publishRowReport(
+        order: model.items.map(\.id),
+        drawing: nitroUiSampleDrawing(of: host, tint: model.tint)
+      )
     }
     if Thread.isMainThread {
       report()
@@ -912,4 +1000,76 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
   func nuiTestStateReport() throws -> String {
     return model.stateReport()
   }
+}
+
+// MARK: - Drawing probe (test-only)
+
+/// How far a pixel may sit from the white backdrop and still count as "nothing drawn here". The
+/// backdrop is the page's own light appearance, so a control's pale capsule is still a thing.
+private let nitroUiDrawingInkBudget = 24
+
+/// How far a pixel may sit from the group's tint and still count as drawn in it. A label's glyph
+/// is anti-aliased over the fill behind it, so only its centre pixels are the tint itself and the
+/// budget has to cover the rest. A grey label is nowhere near a colour that was picked for it.
+private let nitroUiTintBudget = 120
+
+/// What the box `view` is drawing, as `size=<WxH>,fill=<%>,tint=<%>`: the share of the box that
+/// differs from a neutral backdrop, and the share that is the group's own tint.
+///
+/// The rendered layer is the only thing in-process that tells one variant's drawing from
+/// another's: a SwiftUI control keeps its capsule, its fill and its label colours to itself. The
+/// backdrop makes every pixel comparable, including the ones a translucent material leaves open.
+private func nitroUiSampleDrawing(
+  of view: UIView,
+  tint: UIColor?
+) -> String {
+  let bounds = view.bounds
+  guard bounds.width >= 2, bounds.height >= 2 else {
+    return "size=\(Int(bounds.width))x\(Int(bounds.height)),fill=-,tint=-"
+  }
+  let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
+    view.drawHierarchy(in: bounds, afterScreenUpdates: true)
+  }
+  guard let bitmap = image.cgImage else { return "no image" }
+  let width = bitmap.width, height = bitmap.height
+  let bytesPerRow = 4 * width
+  var data = [UInt8](repeating: 0, count: bytesPerRow * height)
+  guard
+    let space = CGColorSpace(name: CGColorSpace.sRGB),
+    let context = CGContext(
+      data: &data, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
+      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+  else { return "no context" }
+  let backdrop = 255
+  context.setFillColor(UIColor.white.cgColor)
+  context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+  context.draw(bitmap, in: CGRect(x: 0, y: 0, width: width, height: height))
+  var target: (red: Int, green: Int, blue: Int)?
+  if let tint {
+    let argb = UInt32(truncatingIfNeeded: Int64(tint.nitroUiARGBValue))
+    target = (Int((argb >> 16) & 0xff), Int((argb >> 8) & 0xff), Int(argb & 0xff))
+  }
+  var filled = 0, tinted = 0
+  for row in 0..<height {
+    for column in 0..<width {
+      let offset = row * bytesPerRow + column * 4
+      // Every pixel is opaque after the backdrop, so the channels are final.
+      let red = Int(data[offset]), green = Int(data[offset + 1]), blue = Int(data[offset + 2])
+      if abs(red - backdrop) + abs(green - backdrop) + abs(blue - backdrop)
+        > nitroUiDrawingInkBudget
+      {
+        filled += 1
+      }
+      if let target,
+        abs(red - target.red) + abs(green - target.green) + abs(blue - target.blue)
+          <= nitroUiTintBudget
+      {
+        tinted += 1
+      }
+    }
+  }
+  let area = width * height
+  return
+    "size=\(Int(bounds.width))x\(Int(bounds.height)),fill=\(filled * 100 / area),"
+    + "tint=\(tint == nil ? "-" : String(tinted * 100 / area))"
 }

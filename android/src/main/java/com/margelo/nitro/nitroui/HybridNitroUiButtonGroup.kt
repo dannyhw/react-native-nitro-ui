@@ -61,6 +61,7 @@ import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.toRgbHex
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -217,8 +218,34 @@ internal class ButtonGroupModel : NitroUiModel() {
   fun iconContent(index: Int): NitroUiIconContent =
     iconSlots.getOrNull(index)?.content ?: NitroUiIconContent.Absent
 
+  /**
+   * What each overflow row last tinted its glyph with, as `<id>#<RRGGBB>`. A row's icon colour
+   * comes from the device's dynamic palette, so a test has to ask the row what it drew.
+   */
+  private val overflowIconTints = LinkedHashMap<String, String>()
+
+  /** The item icons and label style [overflowIconTints] was recorded against. */
+  private var overflowIconKey = ""
+
+  /** Recorded from composition, as an overflow row draws its glyph. */
+  fun noteOverflowIconTint(
+    id: String,
+    tint: ComposeColor,
+  ) {
+    synchronized(reportLock) { overflowIconTints[id] = tint.toRgbHex() }
+  }
+
   /** Resolve every item's glyph, once per batch and never in composition. */
   fun resolveAndroidIcons(artwork: NitroUiIconArtwork) {
+    // A row that would draw something different retires its previous answer rather than
+    // reporting it as if it had just drawn again.
+    val iconKey =
+      "${labelStyle.showsGlyph};" +
+        items.joinToString(",") { item -> "${item.id}:${item.androidIcon ?: ""}" }
+    if (iconKey != overflowIconKey) {
+      overflowIconKey = iconKey
+      synchronized(reportLock) { overflowIconTints.clear() }
+    }
     while (iconSlots.size < items.size) {
       iconSlots.add(NitroUiIconSlot())
     }
@@ -255,8 +282,16 @@ internal class ButtonGroupModel : NitroUiModel() {
           // Item order, not insertion order: two runs must print one string.
           items.filter { displayed.contains(it.id) }.joinToString(",") { it.id }
         }
+      val overflowIcons =
+        if (overflowIconTints.isEmpty()) {
+          "-"
+        } else {
+          items.mapNotNull { item -> overflowIconTints[item.id]?.let { tint -> "${item.id}#$tint" } }
+            .joinToString(",")
+            .ifEmpty { "-" }
+        }
       "checked=$checked;$rowReport;menu=${if (menuOpen) "open" else "closed"};" +
-        "probes=$probes;a11y=$accessibilityReport"
+        "overflowIcons=$overflowIcons;probes=$probes;a11y=$accessibilityReport"
     }
 
   fun publishRowReport(report: String) {
@@ -309,12 +344,14 @@ internal class ButtonGroupModel : NitroUiModel() {
       iconSlots[index].reset()
     }
     iconSlots.clear()
+    overflowIconKey = ""
     ledger.reset()
     menuState = null
     synchronized(reportLock) {
       rowReport = "visible=none;overflow=none;row=none;shown=none"
       accessibilityReport = "none"
       menuOpen = false
+      overflowIconTints.clear()
       probes = 0
     }
   }
@@ -776,6 +813,16 @@ private class ButtonGroupHost(
                 index = 0,
                 count = 1,
                 groupEnabled = enabled,
+                // A row's title is always drawn, so `titleOnly` costs the row its glyph but
+                // not its item. An item with no icon passes nothing: a non-null empty leading
+                // slot would still move the label.
+                icon =
+                  if (labelStyle.showsGlyph) {
+                    model.iconContent(index)
+                  } else {
+                    NitroUiIconContent.Absent
+                  },
+                onIconTint = { tint -> model.noteOverflowIconTint(item.id, tint) },
                 onPick = {
                   if (!itemEnabled) {
                     return@MenuRow

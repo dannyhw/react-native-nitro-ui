@@ -842,3 +842,553 @@ describe('ButtonGroup · G20', () => {
     expect(events).toEqual([]);
   });
 });
+
+/** The colour no scheme uses, so a pixel matching it was painted by the app's `tintColor`. */
+const TINT = '#E01B24';
+
+describe('ButtonGroup · the overflow row glyphs (G21, Android)', () => {
+  /**
+   * The tail of this row cannot fit a 220-point well, and the tail carries both an item with a
+   * glyph and one without: the rows that draw are the ones this reads.
+   */
+  const ICONED: ButtonGroupItem[] = [
+    { id: 'day', title: 'Day' },
+    { id: 'week', title: 'Week' },
+    { id: 'month', title: 'Month' },
+    { id: 'quarter', title: 'Quarter', androidIcon: 'nitroui_test_star' },
+    { id: 'year', title: 'Year' },
+    { id: 'all', title: 'All time', androidIcon: 'nitroui_test_close' },
+  ];
+
+  const glyphOf = (id: string): ButtonGroupItem['androidIcon'] =>
+    ICONED.find((item) => item.id === id)?.androidIcon;
+
+  /** Open the overflow the way the indicator's tap does, and wait for the rows to draw. */
+  async function openOverflow(testId: string): Promise<void> {
+    handleOf(testId).nuiTestOpenOverflow();
+    await pollUntil(
+      () => (reportOf(testId).menu === 'open' ? true : null),
+      () =>
+        new Error(
+          `"${testId}" never opened its overflow menu - it reports "${handleOf(
+            testId
+          ).nuiTestStateReport()}".`
+        ),
+      8000
+    );
+    // The menu state flips before the popup composes its rows.
+    await sleep(250);
+  }
+
+  /** The rows that drew a glyph, as `id` to the colour it drew it with. */
+  function glyphRows(testId: string): Map<string, string> {
+    const rows = new Map<string, string>();
+    const raw = reportOf(testId).overflowIcons ?? '';
+    for (const pair of raw.split(',')) {
+      const at = pair.indexOf('#');
+      if (at > 0) rows.set(pair.slice(0, at), pair.slice(at + 1));
+    }
+    return rows;
+  }
+
+  it('draws an overflowed item its glyph, and nothing for an item without one', async () => {
+    if (Platform.OS === 'ios') return;
+    poison([sizingKey('standard', 'filled', 'medium', 'automatic', ICONED)]);
+    await render(
+      <View style={WELL}>
+        <ButtonGroup
+          items={ICONED}
+          testID="bg-menu-icons"
+          hybridRef={captureHybrid('bg-menu-icons')}
+        />
+      </View>
+    );
+    await waitForTestId('bg-menu-icons');
+    const row = await probeRow('bg-menu-icons');
+    const shown = (row.shown ?? 'none').split(',');
+    const hidden = ICONED.map((item) => item.id).filter(
+      (id) => !shown.includes(id)
+    );
+    const withGlyph = hidden.filter((id) => glyphOf(id) != null);
+    const withoutGlyph = hidden.filter((id) => glyphOf(id) == null);
+    if (withGlyph.length === 0 || withoutGlyph.length === 0) {
+      throw new Error(
+        `the overflowed items must hold both kinds: with a glyph ` +
+          `${JSON.stringify(withGlyph)}, without ` +
+          `${JSON.stringify(withoutGlyph)} (shown: ${JSON.stringify(shown)}).`
+      );
+    }
+
+    await openOverflow('bg-menu-icons');
+    const drew = await pollUntil(
+      () => {
+        const rows = glyphRows('bg-menu-icons');
+        return rows.size > 0 ? rows : null;
+      },
+      () =>
+        new Error(
+          `no overflow row drew a glyph while the menu was open - it reports ` +
+            `"${handleOf('bg-menu-icons').nuiTestStateReport()}".`
+        ),
+      8000
+    );
+    for (const id of withGlyph) {
+      const tint = drew.get(id);
+      if (tint == null || !/^[0-9A-F]{6}$/.test(tint)) {
+        throw new Error(
+          `the overflow row for "${id}" (androidIcon ` +
+            `"${String(glyphOf(id))}") drew no glyph, or drew one with no colour: ` +
+            `"${String(tint)}" in "${handleOf(
+              'bg-menu-icons'
+            ).nuiTestStateReport()}".`
+        );
+      }
+    }
+    for (const id of withoutGlyph) {
+      if (drew.has(id)) {
+        throw new Error(
+          `the overflow row for "${id}" has no androidIcon and drew a glyph in ` +
+            `"${String(drew.get(id))}" anyway.`
+        );
+      }
+    }
+  });
+
+  /**
+   * A row records a glyph only as it composes, so this group is mounted with `titleOnly` from the
+   * start: a popup opened on a group that was rerendered keeps the rows it had already composed.
+   */
+  it('keeps menu rows glyph-free under labelStyle="titleOnly"', async () => {
+    if (Platform.OS === 'ios') return;
+    poison([sizingKey('standard', 'filled', 'medium', 'titleOnly', ICONED)]);
+    await render(
+      <View style={WELL}>
+        <ButtonGroup
+          items={ICONED}
+          labelStyle="titleOnly"
+          testID="bg-menu-title-only"
+          hybridRef={captureHybrid('bg-menu-title-only')}
+        />
+      </View>
+    );
+    await waitForTestId('bg-menu-title-only');
+    const row = await probeRow('bg-menu-title-only');
+    const shown = (row.shown ?? 'none').split(',');
+    const withGlyph = ICONED.map((item) => item.id)
+      .filter((id) => !shown.includes(id))
+      .filter((id) => glyphOf(id) != null);
+    if (withGlyph.length === 0) {
+      throw new Error(
+        `the overflowed items must hold one with a glyph to take away, and ` +
+          `"bg-menu-title-only" shows ${JSON.stringify(shown)} - the fixture proves nothing.`
+      );
+    }
+
+    await openOverflow('bg-menu-title-only');
+    await sleep(EVENT_QUIET_MS);
+    if (glyphRows('bg-menu-title-only').size > 0) {
+      throw new Error(
+        `with labelStyle="titleOnly" an overflow row still drew a glyph: ` +
+          `"${handleOf('bg-menu-title-only').nuiTestStateReport()}".`
+      );
+    }
+  });
+});
+
+describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
+  const VARIANTS = ['filled', 'elevated', 'tonal', 'outlined', 'text'] as const;
+
+  /**
+   * Narrow enough that a one-item row's box is the item's own: the measured shares are then the
+   * item's, not the page's.
+   */
+  const ITEM_WELL = { width: 96 } as const;
+
+  /**
+   * One item, one way. Each is drawn in a group of its own, because the measured box is the
+   * control's: a row of two items would report the two drawings added together.
+   */
+  type Role = 'action' | 'on' | 'off' | 'disabled' | 'disabledAction';
+
+  const ROLES: readonly Role[] = [
+    'action',
+    'on',
+    'off',
+    'disabled',
+    'disabledAction',
+  ];
+
+  function soloItems(role: Role): ButtonGroupItem[] {
+    if (role === 'action') return [{ id: 'bold', title: 'Bold' }];
+    if (role === 'disabledAction') {
+      return [{ id: 'bold', title: 'Bold', disabled: true }];
+    }
+    if (role === 'disabled') {
+      return [{ id: 'bold', title: 'Bold', toggle: true, disabled: true }];
+    }
+    return [
+      {
+        id: 'bold',
+        title: 'Bold',
+        toggle: true,
+        defaultChecked: role === 'on' ? true : undefined,
+      },
+    ];
+  }
+
+  /** What the control's box measured at the last row probe: the share drawn at all, and the
+   * share drawn in the group's own tint. */
+  type Drawing = { fill: number; tint: number };
+
+  async function drawingOf(testId: string, what: string): Promise<Drawing> {
+    const probed = await probeRow(testId);
+    const raw = probed.drawing ?? '';
+    const fill = /,fill=(\d+)(?:,|$)/.exec(raw);
+    const tint = /,tint=(\d+)(?:,|$)/.exec(raw);
+    if (fill == null || tint == null) {
+      throw new Error(
+        `"${testId}" (${what}) reported no measured drawing: "${raw}".`
+      );
+    }
+    return { fill: Number(fill[1]), tint: Number(tint[1]) };
+  }
+
+  /** How far two measured drawings may sit and still be called the same drawing. Two boxes drawn
+   * by one style share every pixel but the anti-aliased ones, which is a point or two; the iOS
+   * style families are tens of points apart. */
+  const SAME_DRAWING = 6;
+
+  /** How far a drawn item sits from a grey one. A grey label, which is what a disabled item is
+   * drawn in, measures none of its ink in the group's colour; a label in the group's colour
+   * measures most of it. Measured on the ink and not on the box because the roles compared here
+   * are not always drawn in boxes of one size: a `text` group holding a toggle is measured at the
+   * height of a capsule while its toggle draws a label alone. */
+  const TINT_SEEN = 3;
+
+  function sameDrawing(a: Drawing, b: Drawing): boolean {
+    return (
+      Math.abs(a.fill - b.fill) <= SAME_DRAWING &&
+      Math.abs(a.tint - b.tint) <= SAME_DRAWING
+    );
+  }
+
+  /** The share of what an item draws that is the group's colour. `fill` and `tint` are both
+   * shares of the same sampled box, so their ratio says the same thing whatever size that box is. */
+  function tintOfInk(drawing: Drawing): number {
+    return drawing.fill === 0
+      ? 0
+      : Math.round((drawing.tint * 100) / drawing.fill);
+  }
+
+  it('draws an unchecked toggle in the group tint, one step below the checked one', async () => {
+    if (Platform.OS !== 'ios') return;
+    const read: Record<string, Record<Role, Drawing>> = {};
+    for (const variant of VARIANTS) {
+      read[variant] = {} as Record<Role, Drawing>;
+      for (const role of ROLES) {
+        const testId = `bg-${variant}-${role}`;
+        await render(
+          <View style={ITEM_WELL}>
+            <ButtonGroup
+              items={soloItems(role)}
+              tintColor={TINT}
+              variant={variant}
+              testID={testId}
+              hybridRef={captureHybrid(testId)}
+            />
+          </View>
+        );
+        await waitForTestId(testId);
+        await waitForMeasured(testId, `the ${variant} ${role} group`);
+        read[variant][role] = await drawingOf(testId, `${variant} ${role}`);
+      }
+    }
+
+    const seen = VARIANTS.map(
+      (variant) =>
+        `${variant}: ` +
+        ROLES.map(
+          (role) => `${role}=${JSON.stringify(read[variant]![role])}`
+        ).join(' ')
+    ).join('; ');
+
+    // Two drawings the mapping is written against: `.bordered` in the group's tint, which is what
+    // a `tonal` action item draws, and `.borderedProminent` in it, which is what a `filled` one
+    // draws. Every cell of the table is compared against one of these rather than a number.
+    const quiet = read.tonal!.action;
+    const loud = read.filled!.action;
+
+    for (const variant of VARIANTS) {
+      const { action, on, off, disabled, disabledAction } = read[variant]!;
+
+      // Unchecked is never grey: what it draws is the group's own colour.
+      if (tintOfInk(off) < TINT_SEEN) {
+        throw new Error(
+          `an unchecked "${variant}" toggle drew only ${tintOfInk(off)}% of the ink it ` +
+            `draws in the group's tint, so it reads as a disabled item rather than as an ` +
+            `unchecked one. ${seen}`
+        );
+      }
+      // Unchecked draws the quiet drawing: the variant's own look for every variant but
+      // `filled`/`elevated`, whose unchecked item drops the prominent fill.
+      const offIs = variant === 'text' ? action : quiet;
+      if (!sameDrawing(off, offIs)) {
+        throw new Error(
+          `an unchecked "${variant}" toggle drew ${JSON.stringify(off)} against ` +
+            `the ${variant === 'text' ? 'variant' : 'quiet'} item's ` +
+            `${JSON.stringify(offIs)}. ${seen}`
+        );
+      }
+      // Checked is one step louder in the same family: the prominent capsule, except for
+      // `text`, whose checked item takes the quiet capsule and keeps its tinted label.
+      const onIs = variant === 'text' ? quiet : loud;
+      if (!sameDrawing(on, onIs)) {
+        throw new Error(
+          `a checked "${variant}" toggle drew ${JSON.stringify(on)} against the ` +
+            `${variant === 'text' ? 'quiet' : 'prominent'} item's ` +
+            `${JSON.stringify(onIs)}. ${seen}`
+        );
+      }
+      // In the group's own colour as well: against a capsule the fill on its own is the drawing
+      // of any capsule, so a checked item that had lost the group's colour would still match the
+      // item it is measured against.
+      if (tintOfInk(on) < TINT_SEEN) {
+        throw new Error(
+          `a checked "${variant}" toggle drew only ${tintOfInk(on)}% of the ink it draws in ` +
+            `the group's tint, so a checked item of any colour would match ` +
+            `${JSON.stringify(onIs)}. ${seen}`
+        );
+      }
+      if (sameDrawing(on, off)) {
+        throw new Error(
+          `a "${variant}" toggle draws the same thing checked (${JSON.stringify(on)}) ` +
+            `and unchecked (${JSON.stringify(off)}). ${seen}`
+        );
+      }
+      // A disabled item is the grey an unchecked item is not, and an unchecked item sits apart
+      // from either of them by more than the read's noise: a toggle drawn in a disabled item's
+      // colour is one no user can tell from a control that does nothing.
+      if (tintOfInk(off) <= tintOfInk(disabled) + TINT_SEEN) {
+        throw new Error(
+          `an unchecked "${variant}" toggle (${JSON.stringify(off)}) draws like the ` +
+            `disabled toggle beside it (${JSON.stringify(disabled)}). ${seen}`
+        );
+      }
+      if (tintOfInk(off) <= tintOfInk(disabledAction) + TINT_SEEN) {
+        throw new Error(
+          `an unchecked "${variant}" toggle (${JSON.stringify(off)}) draws like the disabled ` +
+            `action item beside it (${JSON.stringify(disabledAction)}). ${seen}`
+        );
+      }
+      if (disabled.tint > SAME_DRAWING || disabledAction.tint > SAME_DRAWING) {
+        throw new Error(
+          `"${variant}" drew a disabled item in the group's tint (toggle ` +
+            `${disabled.tint}%, action ${disabledAction.tint}%), so the read no longer ` +
+            `tells a disabled item from an unchecked one. ${seen}`
+        );
+      }
+    }
+
+    // The read tells the three iOS style families apart, so the per-variant claims above say
+    // something: only a prominent family paints its box in the tint, and only the two capsule
+    // families paint a background at all.
+    if (
+      loud.tint < quiet.tint + 10 ||
+      loud.fill < read.text!.action.fill + 20
+    ) {
+      throw new Error(
+        `the measured read does not tell the three iOS style families apart - filled ` +
+          `painted ${loud.tint}% in the tint and ${loud.fill}% of its box, tonal painted ` +
+          `${quiet.tint}% in the tint, text painted ` +
+          `${read.text!.action.fill}% of its box. ${seen}`
+      );
+    }
+  });
+
+  /**
+   * What a control is drawn into and draws there: the height it measured and was laid out at, and
+   * the drawing sampled inside its bounds. The two have to agree before either is read - a box
+   * still at the size the sizing engine had for it describes a layout the control never agreed
+   * to, and a box the control has not measured yet is not the one the drawing fills.
+   */
+  async function readBox(
+    testId: string,
+    what: string
+  ): Promise<{ height: number; drawn: number; fill: number; tint: number }> {
+    const deadline = nitroUiCore.now() + 10000;
+    for (;;) {
+      const raw = (await probeRow(testId)).drawing ?? '';
+      const box = /^size=(\d+)x(\d+),/.exec(raw);
+      const fill = /,fill=(\d+)(?:,|$)/.exec(raw);
+      const tint = /,tint=(\d+)(?:,|$)/.exec(raw);
+      const measuredSize = measured(testId);
+      const boxSize = sizeOf(testId);
+      if (
+        box != null &&
+        fill != null &&
+        tint != null &&
+        measuredSize != null &&
+        boxSize != null &&
+        Math.abs(Number(box[2]) - measuredSize.height) < 1 &&
+        Math.abs(boxSize.height - measuredSize.height) < 1
+      ) {
+        return {
+          height: measuredSize.height,
+          drawn: Number(box[2]),
+          fill: Number(fill[1]),
+          tint: Number(tint[1]),
+        };
+      }
+      if (nitroUiCore.now() > deadline) {
+        throw new Error(
+          `"${testId}" (${what}) is drawn into a box that never took the size it ` +
+            `measured - laid out at ${describeSize(sizeOf(testId))}, sampled at ` +
+            `"${(await probeRow(testId)).drawing ?? 'nothing'}", measured ` +
+            `${describeSize(measured(testId))}.`
+        );
+      }
+      await sleep(100);
+    }
+  }
+
+  /** One item, in a well of its own, in the group's colour. */
+  async function showSolo(
+    testId: string,
+    variant: 'text' | 'tonal',
+    items: ButtonGroupItem[]
+  ): Promise<void> {
+    await render(
+      <View style={ITEM_WELL}>
+        <ButtonGroup
+          items={items}
+          tintColor={TINT}
+          variant={variant}
+          testID={testId}
+          hybridRef={captureHybrid(testId)}
+        />
+      </View>
+    );
+    await waitForTestId(testId);
+  }
+
+  it('draws a checked text toggle inside the box the row was measured into', async () => {
+    if (Platform.OS !== 'ios') return;
+
+    // Every row is one item with a title no other test here measures: the measured size is
+    // cached per configuration and the item titles are part of it, so a second row with the
+    // same title would be laid out at the first one's size instead of measuring itself.
+    const oneToggle = (title: string, checked: boolean): ButtonGroupItem[] => [
+      {
+        id: 'item',
+        title,
+        toggle: true,
+        defaultChecked: checked ? true : undefined,
+      },
+    ];
+    const oneAction = (title: string): ButtonGroupItem[] => [
+      { id: 'item', title },
+    ];
+
+    // The two heights a `text` item can be measured at: the capsule a checked toggle draws, and
+    // the label alone a `text` action item draws.
+    await showSolo('bg-box-checked', 'text', oneToggle('North', true));
+    const checkedFirst = await readBox(
+      'bg-box-checked',
+      'the text group measured with its toggle checked'
+    );
+    await showSolo('bg-box-quiet', 'tonal', oneAction('South'));
+    const quiet = await readBox(
+      'bg-box-quiet',
+      'the same label inside a bordered item'
+    );
+    await showSolo('bg-box-text', 'text', oneAction('South'));
+    const text = await readBox(
+      'bg-box-text',
+      'the same label as a text action item'
+    );
+
+    // The row this is about: measured while its toggle is unchecked, then checked by a press
+    // that re-measures nothing.
+    await showSolo('bg-box-toggle', 'text', oneToggle('South', false));
+    const off = await readBox(
+      'bg-box-toggle',
+      'the text group holding an unchecked toggle'
+    );
+    await pressItem('bg-box-toggle', 'item');
+    await pollUntil(
+      () => (reportOf('bg-box-toggle').checked === 'item' ? true : null),
+      () =>
+        new Error(
+          `the toggle never reached the row - it reports "${handleOf(
+            'bg-box-toggle'
+          ).nuiTestStateReport()}".`
+        )
+    );
+    const on = await readBox(
+      'bg-box-toggle',
+      'the same group with its toggle checked'
+    );
+
+    const seen =
+      `checked-first=${JSON.stringify(checkedFirst)} quiet=${JSON.stringify(quiet)} ` +
+      `text=${JSON.stringify(text)} off=${JSON.stringify(off)} ` +
+      `on=${JSON.stringify(on)}`;
+
+    // A `text` group holding a toggle is measured at the height of a capsule before anything is
+    // checked, which is the only way the checked state has a box to be drawn in: nothing
+    // re-measures the row when an item is checked.
+    if (Math.abs(off.height - quiet.height) > 0.6) {
+      throw new Error(
+        `a "text" group holding a toggle measured ${off.height} pt high with its toggle ` +
+          `unchecked against the ${quiet.height} pt the same label measures inside a ` +
+          `capsule, so the taller state has nowhere to be drawn. ${seen}`
+      );
+    }
+    // And the same height after it is checked: the flip repaints the item and moves nothing.
+    if (Math.abs(on.height - off.height) > 0.01) {
+      throw new Error(
+        `checking a toggle moved the "text" group's box from ${off.height} pt to ` +
+          `${on.height} pt. ${seen}`
+      );
+    }
+    if (Math.abs(on.height - checkedFirst.height) > 0.6) {
+      throw new Error(
+        `a "text" group measured with its toggle unchecked is ${on.height} pt high once ` +
+          `checked, against the ${checkedFirst.height} pt of one measured while checked, ` +
+          `so the checked capsule is drawn outside its box. ${seen}`
+      );
+    }
+    // The two drawings those heights name: the quiet capsule while checked, and far less of the
+    // box while unchecked. Neither a row that grew without drawing a capsule, nor a `text` group
+    // whose toggle had simply become a capsule in both states, gets past both of these.
+    if (!sameDrawing(on, quiet)) {
+      throw new Error(
+        `a checked toggle in a "text" group drew ${JSON.stringify(on)} against the ` +
+          `same label in a bordered item, ${JSON.stringify(quiet)}. ${seen}`
+      );
+    }
+    if (on.fill <= off.fill + 20) {
+      throw new Error(
+        `a "text" group's toggle paints no more of its box checked (${JSON.stringify(
+          on
+        )}) than unchecked (${JSON.stringify(off)}), so the unchecked item is not the ` +
+          `label alone whose height is being reserved. ${seen}`
+      );
+    }
+    // None of this reaches a `text` group that holds no toggle, and the read still tells the two
+    // heights apart.
+    if (text.height + 2 > off.height) {
+      throw new Error(
+        `a "text" group with no toggle is ${text.height} pt high against the ` +
+          `${off.height} pt of one holding a toggle: without a toggle a "text" row is ` +
+          `the height of a label alone. ${seen}`
+      );
+    }
+    if (text.height + 2 > quiet.height) {
+      throw new Error(
+        `the read no longer tells a "text" item's height (${text.height} pt) from a ` +
+          `capsule's (${quiet.height} pt), so the heights above say nothing. ${seen}`
+      );
+    }
+  });
+});
