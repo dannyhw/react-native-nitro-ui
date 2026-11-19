@@ -362,7 +362,7 @@ internal class NitroUiSheetRootView(
       val childX = x - child.left
       val childY = y - child.top
       if (child.visibility != View.VISIBLE ||
-        childX < 0f || childY < 0f || childX > child.right || childY > child.bottom
+        childX < 0f || childY < 0f || childX >= child.width || childY >= child.height
       ) {
         continue
       }
@@ -470,8 +470,9 @@ internal class RisingDragGrabberView(
 /**
  * Measures the one drag a rising sheet should follow: mostly vertical, past the touch slop, and not
  * one a child view has claimed - the drag Material's own drag would have taken once the sheet had
- * settled. It reports at the end of the gesture: travel and release velocity in px and px a
- * second, positive for a drag upward.
+ * settled. It reports at the end of the gesture: travel and release velocity in px and px a second,
+ * positive for a drag upward. Both are the finger's own, read on the screen: the view that measures
+ * rides the opening animation, and its movement is not the drag's.
  */
 internal class RisingDragMeasurement(
   private val slopPx: Int,
@@ -491,7 +492,7 @@ internal class RisingDragMeasurement(
   fun onEvent(event: MotionEvent) {
     when (event.actionMasked) {
       MotionEvent.ACTION_DOWN -> begin(event)
-      MotionEvent.ACTION_POINTER_DOWN -> tracker?.addMovement(event)
+      MotionEvent.ACTION_POINTER_DOWN -> track(tracker, event)
       MotionEvent.ACTION_MOVE -> move(event)
       MotionEvent.ACTION_UP -> end(event, handOver = true)
       // The finger that began the drag owns it: when it lifts, the drag ends with it.
@@ -499,7 +500,7 @@ internal class RisingDragMeasurement(
         if (event.getPointerId(event.actionIndex) == pointerId) {
           end(event, handOver = true)
         } else {
-          tracker?.addMovement(event)
+          track(tracker, event)
         }
       MotionEvent.ACTION_CANCEL -> stop()
     }
@@ -522,21 +523,20 @@ internal class RisingDragMeasurement(
     claimedByChild = false
     handler = handlerAtDown(event)
     pointerId = event.getPointerId(0)
-    fromX = event.getX(0)
-    fromY = event.getY(0)
-    tracker =
-      handler?.let { VelocityTracker.obtain().apply { addMovement(event) } }
+    fromX = event.rawX
+    fromY = event.rawY
+    tracker = handler?.let { VelocityTracker.obtain() }
+    track(tracker, event)
   }
 
   private fun move(event: MotionEvent) {
-    val active = tracker ?: return
     val index = event.findPointerIndex(pointerId)
     if (index < 0) {
       return
     }
-    active.addMovement(event)
-    travelPx = (fromY - event.getY(index)).roundToInt()
-    travelX = (event.getX(index) - fromX).roundToInt()
+    track(tracker, event)
+    travelPx = (fromY - event.getRawY(index)).roundToInt()
+    travelX = (event.getRawX(index) - fromX).roundToInt()
   }
 
   private fun end(event: MotionEvent, handOver: Boolean) {
@@ -551,7 +551,7 @@ internal class RisingDragMeasurement(
       if (abs(vertical) >= slopPx && abs(vertical) > abs(sideways)) {
         // Only an up is a final position: the tracker drops a pointer a lift took away.
         if (event.actionMasked == MotionEvent.ACTION_UP) {
-          kept?.addMovement(event)
+          track(kept, event)
         }
         ending(vertical, releaseVelocity(kept, started))
       }
@@ -564,6 +564,29 @@ internal class RisingDragMeasurement(
     pointerId = NO_POINTER
     travelPx = 0
     travelX = 0
+  }
+
+  /**
+   * Put one event in screen space for the tracker, which reads coordinates off the event itself:
+   * the receiving view moves with the rising sheet, and samples taken on it would carry that
+   * movement as the finger's. The event goes back the way it came: its owner has the gesture
+   * still to dispatch.
+   */
+  private fun track(
+    tracker: VelocityTracker?,
+    event: MotionEvent,
+  ) {
+    if (tracker == null) {
+      return
+    }
+    val dx = event.rawX - event.x
+    val dy = event.rawY - event.y
+    event.offsetLocation(dx, dy)
+    try {
+      tracker.addMovement(event)
+    } finally {
+      event.offsetLocation(-dx, -dy)
+    }
   }
 
   /** px a second, positive upward: Android reads a finger moving up as a negative velocity. */
@@ -817,7 +840,10 @@ internal class BottomSheetHost(
               else -> null
             }
           when {
-            upward == null -> Unit
+            // Back or JS can close the sheet while the drag is held. Such a release decides
+            // nothing: `expand()` would cancel the `hide()` already running and clear its
+            // `closing` flag, and the sheet would be gone in one frame.
+            !model.presented || upward == null -> Unit
             // The detent above the one the sheet is opening to, where there is one to reach.
             upward == true &&
               sheetState.targetValue != SheetValue.Expanded &&
