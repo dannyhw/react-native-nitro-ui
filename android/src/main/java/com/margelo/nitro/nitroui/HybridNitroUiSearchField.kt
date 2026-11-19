@@ -3,6 +3,8 @@
 package com.margelo.nitro.nitroui
 
 import android.app.Activity
+import android.content.Context
+import android.content.res.Configuration
 import android.content.res.Resources
 import android.view.View
 import android.view.ViewGroup
@@ -38,6 +40,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -50,6 +53,7 @@ import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.nitroui.core.nitroUiIcon
 import com.margelo.nitro.views.RecyclableView
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 // The SearchField component: Material's search `InputField` in a `Surface`, sharing
@@ -60,22 +64,69 @@ internal const val SEARCH_FIELD_GLYPH_TAG = "nitroui.searchfield.glyph"
 
 /**
  * The platform's localized "Search…" and "Clear query". Both are private framework
- * strings, so they are looked up by name once, with English fallbacks.
+ * strings, so they are looked up by name, with English fallbacks.
+ *
+ * They are read from the configuration a field draws in, not from the device's: an app
+ * shown in another language than the device's, including a per-app language on Android 13
+ * and later, gets its own words, and the next draw after a language change has the new
+ * ones. Cached per locale list, and bounded, so rendering under many locales cannot grow
+ * the cache for the life of the process.
  */
-private object SearchFieldStrings {
-  private fun frameworkResId(name: String): Int =
-    FRAMEWORK_RESOURCES.getIdentifier(name, "string", "android")
+object SearchFieldStrings {
+  /** The prompt a field with no `placeholder` draws for [context]. */
+  internal fun hint(
+    context: Context,
+  ): String = entryFor(context).first
 
-  private val FRAMEWORK_RESOURCES: Resources = Resources.getSystem()
+  /** The clear button's screen-reader label for [context]. */
+  internal fun clear(
+    context: Context,
+  ): String = entryFor(context).second
 
-  val hint: String by lazy {
-    val id = frameworkResId("search_hint")
-    if (id != 0) FRAMEWORK_RESOURCES.getString(id) else "Search"
+  /**
+   * The pair a field draws for [context], or for the language [localeTag] names when one
+   * is given. Public for the example app's probe, which asks what a field would draw in
+   * another language; an app reads its own strings through a field.
+   */
+  fun forLocale(
+    context: Context,
+    localeTag: String,
+  ): Pair<String, String> {
+    if (localeTag.isEmpty()) {
+      return hint(context) to clear(context)
+    }
+    val configuration = Configuration(context.resources.configuration)
+    configuration.setLocale(Locale.forLanguageTag(localeTag))
+    val other = context.createConfigurationContext(configuration)
+    return hint(other) to clear(other)
   }
 
-  val clear: String by lazy {
-    val id = frameworkResId("searchview_description_clear")
-    if (id != 0) FRAMEWORK_RESOURCES.getString(id) else "Clear query"
+  private const val MAX_ENTRIES = 8
+
+  private val cache = HashMap<String, Pair<String, String>>()
+
+  @Synchronized
+  private fun entryFor(context: Context): Pair<String, String> {
+    val resources = context.resources
+    val key = resources.configuration.locales.toLanguageTags()
+    cache[key]?.let { return it }
+    val built =
+      frameworkString(resources, "search_hint", "Search") to
+        frameworkString(resources, "searchview_description_clear", "Clear query")
+    if (cache.size >= MAX_ENTRIES) {
+      cache.clear()
+    }
+    cache[key] = built
+    return built
+  }
+
+  private fun frameworkString(
+    resources: Resources,
+    name: String,
+    fallback: String,
+  ): String {
+    val id = resources.getIdentifier(name, "string", "android")
+    return if (id != 0) resources.getString(id) else fallback
   }
 }
 
@@ -146,6 +197,8 @@ private class SearchFieldHost(
 @Composable
 private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
   val state = model.textState
+  // The configuration this composition draws in: where the framework's strings come from.
+  val context = LocalContext.current
   val limit = remember(model) { NitroUiTextLimit(model) }
   val focusRequester = remember { FocusRequester() }
   val focusManager = LocalFocusManager.current
@@ -234,7 +287,9 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
           onClick = { state.clearText() },
           // The name goes on the button, not the glyph: Compose does not merge the glyph's
           // description into the clickable node, which would leave that node unnamed.
-          modifier = Modifier.semantics { contentDescription = SearchFieldStrings.clear },
+          modifier = Modifier.semantics {
+            contentDescription = SearchFieldStrings.clear(context)
+          },
         ) {
           Icon(imageVector = nitroUiIcon(R.drawable.nitroui_close), contentDescription = null)
         }
@@ -275,7 +330,7 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
       onSearch = onSearch,
       modifier = modifier,
       enabled = model.editable,
-      placeholder = { Text(model.placeholder ?: SearchFieldStrings.hint) },
+      placeholder = { Text(model.placeholder ?: SearchFieldStrings.hint(context)) },
       leadingIcon = {
         Icon(
           imageVector = nitroUiIcon(R.drawable.nitroui_search),
@@ -686,7 +741,7 @@ class HybridNitroUiSearchField(
         model.editable,
         (model.maxLength ?: -1).toDouble(),
         // What the field draws: the app's placeholder, or the platform's localized one.
-        model.placeholder ?: SearchFieldStrings.hint,
+        model.placeholder ?: SearchFieldStrings.hint(host.context),
         model.accessibilityLabel ?: "",
         model.returnKeyType,
         keyboard.keyboardType,
