@@ -2654,15 +2654,20 @@ describe('Form keyboard opt-out (Android)', () => {
       )} dp to show a row it was asked about (${JSON.stringify(asked)})`
     ).toBeLessThanOrEqual(1);
 
-    // Asked again: this report is built after both requests, so a scroll the first one
-    // started — animated or not — is in it too.
+    // A scroll view asked to show a row may animate it there, so the offset is read again a
+    // second after the ask - the report answering the second ask describes both.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     const askedAgain = await askForRow(2);
     expect(
       Math.abs(num(askedAgain, 'scroll') - offset),
-      `an opted-out Form was asked twice and had then moved ${String(
-        Math.round(num(askedAgain, 'scroll') - offset)
-      )} dp from where it was (${JSON.stringify(askedAgain)})`
+      `an opted-out Form was asked to show a row, a second ask came a second later, and it had ` +
+        `then moved ${String(
+          Math.round(num(askedAgain, 'scroll') - offset)
+        )} dp from where it was (${JSON.stringify(askedAgain)})`
     ).toBeLessThanOrEqual(1);
+    console.log(
+      `FORM OPT-OUT asked for row ${TALL_ROWS - 1} ${JSON.stringify(askedAgain)}`
+    );
   });
 
   it('scrolls a Form that keeps the focused row visible when the same row is asked for (FIX15)', async () => {
