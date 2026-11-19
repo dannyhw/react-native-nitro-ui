@@ -92,3 +92,11 @@ another task's run was on the machine at the same time.
   `NitroUiPresentation.present` and can be refused the same way; only BottomSheet recovers.
   `forgetUnstarted` is ready for them.
 - `docs/tasks/FOLLOWUPS.md`'s G14 line about a refused present can be retired once this merges.
+
+## Orchestrator notes at merge
+
+- Review N3: the first red proof removed the test seam with the fix, so nothing was refused; per
+  the review's reading, removing only `watchForRefusal` turns the same line red. Not rerun.
+- Follow-ups from review: bound re-presents per ask and mute the "dismissed by the user" warning
+  for a refusal (N2); assert no `refused:dismiss` event right after the refusal (N4); the unused
+  `up` parameter on `staysUp`; no harness case for the own-window refusal path.

@@ -914,12 +914,9 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     refusalBlocker = blocker
   }
 
-  /// Ask, one run loop turn later, whether UIKit took `controller`.
-  ///
-  /// `present` installs a presentation before it returns, so a controller with no presenter by the
-  /// next turn was refused, and its completion is never coming. A present that is merely slow, or
-  /// one that had to wait for the chain, has a presenter by then, so this cannot mistake one of
-  /// those for a refusal.
+  /// Ask, one run loop turn later, whether UIKit took `controller`. Observed, not documented: a
+  /// present UIKit carries out, even a slow one, has set `presentingViewController` by then, and a
+  /// refused one never does and runs no completion.
   private func watchForRefusal(_ controller: NitroUiSheetController) {
     let generation = mountGeneration
     DispatchQueue.main.async { [weak self] in
