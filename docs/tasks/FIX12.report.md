@@ -109,46 +109,47 @@ break disjoint guards and each goes red in a different case:
    them.
 
 
+
 ## Fix round 1
 
-The device arrived, and the brief's Proof is not met. `real-input:android -- --control
-bottom-sheet` passed at 05:52:19Z and was red on its next run, at 06:05:10Z: my own slide-out
-witness read nothing at all (`title ys []`), where that same tree read all nine cases green at
-05:20:00Z and at 05:52:19Z. `topsAcrossDrag` opens its reads before the drag, so they queued behind
-it instead of across it once: the witness is the flake, not the library, and a sampler the engine
-cannot queue behind a gesture is a shared-helper question. No run showed a library defect, and no
-assertion was loosened, no wait lengthened, no retry added. A full `real-input:android` (39-42 min
-in this clone) and `need --for merge` did not fit the budget.
+The device arrived, and the brief's Proof is still not met. Reads ride the session that injects a
+drag, so a sampler opened before the gesture cannot be trusted to land across it: the witness that
+read the title across the drag gave nine cases green at 05:52:19Z and eight at 06:05:10Z. The case
+now reads the sheet's own root until it leaves the tree, which outlives its title by the length of
+Material's exit spring: nine of nine at 06:19:42Z, and red under its mutation. The sideways case's
+log is the one the brief had already decided. No run showed a library defect; nothing was loosened,
+no wait lengthened, no retry added.
 
-Red proofs, three in one run and the last alone:
+Owed, in the order a retry should take them: `real-input:android -- --control bottom-sheet` once
+more, which owes one green rather than the two in a row the brief asks for; then one full
+`real-input:android` (39-42 min in this clone); then `check`, which this round's test change made
+stale and which costs 62 s. `harness:android` reads no `example/e2e`, so it stands.
+
+Nothing was started in the last 15 minutes: `lease.mjs list` has a FIX13 lease reading "merge FIX13:
+real-input:ios (full) running, needs a quiet machine - hold device runs", and a device run under that
+note is not mine to start. `bun run task-ready` reports that stale `check` and nothing else.
+
+Red proofs, three in one run and the last alone, each narrowed with `--a11y switch`:
 
 - `a detent dragged to during the rise is reported once` -> `oweDetentReport` spent nowhere and not
   cleared at a presentation -> :407 saw `detent:1 > detent:0 > presented:false > dismiss > detent:0
   > presented:false > dismiss`.
 - `a drag down during the rise slides the sheet out` -> `userDismissed(animate = false)` while
-  rising -> :468 `title ys []`, never read lower than where the drag left it.
+  rising -> :462, the sheet gone before it could be read once after the drag ended.
 - `a sideways fling on the sheet list during the rise` -> the root stops asking `scrollsUnderneath`;
   `end()` drops `claimedByChild` and the vertical-led test -> :80 `the node left the tree before it
   came to rest`.
 - the Back of the first -> `DetentReporter` reads `sheetState.targetValue` -> :388 expected
   `Detent 0`, observed `no node`: Back closed the sheet, FIX11's `expected 0 to be 1` from its cause.
 
-### Owed, and the one call to make
-
-The filtered gate owes its second green, and the full `real-input:android` is still owed. For the
-slide-out case: keep round one's post-gesture read and let the sheet's own root be the witness (it
-outlives its title by ~200 ms and read green in every run here), or give the case a sampler that
-rides the same session as the gesture, which is `support.ts` work and outside this brief.
-Recommendation: the root witness, one line, already green in three runs.
-
 ### Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2178 tests / 96 suites | `ff2ce00a76a6` | 1 m 02 s | start 6.4 / med 8.7 / max 9.7 |
+| `check` | stale | 2178 tests / 96 suites | ff2ce00a76a6 (not this tree) | 1 m 02 s | start 6.4 / med 8.7 / max 9.7 |
 | `harness:ios` | **PASS** (from `merge/FIX7`) | 610 tests / 30 suites + isolated 6 tests / 3 suites | `e40fef38d309` (harness:ios digest) | 14 m 21 s | start 7.7 / med 7.0 / max 15.2 |
 | `harness:android` | **PASS** | 668 tests / 31 suites + isolated 6 tests / 3 suites | `ff2ce00a76a6` (harness:android digest) | 18 m 21 s | start 6.1 / med 5.0 / max 19.8 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
-| `real-input:android:--control:bottom-sheet` | **FAIL** | 1 failed of 9 tests / 1 suites | `ff2ce00a76a6` (real-input:android digest) | 12 m 52 s | start 8.9 / med 5.6 / max 8.9 |
-| `real-input:android:--control:bottom-sheet:--a11y:switch` | **PASS** | 9 tests / 1 suites | `ff2ce00a76a6` (real-input:android digest) | 3 m 17 s | start 5.5 / med 5.2 / max 6.2 |
+| `real-input:android:--control:bottom-sheet` | **PASS** | 9 tests / 1 suites | `adf924dbded9` (real-input:android digest) | 12 m 33 s | start 7.1 / med 4.8 / max 15.6 |
+| `real-input:android:--control:bottom-sheet:--a11y:switch` | **PASS** | 9 tests / 1 suites | `adf924dbded9` (real-input:android digest) | 3 m 46 s | start 4.7 / med 6.6 / max 14.1 |
