@@ -646,12 +646,12 @@ test('a press held still on a button inside a rising sheet closes nothing', asyn
 });
 
 /**
- * The 85% sheet's list is the last thing in its content, so the band under it is the sheet's own
- * space and a drag that starts there is the sheet's, not the list's: the child's own bounds say
- * whether a point below it is inside it. The drag is measured on the screen, so the sheet's rise
- * is no part of it either.
+ * The 85% sheet's list is a child inset in the sheet's own padded content, so the strip of sheet
+ * to the right of it is the sheet's and not the list's: a point in that strip is outside the list
+ * by the list's own width. A drag started there is the sheet's own, and the sheet's rise is no
+ * part of its measurement.
  */
-test('a drag that starts under the sheet list while the sheet rises expands it', async ({
+test("a drag that starts beside the sheet's list during the rise is the sheet's own and slides it out", async ({
   app,
   screen,
 }) => {
@@ -659,47 +659,37 @@ test('a drag that starts under the sheet list while the sheet rises expands it',
   await openScreen(screen, 'sheet');
   const log = screen.getByTestId('sheet-log');
   const window = await windowBox(screen);
-  const row = screen.getByTestId('sheet-fraction-list');
+  const list = screen.getByTestId('sheet-fraction-list');
   const detent = screen.getByTestId('sheet-fraction-detent');
   await expect(log).toHaveText('none');
 
   await reveal(screen, screen.getByTestId('sheet-open-fraction'));
   await screen.getByTestId('sheet-open-fraction').tap();
-  // Only a list that high on the screen leaves room to aim under it, and it comes up that far
-  // only while the sheet is still rising: the point is asked of the list as it passes.
-  const under = Math.round(4 * displayDensity());
+  // The point is asked of the list as it passes, at the height of the list itself: only a list
+  // that far up the screen leaves the strip beside it under the finger.
   const rowPx = Math.round(LIST_ROW_DP * displayDensity());
   const rising = await boxWhileRising(
-    row,
-    (box) => box.y + rowPx + under < window.y + window.height - under
+    list,
+    (box) => box.y + rowPx < window.y + window.height - rowPx
   );
   if (rising == null) {
     throw new Error(
-      'real-input: the rising 85% sheet never showed its list high enough to drag under it.'
+      'real-input: the rising 85% sheet never showed its list with the strip beside it on screen.'
     );
   }
   const from = {
-    x: Math.round(window.x + window.width / 2),
-    y: rising.y + rowPx + under,
+    x: window.x + window.width - Math.round(8 * displayDensity()),
+    y: Math.round(rising.y + rowPx / 2),
   };
   await screen.swipe({
     from,
-    to: { x: from.x, y: window.y + 2 },
-    duration: 400,
+    to: { x: from.x, y: window.y + window.height - 2 },
+    duration: 250,
   });
 
-  // The detent is a report of a settle, so the sheet is asked for rest first: the drag only says
-  // what the sheet was asked to do.
-  await restingBox(detent);
-  await expect(detent).toHaveText('Rising detent 1');
-  await app.back();
-  await restingBox(detent);
-  await expect(detent).toHaveText('Rising detent 0');
-  await app.back();
   await detent.waitFor({ state: 'detached' });
-  // The two Backs are the sheet's own two steps down: the drag's detent, then the one it
-  // opened at. This sheet reports no presentation of its own to the screen's log.
-  await expect(log).toHaveText('fraction-detent:1 > fraction-detent:0');
+  // This sheet's detents were never asked for, and the rise that was dismissed says nothing else.
+  await expect(log).toHaveText('none');
 });
 
 /**
