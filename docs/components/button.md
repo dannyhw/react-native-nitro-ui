@@ -205,10 +205,13 @@ and draws it through the same `VectorPainter` as any Material icon. It does not 
 Native's global asset resolver, so how `Image` resolves its sources is unchanged.
 
 Metro writes that dev-server URL out of the path on disk without escaping it, and the library quotes
-it back on the way to the network, so a name a file system allows is a name that draws: a space, a
-`#`, or a `%` that is not an escape. A `#` belongs to the file's name, because an icon URL carries no
-fragment. One name stays out of reach: a folder whose own name already looks like an escape,
-`icons/a%41b/`, is served by Metro under the decoded `aAb`, so the request finds no file.
+it back on the way to the network, so a space, a `#` or a `%` in a folder or file name reaches Metro
+as that same character. A `#` there belongs to the name; a `#` in a URL you write yourself starts a
+fragment, and nothing after it is asked for. Two development names still draw nothing: a `?` anywhere
+in a folder or file name, which both Metro and the library read as the start of the query, and a
+folder or file whose own name already looks like an escape — the request for
+`icons/a%41b/star.xml` carries `a%41b`, Metro reads that request as `aAb`, and finds nothing there. A
+release build reads the compiled drawable, where neither name is a problem.
 
 A gradient fill (a `<gradient>` inside an `<aapt:attr>`) is not read in development: the parser
 refuses the file, so the icon appears in a release build and not in a development one, and the
