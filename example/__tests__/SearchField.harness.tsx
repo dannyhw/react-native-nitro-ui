@@ -74,6 +74,7 @@ type FieldState = {
   autoCorrect: boolean;
   expanded: boolean;
   canClear: boolean;
+  suggestions: string;
 };
 
 /**
@@ -834,6 +835,52 @@ describe('SearchField', () => {
     // keyboard reports none whatever was asked; iOS has one trait either way.
     expect(together.autoCapitalize).toBe(iOS ? 'characters' : 'none');
     expect(together.returnKeyType).toBe('search');
+  });
+
+  /*
+   * What the keyboard was told about suggestions and autocorrections, read back rather than
+   * from the prop that asked for it: on Android the `EditorInfo` a focused field hands the
+   * IME, on iOS the autocorrection trait it carries. `'unknown'` means nothing has been read
+   * yet, so every wait below goes past it and never reads a wish as an answer.
+   */
+  it('tells the keyboard what autoCorrect asked for', async () => {
+    const { rerender } = await render(<Keyboard />);
+    await waitForTestId('keyboard');
+    await focusField('keyboard');
+
+    const asFound = await stateWhen(
+      'keyboard',
+      (current) => current.suggestions !== 'unknown',
+      'the focused field to read its keyboard back'
+    );
+    expect(asFound.focused).toBe(true);
+    expect(asFound.suggestions).toBe('offered');
+
+    // `autoCorrect={false}` has to send Android's `TYPE_TEXT_FLAG_NO_SUGGESTIONS`: a text
+    // keyboard left without the autocorrect flag alone still draws its suggestion strip.
+    await rerender(<Keyboard autoCorrect={false} />);
+    const refused = await stateWhen(
+      'keyboard',
+      (current) => current.suggestions === 'refused',
+      'the keyboard to be told no suggestions',
+      8000
+    );
+    expect(refused.focused).toBe(true);
+    expect(refused.autoCorrect).toBe(false);
+    console.log(
+      `search field autoCorrect=false read back ${refused.suggestions}`
+    );
+
+    // On a field that never lost focus: the change reaches the keyboard that is already up.
+    await rerender(<Keyboard autoCorrect />);
+    const offered = await stateWhen(
+      'keyboard',
+      (current) => current.suggestions === 'offered',
+      'the keyboard to be told suggestions are back',
+      8000
+    );
+    expect(offered.focused).toBe(true);
+    expect(offered.autoCorrect).toBe(true);
   });
 
   it('comes back from the pool with none of its previous owner', async () => {
