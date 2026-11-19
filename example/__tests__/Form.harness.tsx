@@ -559,11 +559,13 @@ const FOCUSED_ROW = 8;
 const REPORTED_IME_DP = 300;
 
 /**
- * The offset a case parks the tall Form at before it asks anything: its field's box ends a
- * third of a screen below where a keyboard of `REPORTED_IME_DP` would reach, so a Form that
- * reveals a focused field has room to move, and the offset a case measures from is not 0.
+ * The offset a case parks the tall Form at before it asks anything: low enough that the field's
+ * box ends well below where a keyboard of `REPORTED_IME_DP` would reach - the harness emulator
+ * gives the Form some 910 dp of viewport, and the eighth row's box ends near 800 dp at this
+ * offset - and far enough from the end of the content that a reveal has room to move. The
+ * offset a case measures from is not 0 either, which is what makes "it did not move" a claim.
  */
-const PARK_DP = 900;
+const PARK_DP = 700;
 
 const styles = StyleSheet.create({
   form: { flex: 1 },
@@ -2685,7 +2687,7 @@ describe('Form keyboard opt-out (Android)', () => {
       'tall'
     );
     const parked = await settledReport();
-    expect(num(parked, 'keyboard')).toBe(avoids ? 'rn' : 'off');
+    expect(raw(parked, 'keyboard')).toBe(avoids ? 'rn' : 'off');
     expect(
       num(parked, 'focus'),
       `focus is not on the field these cases reveal (${JSON.stringify(parked)})`
