@@ -231,6 +231,14 @@ export default function BottomSheetScreen() {
             >
               {twoDetent == null ? 'Detent none' : `Detent ${twoDetent}`}
             </Text>
+            {/* Tall and not a scroll view: the sheet's own space, where a press is the
+              sheet's gesture to measure rather than a child's. */}
+            <View
+              testID="sheet-two-grip"
+              style={[styles.grip, { backgroundColor: ink.row }]}
+            >
+              <Text style={{ color: ink.ink }}>Hold here while it rises</Text>
+            </View>
           </View>
           {/* `nestedScrollEnabled`: on Android a drag at the list's top edge then
               moves the sheet, as it does on iOS. */}
@@ -269,7 +277,8 @@ export default function BottomSheetScreen() {
           cornerRadius={28}
         >
           {/* `flex: 1`, and the list is the last child: the band under it is the sheet's
-              own space, so a drag that starts there is the sheet's and not the list's. */}
+              own space, so a drag that starts there is the sheet's and not the list's. The
+              row's height is fixed, so that band starts where the row's box ends. */}
           <View style={[styles.sheet, styles.tall]}>
             <Text style={[styles.title, { color: ink.ink }]}>
               Medium, then 85% of the largest height
@@ -286,6 +295,7 @@ export default function BottomSheetScreen() {
             <ScrollView
               horizontal
               testID="sheet-fraction-list"
+              style={styles.row60}
               contentContainerStyle={styles.chips}
             >
               {CHIPS.slice(0, 3).map((chip) => (
@@ -408,6 +418,8 @@ const styles = StyleSheet.create({
   chips: { gap: 8 },
   tall: { flex: 1 },
   gap: { height: 96 },
+  row60: { height: 60 },
+  grip: { height: 200, marginTop: 12, borderRadius: 10, padding: 12 },
   input: { borderWidth: 1, borderRadius: 10, padding: 10, height: 56 },
   chip: { width: 110, padding: 12, borderRadius: 10 },
   opener: {
