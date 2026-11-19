@@ -131,6 +131,11 @@ an iPad's page sheet, a landscape safe area.
   `presentationControllerWillDismiss`/`DidDismiss` (a swipe or an outside tap) and from
   `isBeingDismissed` in `viewDidDisappear` (anything else), never from a view merely
   leaving the screen.
+- **A present UIKit refuses** is the one failure it does not report: no completion runs and
+  the controller never gets a presenter. UIKit installs a presentation before `present`
+  returns, so one turn later a controller with no presenter was refused and nothing is
+  coming for it. The sheet lets it go, reports `onIsPresentedChange(false)` once with no
+  `onDismiss` (nothing was on screen to go), and presents the next `isPresented = true`.
 - **`isPresented` true at mount** presents once the component's place in the app is in a
   window.
 

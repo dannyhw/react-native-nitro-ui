@@ -926,6 +926,11 @@ class HybridNitroUiBottomSheet(
     runOnUi { host.selectDetent?.invoke(index.toInt()) }
   }
 
+  /** Asks for the refusal of a present, which only UIKit can do. */
+  override fun nuiTestRefuseNextPresent() {
+    // No presentation here for UIKit to refuse.
+  }
+
   /** Run [action] on the UI thread, now if already there, queued otherwise. */
   private inline fun runOnUi(crossinline action: () -> Unit) {
     if (Looper.myLooper() == Looper.getMainLooper()) {

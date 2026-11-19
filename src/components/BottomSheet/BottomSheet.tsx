@@ -103,6 +103,7 @@ export interface BottomSheetProps {
         nuiTestStateReport(): string;
         nuiTestDismiss(): void;
         nuiTestSelectDetent(index: number): void;
+        nuiTestRefuseNextPresent(): void;
       }) => void)
     | undefined;
   /**

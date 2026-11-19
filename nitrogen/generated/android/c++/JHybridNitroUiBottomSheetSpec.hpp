@@ -84,6 +84,7 @@ namespace margelo::nitro::nitroui {
     std::string nuiTestStateReport() override;
     void nuiTestDismiss() override;
     void nuiTestSelectDetent(double index) override;
+    void nuiTestRefuseNextPresent() override;
 
   private:
     jni::global_ref<JHybridNitroUiBottomSheetSpec::JavaPart> _javaPart;

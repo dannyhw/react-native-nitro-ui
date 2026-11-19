@@ -29,6 +29,7 @@ public protocol HybridNitroUiBottomSheetSpec_protocol: HybridObject, HybridView 
   func nuiTestStateReport() throws -> String
   func nuiTestDismiss() throws -> Void
   func nuiTestSelectDetent(index: Double) throws -> Void
+  func nuiTestRefuseNextPresent() throws -> Void
 }
 
 public extension HybridNitroUiBottomSheetSpec_protocol {

@@ -163,6 +163,22 @@ final class NitroUiPresentation: NSObject {
     controller = nil
   }
 
+  /// Give up a presentation that never began. UIKit refuses a present it will not carry out
+  /// without saying so: the completion never runs and the controller never gets a presenter.
+  /// `present` installs the presentation before it returns, so no presenter means it was refused,
+  /// and no completion is coming. The entry is dropped here so a completion that arrives after
+  /// all ends the presentation uncounted, as `dismissForTeardown` does. `false` when UIKit had
+  /// taken the controller - the only answer for a present that is merely slow.
+  @MainActor
+  func forgetUnstarted(_ refused: UIViewController) -> Bool {
+    let key = ObjectIdentifier(refused)
+    guard entering[key] != nil, refused.presentingViewController == nil else { return false }
+    entering.removeValue(forKey: key)
+    releaseWindow(for: refused)
+    if controller === refused { controller = nil }
+    return true
+  }
+
   func isInOwnWindow(_ controller: UIViewController) -> Bool {
     windows[ObjectIdentifier(controller)] != nil
   }

@@ -45,6 +45,7 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridMethod("nuiTestStateReport", &HybridNitroUiBottomSheetSpec::nuiTestStateReport);
       prototype.registerHybridMethod("nuiTestDismiss", &HybridNitroUiBottomSheetSpec::nuiTestDismiss);
       prototype.registerHybridMethod("nuiTestSelectDetent", &HybridNitroUiBottomSheetSpec::nuiTestSelectDetent);
+      prototype.registerHybridMethod("nuiTestRefuseNextPresent", &HybridNitroUiBottomSheetSpec::nuiTestRefuseNextPresent);
     });
   }
 

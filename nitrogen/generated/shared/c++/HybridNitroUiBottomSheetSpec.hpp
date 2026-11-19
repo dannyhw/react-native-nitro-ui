@@ -85,6 +85,7 @@ namespace margelo::nitro::nitroui {
       virtual std::string nuiTestStateReport() = 0;
       virtual void nuiTestDismiss() = 0;
       virtual void nuiTestSelectDetent(double index) = 0;
+      virtual void nuiTestRefuseNextPresent() = 0;
 
     protected:
       // Hybrid Setup

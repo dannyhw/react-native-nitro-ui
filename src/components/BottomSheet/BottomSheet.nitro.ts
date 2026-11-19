@@ -111,6 +111,14 @@ export interface NitroUiBottomSheetMethods extends HybridViewMethods {
    * @internal Not app API.
    */
   nuiTestSelectDetent(index: number): void;
+  /**
+   * Test-only (iOS): have UIKit refuse this sheet's next present, the way it refuses
+   * one that races a presentation which got there first. Nothing on Android, where
+   * there is no presentation for UIKit to refuse.
+   *
+   * @internal Not app API.
+   */
+  nuiTestRefuseNextPresent(): void;
 }
 
 /**
