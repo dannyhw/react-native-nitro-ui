@@ -12,8 +12,9 @@ at one that handled the request, so the Form's `requestChildRectangleOnScreen` c
 so `Form.tsx` now passes `scrollsChildToFocus={keyboardAvoidance}`: opted out, React Native's
 scroll view stops moving its content for a focused row, which is what an app means when it says
 the Form must leave its content alone. The cost is in the prop's doc comment - while opted out,
-Android also stops scrolling a focused row into view for d-pad, Tab and TalkBack focus. The
-default path is untouched, and nothing else about the Form moved.
+Android also stops scrolling a focused row into view for Tab, the keyboard's Next key and a
+`focus()` from code; d-pad and TalkBack mostly keep scrolling, as the review's Q2 reads it. That
+cost is why fix round 1 withdrew the switch: see "Fix round 1" below.
 
 `nuiTestCommand` on Android answers two commands now - `ime:<dp>` reports an inset to the Form as
 the window listener does, `rect:<row>` asks the scroller to show a row - and the report gained
@@ -68,16 +69,19 @@ gate `harness:android:Form` - each red on its own mutation, green before and aft
 
 ## Files changed
 
-- `src/components/Form/Form.tsx` — `scrollsChildToFocus={keyboardAvoidance}`, and the prop doc
-  says what opting out also switches off.
+- `src/components/Form/Form.tsx` — round 1 passed `scrollsChildToFocus={keyboardAvoidance}`; fix
+  round 1 withdrew it, so this file is back to what `main` has.
 - `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiForm.kt` — the `ime:`/`rect:` test
   commands, `contentH=`/`rectReqs=`/`rectBelow=` in the report, counters cleared on recycle.
-- `example/__tests__/Form.harness.tsx` — the tall Form and the two cases.
-- `.changeset/form-keyboard-opt-out-stops-the-scroll-view.md`, `docs/tasks/FOLLOWUPS.md`, this file.
+- `example/__tests__/Form.harness.tsx` — the tall Form and the cases.
+- `docs/tasks/FOLLOWUPS.md`, `docs/components/form.md`, `.changeset` (empty), this file.
 
 ## Follow-ups
 
-- Form (Android): the two `requestChildRectangleOnScreen` forwards are no-ops — the ancestor walk
-  already carries the request to every scroller, and their comments say they route it.
+- Form (Android): the two `requestChildRectangleOnScreen` forwards may be dead code - Android's
+  walk up the ancestors carries the same ask to every view above it, and nothing has shown that
+  the forward adds a scroll of its own. The comment now says the walk is there; deleting the two
+  overrides, and the copies in `HybridNitroUiFormSection.kt`, wants one green Form harness run
+  with them gone.
 - e2e (Android): `form-list-geometry` echoes the Form's geometry on iOS only; an Android echo of
   `scroll=`/`ime=` would give real-input checks a reading no keyboard can stand in front of.
