@@ -9,7 +9,6 @@ carried by Metro.
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `star_24px.xml`, `share_24px.xml`, `close_24px.xml` | Google's [Material Symbols][src], Android vector-drawable format, unedited. Apache 2.0, © Google. Fetched and hash-checked.   |
 | `not-a-vector.xml`                                  | Written for this repo. Well-formed XML that is not a vector drawable, so the parser has something wrong to be tested against. |
-| `icons with a space/star_24px.xml`                  | `star_24px.xml` in a folder whose own name holds a space: the same bytes, at the URL such a path writes.                      |
 
 Nothing here is hand-typed. `scripts/icons/fetch-material-symbols.mjs` writes the
 three real files byte for byte from Google's repository at a pinned commit and

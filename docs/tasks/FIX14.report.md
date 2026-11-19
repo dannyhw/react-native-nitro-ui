@@ -56,11 +56,9 @@ green on its own digest · note: treated as both platforms (outside the known pr
   8 of 10 red, e.g. `aSpaceInThePathIsQuotedAndTheFileIsStillReached FAILED
   java.net.URISyntaxException at NitroUiIconUrlTest.kt:35`; green with the fix, `tests="10"
   failures="0"`.
-- `MetroIconPath.android.harness.tsx › draws an icon whose folder name holds a space` -> the same
-  mutation built into the APK -> `the icon served from
-  "url:http://localhost:9293/assets/src/assets/icons with a space/star_24px.xml?platform=android&hash=af48…"
-  never drew. Last probe: "n=151 size=152x126 want=#FF00A0 hits=0 mean=#808080"`; with the fix the
-  same suite is green in 7.1 s, and it is green again inside the full `harness:android` above.
+- Withdrawn in fix round 1: `MetroIconPath.android.harness.tsx › draws an icon whose folder name
+  holds a space` did go red against the same mutation built into the APK, but the case and its
+  fixture are gone (see `## Fix round 1`), so that proof stands for nothing here.
 
 ## Files changed
 
@@ -70,16 +68,18 @@ green on its own digest · note: treated as both platforms (outside the known pr
   `NitroUiIconUrl.requestUri(url)`.
 - `android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconUrlTest.kt`: the request URL for a
   space, a `#`, a stray `%`, non-ASCII, an already-escaped path, an IPv6 authority and a `file://`.
-- `example/__tests__/MetroIconPath.android.harness.tsx`,
-  `example/src/assets/icons with a space/star_24px.xml`, `example/src/assets/icons/README.md`: the
-  device case, and its fixture — `star_24px.xml` byte for byte, one folder deeper.
+- Added in round 1 and removed again in fix round 1:
+  `example/__tests__/MetroIconPath.android.harness.tsx`, its fixture in a sibling folder named
+  `icons with a space`, and the `example/src/assets/icons/README.md` row that pointed at it.
 - `.changeset/android-icon-url-spaces.md`, `etc/package-files.txt`.
 
 ## Follow-ups
 
-- `scripts/__tests__/android-icons.test.js`: the icon-provenance scan reads
-  `example/src/assets/icons` one level deep, so a fixture in a folder of its own is never looked at;
-  this one is Google's file unchanged.
+- A device case drawing a `require`d icon from a folder with a space, once
+  `scripts/__tests__/android-icons.test.js` reads that folder and
+  `scripts/icons/material-symbols.lock.json` records the file. The provenance scan reads
+  `example/src/assets/icons` one level deep and the lock knows no sibling folder, so such a fixture
+  cannot be shown to be an official file from inside this task.
 - FOLLOWUPS G19, second half (`/assets/../..` sent as-is): not settled by this change — `..` is
   legal inside a segment, so the quoter leaves it exactly as `URI` did. Out of scope per the brief.
 - `docs/components/button.md`, "Android icons": worth one sentence saying an icon URL has no
