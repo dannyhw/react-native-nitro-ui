@@ -21,8 +21,8 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   not move, 2026-11-16, `real-input:android` started 18:45 UTC beside an iOS gate; again
   2026-11-18 on the TextField merge run started 22:18 UTC (the first test of the run, the header's
   top 1391 before and after the drag), green on `--rerun-failed`; a third time 2026-11-19 on the
-  ButtonGroup merge run started 03:21 UTC, the same reading, green on `--rerun-failed`. Seen three
-  times. Cause found (FIX11, FIX12, FIX16; branches kept, PR #104 closed): Material 1.5 turns
+  ButtonGroup merge run started 03:21 UTC, the same reading, green on `--rerun-failed`; a fourth
+  time on a tooling branch's full run the same day, the same reading. Seen four times. Cause found (FIX11, FIX12, FIX16; branches kept, PR #104 closed): Material 1.5 turns
   the sheet's drag on only once its opening spring has settled, and the test drags inside the
   spring's sub-pixel tail, after two reads 150 ms apart already agree. A library change that takes
   such a drag was built but cannot be proven: the rise finishes inside the tap that opens the sheet,
@@ -391,6 +391,12 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - No test covers a red Android run with both a failed control and a failed accessibility case.
   - The Android plan's `full` field is read only by tests.
   - `check-runner.test.js` "runs no more steps at once than --jobs" failed once at load 77 and passed on rerun.
+  - A tree read interrupted by a signal (Ctrl-C, a killed worker) leaves its temp directory in the OS temp folder.
+  - No test guards that the tree read closes its snapshot file.
+  - `pressableItem` rejecting a clickable node outside the group's box is never shown red; a unit test with a stand-in driver would cover it.
+  - `android-tree-checks.mjs`: `makeContext` keeps helpers nothing calls (`requireControl`, `requireControlOnScreen`, `nodesNamed`), and two comments there tell history or document nothing.
+  - `check` was red once right after `bun install` rebuilt `nitrogen/` (`patch-nitrogen.test.js` ENOENT on a generated header), green on the next run.
+  - A brief that names a one-platform lease cannot run the other platform's harness gate that `need --for review` lists.
   - A control whose every test is quarantined passes with no check behind it; it could read as not run.
   - Nothing checks against a real e2e report that a skipped test's `source.line` is its `test.skip(` line; if it is off, every quarantine reads red.
 - Form row presses, open after a control inside a pressing row became the control's own:

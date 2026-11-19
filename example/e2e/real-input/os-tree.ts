@@ -4,7 +4,15 @@
  * the node carrying a control’s name is the node carrying its state.
  */
 import { execFileSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -20,7 +28,7 @@ import { tightestFlaggedNode } from '../../../scripts/real-input/android-tree.mj
 export type TreeNode = UiautomatorNode & { hittable?: 'true' | 'false' };
 
 /** One node of the driver's snapshot, as its JSON prints it. */
-interface DriverNode {
+export interface DriverNode {
   index: number;
   type?: string;
   label?: string;
@@ -31,6 +39,10 @@ interface DriverNode {
   selected?: boolean;
   checked?: boolean;
   hittable?: boolean;
+  clickable?: boolean;
+  focusable?: boolean;
+  longClickable?: boolean;
+  scrollable?: boolean;
   rect?: { x: number; y: number; width: number; height: number };
   parentIndex?: number;
   depth?: number;
@@ -54,6 +66,34 @@ function driverBinary(): string {
 }
 
 /**
+ * The reason a failed driver gave, which it prints to stdout as JSON under `--json`, or
+ * nothing when the file holds no such answer.
+ */
+function driverReason(file: string): string {
+  let text = '';
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+  try {
+    const error = (
+      JSON.parse(text) as { error?: { code?: unknown; message?: unknown } }
+    )?.error;
+    if (error != null) {
+      return ` — the driver says ${[error.code, error.message]
+        .filter((part) => part != null && part !== '')
+        .map(String)
+        .join(': ')}`;
+    }
+  } catch {
+    // Not JSON: fall through to the raw text.
+  }
+  const raw = text.trim().slice(0, 300);
+  return raw === '' ? '' : ` — the driver printed: ${raw}`;
+}
+
+/**
  * One fresh capture of the accessibility tree, as the flags-only shape the readers need.
  *
  * `--force-full` because a repeat of the same request is answered with an “unchanged”
@@ -64,8 +104,14 @@ function driverBinary(): string {
  * driver folds a childless role node (a Compose `RadioButton`, say) into its clickable
  * parent, which then reports the child's class with its own box. The unmerged tree also
  * keeps off-screen nodes, at their own boxes, and other apps' windows.
+ *
+ * `driver` is the driver script to run, the suite's own install unless a test passes
+ * a stand-in.
  */
-export function tree(options: { unmerged?: boolean } = {}): TreeNode[] {
+export function tree(
+  options: { unmerged?: boolean } = {},
+  driver: string = driverBinary()
+): TreeNode[] {
   const serial = process.env.ANDROID_SERIAL;
   if (serial == null || serial === '') {
     throw new Error(
@@ -73,36 +119,54 @@ export function tree(options: { unmerged?: boolean } = {}): TreeNode[] {
         'Source the lease before running the suite.'
     );
   }
-  let stdout = '';
+  // The driver exits at most 2 s after writing, drained or not, so a large answer
+  // on a pipe can be cut short. Its writes to a file are synchronous and complete.
+  const dir = mkdtempSync(join(tmpdir(), 'nitro-ui-tree-'));
+  let answer: Buffer;
   try {
-    stdout = execFileSync(
-      process.execPath,
-      [
-        driverBinary(),
-        'snapshot',
-        '--json',
-        '--force-full',
-        '--serial',
-        serial,
-        '--session',
-        DRIVER_SESSION,
-        ...(options.unmerged === true ? ['--raw'] : []),
-      ],
-      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 60_000 }
-    );
-  } catch (error) {
-    throw new Error(
-      `real-input: reading the accessibility tree from the driver failed: ` +
-        String((error as Error)?.message ?? error)
-    );
+    const file = join(dir, 'snapshot.json');
+    const fd = openSync(file, 'w');
+    try {
+      execFileSync(
+        process.execPath,
+        [
+          driver,
+          'snapshot',
+          '--json',
+          '--force-full',
+          '--serial',
+          serial,
+          '--session',
+          DRIVER_SESSION,
+          ...(options.unmerged === true ? ['--raw'] : []),
+        ],
+        {
+          stdio: ['pipe', fd, 'pipe'],
+          maxBuffer: 64 * 1024 * 1024,
+          timeout: 60_000,
+        }
+      );
+    } catch (error) {
+      closeSync(fd);
+      throw new Error(
+        `real-input: reading the accessibility tree from the driver failed: ` +
+          String((error as Error)?.message ?? error) +
+          driverReason(file)
+      );
+    }
+    closeSync(fd);
+    answer = readFileSync(file);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
+  const stdout = answer.toString('utf8');
   let nodes: unknown;
   try {
     const parsed: unknown = JSON.parse(stdout);
     nodes = (parsed as { data?: { nodes?: unknown } })?.data?.nodes;
   } catch (error) {
     throw new Error(
-      `real-input: the driver answered with ${String(stdout.length)} bytes that are ` +
+      `real-input: the driver answered with ${String(answer.length)} bytes that are ` +
         `not a snapshot this suite can read: ${String(
           (error as Error)?.message ?? error
         )}`
@@ -122,33 +186,39 @@ export function tree(options: { unmerged?: boolean } = {}): TreeNode[] {
  *
  * The driver prints `label` as whatever a reader is told, where a dump keeps `text` and
  * `content-desc` apart; keeping them apart is what lets a reader tell a control’s own
- * name from the words drawn inside it. `clickable` and friends have no source here.
+ * name from the words drawn inside it. A node with no `value` and a description of its
+ * own (a `Spinner` naming itself while it shows its choice) printed its text as `label`.
+ * A flag the driver left out stays empty, as a dump leaves an attribute it did not write.
  */
-function asTreeNode(node: DriverNode): TreeNode {
+export function asTreeNode(node: DriverNode): TreeNode {
   const hasText = node.value !== undefined;
+  const textInLabel = !hasText && node.contentDescription !== undefined;
   const rect = node.rect ?? { x: 0, y: 0, width: 0, height: 0 };
   return {
-    text: hasText ? (node.value ?? '') : '',
+    text: hasText ? (node.value ?? '') : textInLabel ? (node.label ?? '') : '',
     resourceId: node.identifier ?? '',
     className: node.type ?? '',
-    contentDesc: hasText ? (node.contentDescription ?? '') : (node.label ?? ''),
+    contentDesc:
+      hasText || textInLabel
+        ? (node.contentDescription ?? '')
+        : (node.label ?? ''),
     enabled: node.enabled === false ? 'false' : 'true',
     hittable: node.hittable === true ? 'true' : 'false',
-    clickable: '',
-    longClickable: '',
-    focusable: '',
+    clickable: flag(node.clickable),
+    longClickable: flag(node.longClickable),
+    focusable: flag(node.focusable),
     // The driver prints `checked` only for a node that offers the state, so its
     // presence is the flag a dump spells `checkable="true"`.
     checkable: node.checked === undefined ? 'false' : 'true',
     checked: node.checked === undefined ? '' : node.checked ? 'true' : 'false',
     selected: node.selected === true ? 'true' : 'false',
-    // No flag, but a class that cannot be anything else: the rule this serves is the
-    // one that refuses a control's name sitting on the page's own scroller.
-    scrollable: /scroll|recycler|listview|gridview|collection/i.test(
-      node.type ?? ''
-    )
-      ? 'true'
-      : 'false',
+    // The driver prints the flag on the unmerged tree only. Without it, a class that
+    // cannot be anything else stands in: the rule this serves is the one that refuses a
+    // control's name sitting on the page's own scroller.
+    scrollable:
+      node.scrollable === undefined
+        ? String(SCROLLER_CLASS.test(node.type ?? ''))
+        : String(node.scrollable),
     bounds: {
       x1: rect.x,
       y1: rect.y,
@@ -160,6 +230,12 @@ function asTreeNode(node: DriverNode): TreeNode {
       height: rect.height,
     },
   };
+}
+
+const SCROLLER_CLASS = /scroll|recycler|listview|gridview|collection/i;
+
+function flag(value: boolean | undefined): string {
+  return value === undefined ? '' : String(value);
 }
 
 /** Every node with a box that carries exactly this description. */
@@ -287,37 +363,13 @@ export interface TextFacts {
  */
 export function factsForItem(groupLabel: string, title: string): TextFacts {
   const nodes = tree({ unmerged: true });
-  const group = namedNodesIn(nodes, groupLabel)[0];
-  if (group == null) {
-    return {
-      checked: null,
-      enabled: null,
-      role: null,
-      detail: `no node carries the group name "${groupLabel}"`,
-    };
-  }
-  const insideGroup = (node: TreeNode): boolean =>
-    node.bounds.x1 >= group.bounds.x1 - 1 &&
-    node.bounds.y1 >= group.bounds.y1 - 1 &&
-    node.bounds.x2 <= group.bounds.x2 + 1 &&
-    node.bounds.cy >= group.bounds.y1 - 1 &&
-    node.bounds.cy <= group.bounds.y2 + 1;
-  // A Compose row that merges its descendants is named by its title and draws no separate
-  // text node, so the words are either a node’s text or the name a reader is told — the
-  // two places the driver’s own `getByText` looks.
-  const titled =
-    findAllByText(nodes, title).find(insideGroup) ??
-    namedNodesIn(nodes, title).find(insideGroup);
-  if (titled == null) {
-    return {
-      checked: null,
-      enabled: null,
-      role: null,
-      detail: `"${groupLabel}" draws no item titled "${title}" inside its own box`,
-    };
+  const found = itemTitle(nodes, groupLabel, title);
+  if ('missing' in found) {
+    return { checked: null, enabled: null, role: null, detail: found.missing };
   }
   const item =
-    tightestFlaggedNode(nodes, titled, 'checkable') ?? ownerNode(nodes, titled);
+    tightestFlaggedNode(nodes, found.titled, 'checkable') ??
+    ownerNode(nodes, found.titled);
   if (item == null) {
     return {
       checked: null,
@@ -332,6 +384,107 @@ export function factsForItem(groupLabel: string, title: string): TextFacts {
     role: item.className,
     detail: describe(item),
   };
+}
+
+/**
+ * The node drawing an item's title inside its group's own box, on the unmerged tree.
+ *
+ * A Compose row that merges its descendants is named by its title and draws no separate
+ * text node, so the words are either a node’s text or the name a reader is told — the
+ * two places the driver’s own `getByText` looks.
+ */
+function itemTitle(
+  nodes: TreeNode[],
+  groupLabel: string,
+  title: string
+): { group: TreeNode; titled: TreeNode } | { missing: string } {
+  const group = namedNodesIn(nodes, groupLabel)[0];
+  if (group == null) {
+    return { missing: `no node carries the group name "${groupLabel}"` };
+  }
+  const titled =
+    findAllByText(nodes, title).find((node) => insideBox(group, node)) ??
+    namedNodesIn(nodes, title).find((node) => insideBox(group, node));
+  if (titled == null) {
+    return {
+      missing: `"${groupLabel}" draws no item titled "${title}" inside its own box`,
+    };
+  }
+  return { group, titled };
+}
+
+function insideBox(box: TreeNode, node: TreeNode): boolean {
+  return (
+    node.bounds.x1 >= box.bounds.x1 - 1 &&
+    node.bounds.y1 >= box.bounds.y1 - 1 &&
+    node.bounds.x2 <= box.bounds.x2 + 1 &&
+    node.bounds.cy >= box.bounds.y1 - 1 &&
+    node.bounds.cy <= box.bounds.y2 + 1
+  );
+}
+
+/**
+ * The node a press on a group's item lands on: the tightest clickable node around the
+ * item's title, read on the unmerged tree. `null` when nothing clickable holds it, or
+ * when what does is not inside the group's own box.
+ */
+export function pressableItem(
+  groupLabel: string,
+  title: string
+): { node: TreeNode | null; detail: string } {
+  const nodes = tree({ unmerged: true });
+  const found = itemTitle(nodes, groupLabel, title);
+  if ('missing' in found) return { node: null, detail: found.missing };
+  const clickable = tightestFlaggedNode(nodes, found.titled, 'clickable');
+  const detail =
+    `title on ${describeFlags(found.titled)}; tightest clickable around it: ` +
+    (clickable == null ? 'none' : describeFlags(clickable));
+  return {
+    node:
+      clickable != null && insideBox(found.group, clickable) ? clickable : null,
+    detail,
+  };
+}
+
+/** What the platform says about pressing a node, as a dump spells it. */
+export interface ActionFlags {
+  clickable: string;
+  longClickable: string;
+  focusable: string;
+  detail: string;
+}
+
+/**
+ * The action flags on the first node carrying this name or testID, read on the unmerged
+ * tree, which keeps a node scrolled out of sight at its own box.
+ */
+export function actionFlags(
+  by: { label: string } | { testId: string }
+): ActionFlags | null {
+  const nodes = tree({ unmerged: true });
+  const node =
+    'label' in by
+      ? namedNodesIn(nodes, by.label)[0]
+      : nodes.find((entry) => entry.resourceId === by.testId);
+  if (node == null) return null;
+  return {
+    clickable: node.clickable,
+    longClickable: node.longClickable,
+    focusable: node.focusable,
+    detail: describeFlags(node),
+  };
+}
+
+function describeFlags(node: TreeNode): string {
+  return (
+    `${node.className} "${node.contentDesc || node.text}" ` +
+    `clickable=${node.clickable} long-clickable=${node.longClickable} ` +
+    `focusable=${node.focusable} scrollable=${node.scrollable} at ${String(
+      node.bounds.x1
+    )},${String(node.bounds.y1)}-${String(node.bounds.x2)},${String(
+      node.bounds.y2
+    )}`
+  );
 }
 
 function stateOf(value: string): 'on' | 'off' {
