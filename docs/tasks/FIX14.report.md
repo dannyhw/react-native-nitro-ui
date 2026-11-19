@@ -82,8 +82,5 @@ green on its own digest · note: treated as both platforms (outside the known pr
   cannot be shown to be an official file from inside this task.
 - FOLLOWUPS G19, second half (`/assets/../..` sent as-is): not settled by this change — `..` is
   legal inside a segment, so the quoter leaves it exactly as `URI` did. Out of scope per the brief.
-- `docs/components/button.md`, "Android icons": worth one sentence saying an icon URL has no
-  fragment, so a `#` names part of the file. Left out so both device gates stay green on one code
-  tree.
 - The Gradle daemon this round started is left running: `gradlew --stop` is machine-wide and another
   task is building on this machine.

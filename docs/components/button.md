@@ -204,6 +204,12 @@ on a worker thread, parses it into a Compose `ImageVector`, caches it per URL fo
 and draws it through the same `VectorPainter` as any Material icon. It does not patch React
 Native's global asset resolver, so how `Image` resolves its sources is unchanged.
 
+Metro writes that dev-server URL out of the path on disk without escaping it, and the library quotes
+it back on the way to the network, so a name a file system allows is a name that draws: a space, a
+`#`, or a `%` that is not an escape. A `#` belongs to the file's name, because an icon URL carries no
+fragment. One name stays out of reach: a folder whose own name already looks like an escape,
+`icons/a%41b/`, is served by Metro under the decoded `aAb`, so the request finds no file.
+
 A gradient fill (a `<gradient>` inside an `<aapt:attr>`) is not read in development: the parser
 refuses the file, so the icon appears in a release build and not in a development one, and the
 log says so.
