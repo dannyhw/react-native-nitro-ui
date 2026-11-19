@@ -63,6 +63,13 @@ export class CheckLog {
      * @type {string[]}
      */
     this.retries = [];
+    /**
+     * Tests skipped under a listed quarantine: not run, so neither a pass nor a
+     * failure, and named in the summary so a quarantine stays visible.
+     *
+     * @type {string[]}
+     */
+    this.quarantined = [];
   }
 
   /**
@@ -84,6 +91,16 @@ export class CheckLog {
   warn(message) {
     this.warns.push(message);
     console.log(`    WARN ${message}`);
+  }
+
+  /**
+   * A test that did not run because it is quarantined. It never fails the log.
+   *
+   * @param {string} message
+   */
+  quarantine(message) {
+    this.quarantined.push(message);
+    console.log(`    QUARANTINED ${message}`);
   }
 
   /**
@@ -366,6 +383,17 @@ export class Suite {
           console.log(`  ${entry.id ?? entry.control.id}: ${message}`);
         }
       }
+    }
+    const quarantined = this.results.flatMap((entry) =>
+      (entry.log?.quarantined ?? []).map(
+        (message) => `${entry.control.id}: ${message}`
+      )
+    );
+    if (quarantined.length > 0) {
+      console.log(
+        `\nQUARANTINED ${String(quarantined.length)} test(s) skipped, not run:`
+      );
+      for (const line of quarantined) console.log(`  ${line}`);
     }
     console.log(
       `\nreal-input (${this.platform}): ${String(passed.length)}/${String(expected)} controls passed` +
