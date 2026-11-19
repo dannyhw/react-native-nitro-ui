@@ -568,6 +568,13 @@ const RISE_AIM_LIFT_PX = 40;
 /** How long a press that should outlast the opening animation is held, in ms. */
 const HELD_MS = 2000;
 
+/** A box read, short enough to sit inside the message of an assertion about something else. */
+function describeBox(box: Box | null): string {
+  return box == null
+    ? 'no box'
+    : `y=${String(Math.round(box.y))}, ${String(Math.round(box.height))} px tall`;
+}
+
 /** The middle of the window, low at its bottom edge: where a rising sheet is caught. */
 function riseAim(window: Box): Point {
   return {
@@ -593,19 +600,29 @@ test('a press held still on the header of a rising sheet is no drag at all', asy
   await app.open();
   await openScreen(screen, 'sheet');
   const log = screen.getByTestId('sheet-log');
+  const header = screen.getByTestId('sheet-two-header');
   const window = await windowBox(screen);
   const held = riseAim(window);
   await expect(log).toHaveText('none');
 
   await reveal(screen, screen.getByTestId('sheet-open-two'));
   await screen.getByTestId('sheet-open-two').tap();
+  // Where the sheet is at the two ends of the hold: the press is only a witness about a rising
+  // sheet if the rise really was still ahead of it when the finger arrived.
+  const rising = await boxOf(header);
   await screen.swipe({
     from: held,
     to: { x: held.x, y: held.y + STILL_PX },
     duration: HELD_MS,
   });
+  const settled = await boxOf(header);
 
-  await staysUp(screen, TWO, 'a press held still on its header');
+  await staysUp(
+    screen,
+    TWO,
+    `a press held still on its header (its header at ` +
+      `${describeBox(rising)} when the press arrived, ${describeBox(settled)} when it left)`
+  );
   // Nothing was dragged, so no detent was ever asked for: the sheet rests where it opened.
   await expect(settledDetent(screen)).toHaveText('Detent none');
   await app.back();
@@ -712,15 +729,41 @@ const AIM_MIN_RISING_PX = 100;
  * rising while the press is on its way, so the field is always higher than the read says, never
  * lower. It never rises past the place its sheet settles at either, so the travel left at the read
  * bounds how far behind the aim can have fallen: read within one field-height of the destination
- * and the press is inside the field whatever the lag turns out to be. Reads here come ~450 ms and
- * ~100 px apart, coarser than any narrower rule, so the first aimable read is also the earliest
- * press a trusted aim allows - the one that finds the sheet with the most travel left.
+ * and the press is inside the field whatever the lag turns out to be. A read taken while the field
+ * is coming into view reports the part of it that is visible, so the height it can miss by is the
+ * height of the settled field, and a read shorter than that is not an aimable one.
  */
-function aimableWhileRising(box: Box, restY: number): boolean {
-  const travelLeft = box.y - restY;
+function aimableWhileRising(box: Box, rest: Box): boolean {
+  const travelLeft = box.y - rest.y;
   return (
-    travelLeft >= AIM_MIN_RISING_PX && travelLeft + AIM_INSET_PX <= box.height
+    box.height >= rest.height &&
+    travelLeft >= AIM_MIN_RISING_PX &&
+    travelLeft + AIM_INSET_PX <= rest.height
   );
+}
+
+/**
+ * The field's box at the first read an aim can trust, and every read it looked at: the reads are
+ * the evidence that a drag aimed from one of them was aimed at a sheet that still had travel left.
+ */
+async function risingAim(
+  input: Locator,
+  rest: Box
+): Promise<{ box: Box | null; reads: string[] }> {
+  const reads: string[] = [];
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const box = await boxOf(input);
+    if (box == null) {
+      reads.push('no box');
+    } else {
+      reads.push(
+        `y=${String(Math.round(box.y))} h=${String(Math.round(box.height))}`
+      );
+      if (aimableWhileRising(box, rest)) return { box, reads };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return { box: null, reads };
 }
 
 /**
@@ -754,14 +797,14 @@ test('a drag down that starts on the sheet TextInput during the rise is the fiel
 
   const room = Math.round(80 * displayDensity());
   await screen.getByTestId('sheet-open-fit').tap();
-  const rising = await boxWhileRising(input, (box) =>
-    aimableWhileRising(box, rest.y)
-  );
+  const { box: rising, reads } = await risingAim(input, rest);
   if (rising == null) {
     throw new Error(
       `real-input: no read of the rising fit sheet caught its TextInput between ` +
-        `${String(AIM_MIN_RISING_PX)} px and one field-height short of the resting ` +
-        `y=${String(Math.round(rest.y))} it settles at, so this drag has no aim to trust.`
+        `${String(AIM_MIN_RISING_PX)} px and its own height ` +
+        `${String(Math.round(rest.height))} px short of the resting ` +
+        `y=${String(Math.round(rest.y))} it settles at, so this drag has no aim to trust. ` +
+        `Reads: ${reads.join(' ')}.`
     );
   }
   const from = {
