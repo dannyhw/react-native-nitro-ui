@@ -697,24 +697,40 @@ test("a drag that starts beside the sheet's list during the rise is the sheet's 
  */
 const AIM_INSET_PX = 8;
 
-/** The least the field still has to travel for its sheet to be called rising. */
-const STILL_RISING_PX = 12;
+/** How much a node has to move between two reads for its sheet to be called still rising. */
+const MOVING_PX = 3;
 
 /**
- * Whether a read of the field is one to aim a rising sheet's drag at.
+ * The field's box on the way up, at the first read that is both aimable and known to be moving.
  *
  * A box read names where the field was when the read walked past it, and the sheet carries on
  * rising while the press is on its way, so the field is always higher than the read says, never
- * lower. The field never rises past the place its sheet settles at either, so the whole of the
- * travel left at the read bounds how far the aim can have fallen behind: read close enough to
- * the destination that the field is taller than all of it, and a press at the top of the read is
- * inside the field whatever the lag turns out to be.
+ * lower. It never rises past the place its sheet settles at either, so the travel left at the read
+ * bounds how far behind the aim can have fallen: read within one field-height of the destination
+ * and the press is inside the field whatever the lag turns out to be. Two reads of the same node
+ * naming different places is the witness that the rise has not ended, and unlike a band to land in
+ * it is a witness that holds for the whole of the rise - reads on this screen come ~450 ms and
+ * ~100 px apart, which is coarser than any band worth aiming at.
  */
-function aimableField(box: Box, restY: number): boolean {
-  const travelLeft = box.y - restY;
-  return (
-    travelLeft >= STILL_RISING_PX && travelLeft + AIM_INSET_PX <= box.height
-  );
+async function risingAimableBox(
+  locator: Locator,
+  restY: number
+): Promise<Box | null> {
+  let last: Box | null = null;
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const box = await boxOf(locator);
+    if (
+      box != null &&
+      last != null &&
+      Math.abs(box.y - last.y) > MOVING_PX &&
+      box.y - restY + AIM_INSET_PX <= box.height
+    ) {
+      return box;
+    }
+    if (box != null) last = box;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return null;
 }
 
 /**
@@ -747,12 +763,7 @@ test('a drag down that starts on the sheet TextInput during the rise is the fiel
 
   const room = Math.round(80 * displayDensity());
   await screen.getByTestId('sheet-open-fit').tap();
-  const rising = await boxWhileRising(
-    input,
-    (box) =>
-      aimableField(box, rest.y) &&
-      box.y + AIM_INSET_PX + room <= window.y + window.height - 2
-  );
+  const rising = await risingAimableBox(input, rest.y);
   if (rising == null) {
     throw new Error(
       `real-input: the rising fit sheet never showed its TextInput on the way down to the ` +
