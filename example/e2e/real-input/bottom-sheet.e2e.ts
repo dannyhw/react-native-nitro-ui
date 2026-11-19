@@ -710,43 +710,24 @@ test("a drag that starts beside the sheet's list during the rise is the sheet's 
 });
 
 /**
- * How far below the top of a read the press lands, clear of the edge it is aimed at.
- */
-const AIM_INSET_PX = 8;
-
-/**
- * How far short of its destination a read has to find the field for its aim to be trusted. A read
- * taken nearer than this may be of a field that has come to rest by the time the press lands, and
- * a drag on a settled field asks nothing of a sheet that is still rising.
- */
-const AIM_MIN_RISING_PX = 100;
-
-/**
- * Whether a press aimed a little below the top of this read lands inside the field whenever it
- * lands.
+ * How far from its settled place a read of the field may be for its middle to be a safe aim.
  *
- * A box read names where the field was when the read walked past it, and the sheet carries on
- * rising while the press is on its way, so the field is always higher than the read says, never
- * lower. It never rises past the place its sheet settles at either, so the travel left at the read
- * bounds how far behind the aim can have fallen: read within one field-height of the destination
- * and the press is inside the field whatever the lag turns out to be. A read taken while the field
- * is coming into view reports the part of it that is visible, so the height it can miss by is the
- * height of the settled field, and a read shorter than that is not an aimable one.
+ * A box read names where the field was when the read walked past it. A sheet that is opening comes
+ * to its place from below, overshoots it a little above, and stops there, so a read taken within one
+ * field-height of that place cannot be more than half a field away from the field by the time a
+ * press lands, whichever side of it the read happened to be on.
  */
-function aimableWhileRising(box: Box, rest: Box): boolean {
-  const travelLeft = box.y - rest.y;
-  return (
-    box.height >= rest.height &&
-    travelLeft >= AIM_MIN_RISING_PX &&
-    travelLeft + AIM_INSET_PX <= rest.height
-  );
+function aimableField(box: Box, rest: Box): boolean {
+  return Math.abs(box.y - rest.y) <= rest.height;
 }
 
 /**
- * The field's box at the first read an aim can trust, and every read it looked at: the reads are
- * the evidence that a drag aimed from one of them was aimed at a sheet that still had travel left.
+ * The field's first aimable read, and every read it looked at: the reads are the evidence for what a
+ * drag aimed from one of them may claim. Measured here, the first read of a fit sheet that has just
+ * been opened already finds its field ~25 px from home - the rise is inside the tap that starts it -
+ * so a press aimed from a read is a press on a sheet that is nearly home, never one caught early.
  */
-async function risingAim(
+async function aimableFieldRead(
   input: Locator,
   rest: Box
 ): Promise<{ box: Box | null; reads: string[] }> {
@@ -759,7 +740,7 @@ async function risingAim(
       reads.push(
         `y=${String(Math.round(box.y))} h=${String(Math.round(box.height))}`
       );
-      if (aimableWhileRising(box, rest)) return { box, reads };
+      if (aimableField(box, rest)) return { box, reads };
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -767,14 +748,13 @@ async function risingAim(
 }
 
 /**
- * A `TextInput` takes the gesture from its touch-down, so a drag that starts on one is the
- * field's own even while the sheet is rising: it is not asked of the sheet, and the sheet carries
- * on rising. The drag is aimed from the first read whose aim cannot miss, the earliest press the
- * aim can be trusted with and so the one that finds the sheet with the most travel left; the
- * field's own press-in witnesses that the drag started inside it, and a field still short of its
- * rest once the drag ended witnesses that the sheet had not stopped yet.
+ * A `TextInput` takes the gesture from its touch-down, so a drag that starts on one is the field's
+ * own: it is not asked of the sheet, and the sheet does not close to answer it. The drag is aimed at
+ * the middle of the freshest read of the field, which is the point that stays inside a field the
+ * sheet is still settling, and the field's own press-in is the witness that the drag really started
+ * inside it.
  */
-test('a drag down that starts on the sheet TextInput during the rise is the field’s, and the sheet stays up', async ({
+test('a drag down that starts on the sheet TextInput is the field’s, and the sheet stays up', async ({
   app,
   screen,
 }) => {
@@ -797,19 +777,17 @@ test('a drag down that starts on the sheet TextInput during the rise is the fiel
 
   const room = Math.round(80 * displayDensity());
   await screen.getByTestId('sheet-open-fit').tap();
-  const { box: rising, reads } = await risingAim(input, rest);
-  if (rising == null) {
+  const { box: field, reads } = await aimableFieldRead(input, rest);
+  if (field == null) {
     throw new Error(
-      `real-input: no read of the rising fit sheet caught its TextInput between ` +
-        `${String(AIM_MIN_RISING_PX)} px and its own height ` +
-        `${String(Math.round(rest.height))} px short of the resting ` +
-        `y=${String(Math.round(rest.y))} it settles at, so this drag has no aim to trust. ` +
-        `Reads: ${reads.join(' ')}.`
+      `real-input: no read of the fit sheet found its TextInput within one field-height ` +
+        `(${String(Math.round(rest.height))} px) of the resting ` +
+        `y=${String(Math.round(rest.y))} it settles at. Reads: ${reads.join(' ')}.`
     );
   }
   const from = {
-    x: Math.round(rising.x + rising.width / 2),
-    y: Math.round(rising.y + AIM_INSET_PX),
+    x: Math.round(field.x + field.width / 2),
+    y: Math.round(field.y + field.height / 2),
   };
   await screen.swipe({
     from,
@@ -817,13 +795,12 @@ test('a drag down that starts on the sheet TextInput during the rise is the fiel
     duration: 250,
   });
 
-  // A sheet rises in one direction only and stops at its destination, so a field still short of
-  // its rest after the drag was short of it when the drag began: the drag is a rising sheet's own.
   const dragged = await boxOf(input);
   const witness =
-    `drag aimed at y=${String(from.y)} from a read of the field at ` +
-    `y=${String(Math.round(rising.y))}, ${String(Math.round(rest.y - rising.y))} px short of its ` +
-    `rest at y=${String(Math.round(rest.y))}, ` +
+    `drag aimed at the middle of a read of the field at ` +
+    `y=${String(Math.round(field.y))} against its resting y=${String(
+      Math.round(rest.y)
+    )}, ` +
     (dragged == null
       ? 'and the field was gone once the drag ended'
       : `the field at y=${String(Math.round(dragged.y))} once it ended`);
