@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import {
@@ -40,6 +41,7 @@ type RowHandle = {
 const forms: Record<string, FormHandle> = {};
 const sections: Record<string, SectionHandle> = {};
 const rows: Record<string, RowHandle> = {};
+const fields: Record<string, { focus(): void } | null> = {};
 
 function parse(line: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -547,8 +549,21 @@ const formBox = { height: Number.NaN };
 const TALL_ROWS = 12;
 const TALL_ROW_HEIGHT = 160;
 
+/**
+ * The row that holds a focusable field: below a first viewport of any phone this Form runs on,
+ * and three rows short of the end, so the scroller has room left below it to move into.
+ */
+const FOCUSED_ROW = 8;
+
 /** The keyboard height a test command reports to the Form, in dp. */
 const REPORTED_IME_DP = 300;
+
+/**
+ * The offset a case parks the tall Form at before it asks anything: its field's box ends a
+ * third of a screen below where a keyboard of `REPORTED_IME_DP` would reach, so a Form that
+ * reveals a focused field has room to move, and the offset a case measures from is not 0.
+ */
+const PARK_DP = 900;
 
 const styles = StyleSheet.create({
   form: { flex: 1 },
@@ -564,6 +579,7 @@ const styles = StyleSheet.create({
   storyOuter: { flex: 1, padding: 16 },
   storyForm: { height: 420 },
   tallRow: { height: TALL_ROW_HEIGHT },
+  tallField: { alignSelf: 'stretch' },
 });
 
 // The same `Pressable` and `Switch` outside any Form: a positive control for the press
@@ -2575,7 +2591,20 @@ function TallForm({ avoids }: { avoids: boolean }) {
       <Form.Section title="Scrolling">
         {Array.from({ length: TALL_ROWS }, (_, index) => (
           <Form.Row key={index} style={styles.tallRow}>
-            <Text>{`Row ${String(index + 1)}`}</Text>
+            {index === FOCUSED_ROW ? (
+              // A field that raises no keyboard of the emulator's own: these cases report the
+              // inset themselves, and a real one would answer for the same ask.
+              <TextInput
+                ref={(field) => {
+                  fields.tall = field;
+                }}
+                testID="tall-field"
+                showSoftInputOnFocus={false}
+                style={styles.tallField}
+              />
+            ) : (
+              <Text>{`Row ${String(index + 1)}`}</Text>
+            )}
           </Form.Row>
         ))}
       </Form.Section>
@@ -2587,22 +2616,8 @@ describe('Form keyboard opt-out (Android)', () => {
   afterEach(() => {
     cleanup();
     for (const key of Object.keys(forms)) delete forms[key];
+    fields.tall = null;
   });
-
-  /** The tall Form at rest: nothing asked of it, no keyboard reported to it. */
-  async function mountTall(avoids: boolean): Promise<Record<string, string>> {
-    await render(<TallForm avoids={avoids} />);
-    await formReport(
-      (r) =>
-        num(r, 'rows') === TALL_ROWS &&
-        num(r, 'contentH') >= TALL_ROWS * TALL_ROW_HEIGHT,
-      'the tall Form laid out past its viewport',
-      'tall'
-    );
-    const atRest = await settledReport();
-    expect(raw(atRest, 'keyboard')).toBe(avoids ? 'rn' : 'off');
-    return atRest;
-  }
 
   /**
    * The tall Form's report once its rows have stopped moving.
@@ -2642,42 +2657,65 @@ describe('Form keyboard opt-out (Android)', () => {
   }
 
   /**
-   * Asking the scroller to show the last row, and answering the report built after the ask.
-   *
-   * The report is built on the UI thread after the request it is asked about, so a scroll the
-   * request caused is in the numbers it answers with.
+   * The tall Form with its field focused and parked at `PARK_DP`: the numbers a case measures
+   * from, with no keyboard reported to the Form yet.
    */
-  async function askForRow(requests: number): Promise<Record<string, string>> {
-    need(forms.tall).nuiTestCommand(`rect:${TALL_ROWS - 1}`);
-    const asked = await formReport(
-      (r) => num(r, 'rectReqs') >= requests,
-      `the Form being asked ${requests} time${requests === 1 ? '' : 's'} to show its last row`,
+  async function parkField(avoids: boolean): Promise<Record<string, string>> {
+    await render(<TallForm avoids={avoids} />);
+    await formReport(
+      (r) =>
+        num(r, 'rows') === TALL_ROWS &&
+        num(r, 'contentH') >= TALL_ROWS * TALL_ROW_HEIGHT,
+      'the tall Form laid out past its viewport',
       'tall'
     );
+    const field = fields.tall;
+    if (field == null)
+      throw new Error('the tall Form was laid out and has no field to focus');
+    field.focus();
+    await formReport(
+      (r) => num(r, 'focus') === FOCUSED_ROW,
+      'the Form holding focus on the field in its eighth row',
+      'tall'
+    );
+    need(forms.tall).nuiTestScrollTo(PARK_DP);
+    await formReport(
+      (r) => Math.abs(num(r, 'scroll') - PARK_DP) <= 2,
+      `the Form parked at ${String(PARK_DP)} dp`,
+      'tall'
+    );
+    const parked = await settledReport();
+    expect(num(parked, 'keyboard')).toBe(avoids ? 'rn' : 'off');
     expect(
-      num(asked, 'rectBelow'),
-      `the premise of this case is gone: the last row was on screen when it was asked for, ` +
-        `so no Form would have moved for it (${JSON.stringify(asked)})`
-    ).toBe(1);
-    return asked;
+      num(parked, 'focus'),
+      `focus is not on the field these cases reveal (${JSON.stringify(parked)})`
+    ).toBe(FOCUSED_ROW);
+    return parked;
   }
 
-  it('leaves an opted-out Form alone when a row below the viewport is asked to be shown (FIX15)', async () => {
-    if (IOS) return;
-    const atRest = await mountTall(false);
-    const offset = num(atRest, 'scroll');
-    const content = num(atRest, 'contentH');
-    const form = need(forms.tall);
-
-    form.nuiTestCommand(`ime:${REPORTED_IME_DP}`);
+  /**
+   * Reporting the keyboard to the Form, and answering once the reservation it causes has been
+   * laid out and any reveal has stopped retrying.
+   */
+  async function raiseKeyboard(): Promise<Record<string, string>> {
+    need(forms.tall).nuiTestCommand(`ime:${String(REPORTED_IME_DP)}`);
     await formReport(
       (r) => Math.abs(num(r, 'ime') - REPORTED_IME_DP) <= 1,
       'the Form being told a keyboard is up',
       'tall'
     );
-    // A reservation is made by a render, so it is given one before the content is read.
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const insetUp = await freshReport();
+    // A reservation lands in a render, and a reveal retries for 600 ms waiting for it.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    return settledReport();
+  }
+
+  it('grows nothing and moves nothing for a keyboard it was told to leave alone (FIX15)', async () => {
+    if (IOS) return;
+    const parked = await parkField(false);
+    const offset = num(parked, 'scroll');
+    const content = num(parked, 'contentH');
+
+    const insetUp = await raiseKeyboard();
     expect(Math.abs(num(insetUp, 'ime') - REPORTED_IME_DP)).toBeLessThanOrEqual(
       1
     );
@@ -2685,64 +2723,98 @@ describe('Form keyboard opt-out (Android)', () => {
       Math.abs(num(insetUp, 'contentH') - content),
       `an opted-out Form grew its content by ${(
         num(insetUp, 'contentH') - content
-      ).toFixed(1)} dp for a ${String(
+      ).toFixed(1)} dp for the ${String(
+        REPORTED_IME_DP
+      )} dp keyboard it was told to leave alone (${JSON.stringify(insetUp)})`
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(num(insetUp, 'scroll') - offset),
+      `an opted-out Form lifted its focused field ${String(
+        Math.round(num(insetUp, 'scroll') - offset)
+      )} dp off the spot it was parked at for a ${String(
         REPORTED_IME_DP
       )} dp keyboard it was told to leave alone (${JSON.stringify(insetUp)})`
     ).toBeLessThanOrEqual(1);
 
-    const asked = await askForRow(1);
-    expect(
-      Math.abs(num(asked, 'scroll') - offset),
-      `an opted-out Form scrolled ${String(
-        Math.round(num(asked, 'scroll') - offset)
-      )} dp to show a row it was asked about (${JSON.stringify(asked)})`
-    ).toBeLessThanOrEqual(1);
-
-    // A scroll view asked to show a row may animate it there, so the offset is read again a
-    // second after the ask - the report answering the second ask describes both.
+    // A reveal is retried for 600 ms after the content grows, so the offset is read again
+    // once that window has closed.
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    const askedAgain = await askForRow(2);
+    const later = await freshReport();
     expect(
-      Math.abs(num(askedAgain, 'scroll') - offset),
-      `an opted-out Form was asked to show a row, a second ask came a second later, and it had ` +
-        `then moved ${String(
-          Math.round(num(askedAgain, 'scroll') - offset)
-        )} dp from where it was (${JSON.stringify(askedAgain)})`
-    ).toBeLessThanOrEqual(1);
-    console.log(
-      `FORM OPT-OUT asked for row ${TALL_ROWS - 1} ${JSON.stringify(askedAgain)}`
-    );
+      Math.abs(num(later, 'scroll') - offset) <= 1,
+      `an opted-out Form was told a keyboard was up, and a second later it had moved ${String(
+        Math.round(num(later, 'scroll') - offset)
+      )} dp from where it was parked (${JSON.stringify(later)})`
+    ).toBe(true);
+    console.log(`FORM KEYBOARD opted out, inset up: ${JSON.stringify(later)}`);
   });
 
-  it('scrolls a Form that keeps the focused row visible when the same row is asked for (FIX15)', async () => {
+  it('reserves the keyboard in its content and lifts its focused field clear of it (FIX15)', async () => {
     if (IOS) return;
-    const atRest = await mountTall(true);
-    const offset = num(atRest, 'scroll');
-    const content = num(atRest, 'contentH');
+    const parked = await parkField(true);
+    const offset = num(parked, 'scroll');
+    const content = num(parked, 'contentH');
 
-    need(forms.tall).nuiTestCommand(`ime:${REPORTED_IME_DP}`);
-    await formReport(
-      (r) => num(r, 'contentH') >= content + REPORTED_IME_DP - 2,
-      `the Form reserving the ${String(REPORTED_IME_DP)} dp keyboard at the end of its content`,
+    const insetUp = await raiseKeyboard();
+    expect(
+      num(insetUp, 'contentH'),
+      `a Form that keeps the focused row visible grew its content by only ${(
+        num(insetUp, 'contentH') - content
+      ).toFixed(1)} dp, not the ${String(
+        REPORTED_IME_DP
+      )} dp it was asked to reserve (${JSON.stringify(insetUp)})`
+    ).toBeGreaterThanOrEqual(content + REPORTED_IME_DP - 2);
+    expect(
+      num(insetUp, 'scroll'),
+      `a Form that keeps the focused row visible left it behind the ${String(
+        REPORTED_IME_DP
+      )} dp keyboard, still parked at ${offset.toFixed(1)} dp (${JSON.stringify(
+        insetUp
+      )})`
+    ).toBeGreaterThan(offset + 1);
+    console.log(`FORM KEYBOARD avoiding, inset up: ${JSON.stringify(insetUp)}`);
+  });
+
+  /**
+   * Asking the scroller to show a row a screen below it - what Tab, the keyboard's Next key
+   * and a `focus()` from code ask - and reading the answer.
+   *
+   * The Form's own keyboard promise says nothing about this ask: the scroll view answers it
+   * into its own viewport, which is the size it was given and knows no keyboard.
+   */
+  async function expectShownOnRequest(avoids: boolean): Promise<void> {
+    const parked = await parkField(avoids);
+    const offset = num(parked, 'scroll');
+
+    need(forms.tall).nuiTestCommand(`rect:${String(TALL_ROWS - 1)}`);
+    const asked = await formReport(
+      (r) => num(r, 'rectReqs') >= 1,
+      'the Form being asked to show its last row',
       'tall'
     );
-    const reserved = await freshReport();
     expect(
-      Math.abs(num(reserved, 'ime') - REPORTED_IME_DP)
-    ).toBeLessThanOrEqual(1);
-    expect(num(reserved, 'contentH')).toBeGreaterThanOrEqual(
-      content + REPORTED_IME_DP - 2
-    );
-
-    await askForRow(1);
-    const moved = await formReport(
+      num(asked, 'rectBelow'),
+      `the premise of this case is gone: the last row was on screen when it was asked for (${JSON.stringify(asked)})`
+    ).toBe(1);
+    const shown = await formReport(
       (r) => num(r, 'scroll') > offset + 1,
-      'the Form scrolling the row it was asked about into view',
+      `the scroller showing the row it was asked about, last parked at ${offset.toFixed(
+        1
+      )} dp (${JSON.stringify(asked)})`,
       'tall'
     );
     console.log(
-      `FORM RECT asked for row ${TALL_ROWS - 1} ${JSON.stringify(moved)}`
+      `FORM KEYBOARD rect request, avoids=${avoids ? 'yes' : 'no'}: ${JSON.stringify(shown)}`
     );
-    expect(num(moved, 'scroll')).toBeGreaterThan(offset);
+  }
+
+  it('still shows a requested row while it avoids the keyboard (FIX15)', async () => {
+    if (IOS) return;
+    await expectShownOnRequest(true);
+  });
+
+  it('still shows a requested row after opting out of keyboard avoidance (FIX15)', async () => {
+    if (IOS) return;
+    await expectShownOnRequest(false);
   });
 });

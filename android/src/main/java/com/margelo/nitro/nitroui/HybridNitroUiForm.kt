@@ -176,6 +176,7 @@ internal class HybridNitroUiForm(
       "contentH=${String.format("%.1f", view.contentHeightDp())}",
       "rectReqs=${view.rectRequests}",
       "rectBelow=${if (view.rectAskedBelow) 1 else 0}",
+      "focus=${view.focusedRowIndex()}",
       "keyboard=${if (avoidsKeyboard) "rn" else "off"}",
       "ime=${String.format("%.2f", if (reportedImeInsetDp < 0f) 0f else reportedImeInsetDp)}",
       "offset=0.00",
@@ -372,6 +373,19 @@ internal class NitroUiFormView(
       tallest = maxOf(tallest, scroller.getChildAt(index).height)
     }
     return (tallest / resources.displayMetrics.density).toDouble()
+  }
+
+  /**
+   * Which row holds the view that has focus, or -1 when nothing below here does: the premise a
+   * keyboard case needs, since a reveal that had nothing focused does nothing anyway.
+   */
+  fun focusedRowIndex(): Int {
+    var node: View? = findFocus()
+    while (node != null && node !is NitroUiFormRowView) {
+      node = node.parent as? View
+    }
+    val row = node as? NitroUiFormRowView ?: return -1
+    return rowViews().indexOf(row)
   }
 
   /** A field focused while the keyboard is already up is revealed the same way. */
