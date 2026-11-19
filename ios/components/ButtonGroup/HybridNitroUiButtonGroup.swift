@@ -473,13 +473,15 @@ struct ButtonGroupContent: NitroUIContent {
         itemLabel(item, inControlGroup: inControlGroup)
       }
       .modifier(ItemButtonStyle(style: ItemStyle(variant: model.variant)))
-      .controlSize(model.scale.controlSize)
       .modifier(
         BorderedFootprint(
           reserves: reservesFootprint,
           label: itemLabel(item, inControlGroup: inControlGroup)
         )
       )
+      // Outside the footprint: the hidden `.bordered` copy measures the group's `size`, and an
+      // environment value reaches only the views it wraps.
+      .controlSize(model.scale.controlSize)
       .modifier(OptionalItemTint(color: inControlGroup ? nil : model.tint))
       .disabled(model.disabled || item.disabled)
     }
