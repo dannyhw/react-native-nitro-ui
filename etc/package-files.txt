@@ -42,6 +42,7 @@ android/src/main/java/com/margelo/nitro/nitroui/NitroUiBottomSheetViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiContextMenuViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiHostViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt
+android/src/main/java/com/margelo/nitro/nitroui/NitroUiIconUrl.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPopoverViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiSliderValue.kt

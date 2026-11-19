@@ -235,7 +235,10 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - FIX4 review: `fetch-material-symbols.mjs --verify` (the only check against Google's files) runs only by hand; consider a scheduled CI job.
 - E5: `gate.mjs`'s `pidof` probe can report a live app as dead.
 - G19 review: an icon added in an over-the-air update (`file://` bundle, expo-updates/CodePush) has no drawable resource to resolve; document it or send `url:file://…`.
-- G19 review: `URI(url)` throws on asset paths with spaces, so such an icon draws nothing; a dev URL with `/assets/../..` is sent as-is, unverified against Metro.
+- Android icons, open after development URLs were quoted per path segment:
+  - A dev URL with `/assets/../..` is sent as-is, unverified against Metro (`..` is legal in a segment).
+  - No device case draws a `require`d icon from a folder with a space in its name: the icon provenance check reads `example/src/assets/icons` one level deep and the Material Symbols lock records only those files, so such a fixture cannot be proven official yet.
+  - In development a `?` in a folder or file name, or a name that already looks like an escape, still draws nothing (documented).
 - G19 review: nothing checks that a release bundle actually contains the imported icon drawables (`drawable-mdpi/…`).
 - G19 re-review: `NitroUiIcons` keeps every app vector it is asked for, unbounded and keyed by resource id alone, so a `-ldrtl` or `-night` variant of that id is never read after the first parse; `NitroUiIconBitmaps` is keyed by id the same way.
 - G19 re-review: an app's own vector resource is parsed on the main thread the first time its id is seen (`loadIconArtwork` runs inside `afterUpdate()`); only the dev-server road is off-main.
