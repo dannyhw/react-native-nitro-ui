@@ -420,7 +420,9 @@ const styles = StyleSheet.create({
   gap: { height: 96 },
   row60: { height: 60 },
   grip: { height: 200, marginTop: 12, borderRadius: 10, padding: 12 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 10, height: 96 },
+  // Tall so that a drag aimed at the field while its sheet is still rising has room to be inside
+  // it by the time it lands: a box read names where the field was, not where it is.
+  input: { borderWidth: 1, borderRadius: 10, padding: 10, height: 164 },
   chip: { width: 110, padding: 12, borderRadius: 10 },
   opener: {
     alignSelf: 'flex-start',
