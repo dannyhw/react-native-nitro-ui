@@ -143,9 +143,10 @@ when its keyboard options change while it has focus, so the IME gets the new key
 field losing focus.
 
 `autoCorrect={false}` refuses correction in the way each platform's keyboard understands: iOS gets
-`autocorrectionType = .no`, and Android is sent `TYPE_TEXT_FLAG_NO_SUGGESTIONS` along with no
-autocorrect flag, which is what actually stops it drawing a suggestion strip over the word at the
-caret - leaving the autocorrect flag out does not. The flag belongs to Android's text input class,
+`autocorrectionType = .no` and `spellCheckingType = .no`, and Android is sent
+`TYPE_TEXT_FLAG_NO_SUGGESTIONS` along with no autocorrect flag, which asks the keyboard not to
+draw a suggestion strip over the word at the caret - leaving the autocorrect flag out does not.
+Most keyboards honour it; a keyboard may still ignore it. The flag belongs to Android's text input class,
 so a number or phone keyboard is sent what it is sent with the default.
 
 UIKit's `.numberPad` and `.decimalPad` have no Return key, so on iOS a field with
