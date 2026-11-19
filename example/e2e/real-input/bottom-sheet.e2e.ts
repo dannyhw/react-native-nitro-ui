@@ -594,10 +594,11 @@ test('a press held still on the header of a rising sheet is no drag at all', asy
   });
 
   await staysUp(screen, TWO, 'a press held still on its header');
-  await expect(log).toHaveText('none');
+  // Nothing was dragged, so no detent was ever reported: the sheet rests where it opened.
   await expect(detent).toHaveText('Detent none');
   await app.back();
   await screen.getByText(TWO).waitFor({ state: 'detached' });
+  // The one close this sheet reports is the Back's own.
   await expect(log).toHaveText('presented:false > dismiss');
 });
 
@@ -636,9 +637,9 @@ test('a press held still on a button inside a rising sheet closes nothing', asyn
   });
 
   await staysUp(screen, FIT, 'a press held still on its own button');
-  await expect(log).toHaveText(/^(none|press:1)$/);
   await app.back();
   await screen.getByText(FIT).waitFor({ state: 'detached' });
+  await expect(log).toHaveText(/^(press:1 > )?presented:false > dismiss$/);
 });
 
 /**
