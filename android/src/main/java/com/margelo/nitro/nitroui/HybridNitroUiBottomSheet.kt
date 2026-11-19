@@ -123,8 +123,8 @@ internal class BottomSheetModel : NitroUiModel() {
   @Volatile var geometryReport = "sheetPx=0;containerPx=0"
 
   /**
-   * Whether a detent the person dragged to is owed its report. Set when a drag is followed while
-   * the sheet has not settled at a value yet, where the settle it causes is the first one.
+   * Whether the settle a followed drag asks for is owed a report. It belongs to that one gesture,
+   * so a settle takes it whether or not the sheet had already come to rest during the drag.
    */
   @Volatile var oweDetentReport = false
 
@@ -145,6 +145,8 @@ internal class BottomSheetModel : NitroUiModel() {
     if (next) {
       closing = false
       generation += 1
+      // A drag's owed report is spent in the presentation that asked for it.
+      oweDetentReport = false
     } else {
       // Stay composed while animating out; the sheet clears this when `hide()` returns.
       // A sheet that never got a window has nothing to animate.
@@ -725,8 +727,9 @@ internal class BottomSheetHost(
         .collect { index ->
           // The detent a sheet opens at is not a change. One the person dragged to is, even when
           // the drag cancelled the opening animation and its settle is the presentation's first.
-          val report = !opening || model.consumeDetentReport()
+          val owed = model.consumeDetentReport()
           opening = false
+          val report = !opening || owed
           if (report) {
             model.selected = index
             model.onDetentChange?.invoke(index.toDouble())
