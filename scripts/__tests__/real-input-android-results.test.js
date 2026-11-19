@@ -33,6 +33,9 @@ const SWITCH_SOURCE = [
   '',
   '// The thumb is drawn by the platform, not by the library.',
   "test.skip('the thumb follows the finger', async () => {});",
+  '',
+  '// QUARANTINED 2026-11-19: skipped from inside its own body.',
+  "test('an inline skip', async () => { test.skip(); });",
 ].join('\n');
 
 const FOLLOWUPS = [
@@ -48,8 +51,11 @@ const FOLLOWUPS = [
   '- `slider.e2e.ts` "a tap on the label flips the switch" (Android), the',
   '  same title in another file.',
   '- `switch.e2e.ts` "the thumb follows the finger" (Android).',
+  '- `switch.e2e.ts` "an inline skip" (Android).',
+  '- `slider.e2e.ts` "a title long enough to',
+  '  wrap onto a second line" (Android).',
   '',
-  '## Done',
+  'Triaged notes follow, with no heading of their own:',
   '',
   '- `switch.e2e.ts` "a tap on the label flips the switch", listed outside the section.',
 ].join('\n');
@@ -103,6 +109,11 @@ const OTHER_COMMENT = test(
   { cause: 'explicit', reason: 'skipped' }
 );
 
+const INLINE_SKIP = test(SWITCH_FILE, 'an inline skip', 18, 'skipped', {
+  cause: 'explicit',
+  reason: 'skipped',
+});
+
 const sources = {
   followups: FOLLOWUPS,
   readTestFile: (file) => (file === SWITCH_FILE ? SWITCH_SOURCE : null),
@@ -143,6 +154,11 @@ describe('quarantineList', () => {
       },
       { file: 'slider.e2e.ts', title: 'a tap on the label flips the switch' },
       { file: 'switch.e2e.ts', title: 'the thumb follows the finger' },
+      { file: 'switch.e2e.ts', title: 'an inline skip' },
+      {
+        file: 'slider.e2e.ts',
+        title: 'a title long enough to wrap onto a second line',
+      },
     ]);
     expect(quarantineList(null)).toEqual([]);
     expect(quarantineList('# Follow-ups\n\n- `switch.e2e.ts` "x"\n')).toEqual(
@@ -191,6 +207,15 @@ describe('recordResults on an Android e2e report', () => {
       'a tap on the label flips the switch — skipped, which is not a pass: ' +
         '`switch.e2e.ts` "a tap on the label flips the switch" is not listed under ' +
         '"Quarantined tests" in docs/tasks/FOLLOWUPS.md',
+    ]);
+  });
+
+  it('fails a skip called inside a test body, whose body ran up to it', () => {
+    const { passed, failures } = runSwitch([PASSED, INLINE_SKIP]);
+    expect(passed).toBe(false);
+    expect(failures).toEqual([
+      'an inline skip — skipped, which is not a pass: ' +
+        'real-input/switch.e2e.ts:18 is not a test.skip( line',
     ]);
   });
 

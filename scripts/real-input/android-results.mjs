@@ -40,6 +40,9 @@ export function quarantineList(text) {
       items.push(line.slice(2));
     } else if (/^\s+\S/.test(line) && items.length > 0) {
       items[items.length - 1] += ` ${line.trim()}`;
+    } else if (/^\S/.test(line) && items.length > 0) {
+      // Prose after the list is the rest of the file, whose own items are not quarantines.
+      break;
     }
   }
   return items.flatMap((item) => {
@@ -78,7 +81,7 @@ export function quarantineGaps(result, { listed, readTestFile }) {
     gaps.push(
       `its source (${where}) cannot be read for the QUARANTINED comment`
     );
-  } else if (!lines[line - 1]?.includes('test.skip(')) {
+  } else if (!/^\s*test\.skip\(/.test(lines[line - 1] ?? '')) {
     gaps.push(`${where} is not a test.skip( line`);
   } else {
     let commented = false;
