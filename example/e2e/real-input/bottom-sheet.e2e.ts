@@ -368,15 +368,15 @@ test('a detent dragged to during the rise is reported once, and the next open re
     to: { x: from.x, y: window.y + 2 },
     duration: 260,
   });
+  // The log is behind the sheet's window while the sheet is up, so it is read once, after the
+  // last close. The drag is the only thing that asked for a detent in either presentation.
   await restingBox(header);
-  await expect(log).toHaveText('detent:1');
-
   await app.back();
   await staysUp(screen, TWO, 'Back from the detent the drag asked for');
   await app.back();
   await screen.getByText(TWO).waitFor({ state: 'detached' });
 
-  // Opened again with no drag at all: the sheet rises to the detent it opened at and says nothing.
+  // Opened again with no drag at all: it rises to the detent it opened at and says nothing.
   await screen.getByTestId('sheet-open-two').tap();
   const reopened = await restingBox(screen.getByText(TWO));
   expect(
@@ -518,5 +518,13 @@ test('a sideways fling on the sheet list during the rise neither expands the she
     await screen.getByText(FIT).count(),
     'the sideways fling closed the sheet'
   ).toBe(1);
-  await expect(log).toHaveText('none');
+
+  // The log sits behind the sheet's window: close the sheet the app's own way, then read it.
+  await screen.getByText(FIT).tap();
+  await expect(screen.getByTestId('sheet-presses')).toHaveText(
+    'Pressed 1 times'
+  );
+  await app.back();
+  await screen.getByText(FIT).waitFor({ state: 'detached' });
+  await expect(log).toHaveText('press:1');
 });
