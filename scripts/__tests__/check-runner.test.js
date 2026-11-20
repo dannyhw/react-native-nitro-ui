@@ -240,7 +240,8 @@ describe('steps that share an output are ordered', () => {
   it('test:tooling declares every nitrogen/ region its tests name', () => {
     // A tooling test that names a path under `nitrogen/` may read the committed tree,
     // which `prepare` deletes and regenerates; an undeclared read hides that from
-    // findOutputConflicts. Fixture trees are copied out before use, so they are skipped.
+    // findOutputConflicts. Fixture trees are copied out before use, and this file names
+    // regions rather than reading them, so both are skipped.
     const regionOf = (relative) =>
       relative === 'generated' || relative.startsWith('generated/')
         ? FINDINGS.generatedDir
@@ -251,7 +252,9 @@ describe('steps that share an output are ordered', () => {
         .readdirSync(path.join(root, dir), { recursive: true })
         .filter(
           (file) =>
-            file.endsWith('.js') && !file.split(path.sep).includes('fixtures')
+            file.endsWith('.js') &&
+            file !== 'check-runner.test.js' &&
+            !file.split(path.sep).includes('fixtures')
         );
       for (const file of files) {
         const source = fs.readFileSync(path.join(root, dir, file), 'utf8');
