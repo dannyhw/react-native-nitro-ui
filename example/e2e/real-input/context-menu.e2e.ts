@@ -404,7 +404,7 @@ test('a menu that is not accessible offers TalkBack no long-click and no stop', 
 }) => {
   await app.open();
   await openScreen(screen, 'contextmenu');
-  await revealInScroll(screen, 'ctx-bottom');
+  await screen.getByTestId('ctx-bottom').waitFor({ state: 'visible' });
   const plain = actionFlags({ testId: 'ctx-bottom' });
   expect(
     { longClickable: plain?.longClickable, focusable: plain?.focusable },
