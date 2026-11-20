@@ -8,13 +8,13 @@
  *
  * @file
  */
-import { blockMs, sleep } from "./support.mjs";
-import { screenTab } from "./screens.mjs";
-import { imeServiceShown } from "./ime-frame.mjs";
-import { findByTestId, parseHierarchy } from "./uiautomator.mjs";
-import { runA11ySweep } from "./a11y-sweep.mjs";
-import { countAppPopupWindows } from "./popup-windows.mjs";
-import { readWindowFocus } from "./window-focus.mjs";
+import { blockMs, sleep } from './support.mjs';
+import { screenTab } from './screens.mjs';
+import { imeServiceShown } from './ime-frame.mjs';
+import { findByTestId, parseHierarchy } from './uiautomator.mjs';
+import { runA11ySweep } from './a11y-sweep.mjs';
+import { countAppPopupWindows } from './popup-windows.mjs';
+import { readWindowFocus } from './window-focus.mjs';
 
 /** Taps one tab gets before its screen is called unreachable. */
 const TAB_TAPS = 3;
@@ -79,7 +79,7 @@ export async function runA11ySweepOnDevice(begin, device) {
         await sleep(500);
       },
     },
-    device.cases,
+    device.cases
   );
 }
 
@@ -98,7 +98,7 @@ export class SweepDevice {
     this.adbShell = adbShell;
     this.tabs = tabs;
     this.appId = appId;
-    this.remoteDump = "/sdcard/nitro-ui-a11y-sweep.xml";
+    this.remoteDump = '/sdcard/nitro-ui-a11y-sweep.xml';
     // The tab bar is the strip at the top of the window: 12% of its height covers the
     // tabs at any density without ever reaching the content below them.
     this.tabBandY = Math.round(this.size().height * 0.12);
@@ -114,14 +114,14 @@ export class SweepDevice {
    */
   async startFromLaunch() {
     this.adbShell(`am force-stop ${this.appId}`);
-    this.adbShell("cmd statusbar collapse");
+    this.adbShell('cmd statusbar collapse');
     this.adbShell(`am start -W -n ${this.appId}/.MainActivity`);
     await this.awaitApp({ timeoutMs: LAUNCH_DEADLINE_MS, backs: 0 });
   }
 
   /** The focused window, from the window manager (see `readWindowFocus`). */
   windowFocus() {
-    return readWindowFocus(this.adbShell("dumpsys window"), this.appId);
+    return readWindowFocus(this.adbShell('dumpsys window'), this.appId);
   }
 
   /**
@@ -142,13 +142,13 @@ export class SweepDevice {
     let broughtForwardAt = -Infinity;
     for (;;) {
       const focus = this.windowFocus();
-      if (focus.owner === "activity") {
+      if (focus.owner === 'activity') {
         const nodes = this.hierarchy();
         const tabStrip = nodes.some(
-          (node) => node.resourceId === "example-tabs",
+          (node) => node.resourceId === 'example-tabs'
         );
         const ownWindow = nodes.some(
-          (node) => node.resourceId === "android:id/content",
+          (node) => node.resourceId === 'android:id/content'
         );
         if (tabStrip && ownWindow) return;
         if (backsLeft > 0 && this.imeShown()) {
@@ -157,30 +157,30 @@ export class SweepDevice {
           await sleep(700);
           continue;
         }
-      } else if (focus.owner === "app-window" && backsLeft > 0) {
+      } else if (focus.owner === 'app-window' && backsLeft > 0) {
         backsLeft -= 1;
         this.key(KEY_BACK);
         await sleep(700);
         continue;
       } else if (
-        focus.owner === "other" &&
+        focus.owner === 'other' &&
         Date.now() - broughtForwardAt >= BRING_FORWARD_EVERY_MS
       ) {
         broughtForwardAt = Date.now();
         // An activity's window is named `package/class`; a system window (the shade,
         // the status bar) is named without a slash and is not an app to replace.
         this.adbShell(
-          focus.title?.includes("/") === true
+          focus.title?.includes('/') === true
             ? `am start -n ${this.appId}/.MainActivity`
-            : "cmd statusbar collapse",
+            : 'cmd statusbar collapse'
         );
       }
       if (Date.now() > deadline) {
         throw new Error(
           `real-input: ${this.appId} did not come back to its tab bar within ` +
             `${String(Math.round(timeoutMs / 1000))} s. The focused window was ` +
-            `${focus.title == null ? "none" : `"${focus.title}"`} (${focus.owner}), ` +
-            "as `dumpsys window` reports mCurrentFocus.",
+            `${focus.title == null ? 'none' : `"${focus.title}"`} (${focus.owner}), ` +
+            'as `dumpsys window` reports mCurrentFocus.'
         );
       }
       await sleep(500);
@@ -192,7 +192,7 @@ export class SweepDevice {
     if (this.sizeCache == null) {
       const reported =
         /Physical size:\s*(\d+)x(\d+)|Override size:\s*(\d+)x(\d+)/g;
-      const text = this.adbShell("wm size");
+      const text = this.adbShell('wm size');
       const boxes = [...text.matchAll(reported)].map((match) => ({
         width: Number(match[1] ?? match[3]),
         height: Number(match[2] ?? match[4]),
@@ -200,8 +200,8 @@ export class SweepDevice {
       const used = boxes.at(-1);
       if (used == null) {
         throw new Error(
-          "real-input: `wm size` named no size, so the a11y sweep has no window to " +
-            `aim a swipe at. It said: ${text.trim()}`,
+          'real-input: `wm size` named no size, so the a11y sweep has no window to ' +
+            `aim a swipe at. It said: ${text.trim()}`
         );
       }
       this.sizeCache = used;
@@ -211,25 +211,25 @@ export class SweepDevice {
 
   /** A fresh accessibility tree — the flags the rule grades are only in this one. */
   hierarchy() {
-    let xml = "";
-    let last = "";
-    for (let attempt = 1; attempt <= 4 && xml === ""; attempt += 1) {
+    let xml = '';
+    let last = '';
+    for (let attempt = 1; attempt <= 4 && xml === ''; attempt += 1) {
       const dumped = this.tryShell(`uiautomator dump ${this.remoteDump}`);
       // A refused dump leaves the file from the last one where it is, so the tree is
       // only read after the dump says it wrote a new one.
       const read =
         dumped.status === 0 ? this.tryShell(`cat ${this.remoteDump}`) : null;
-      if (read?.stdout.includes("<node") === true) {
+      if (read?.stdout.includes('<node') === true) {
         xml = read.stdout;
         break;
       }
       last = read?.text ?? dumped.text;
       if (attempt < 4) blockMs(500);
     }
-    if (xml === "") {
+    if (xml === '') {
       throw new Error(
-        "real-input: `uiautomator dump` answered nothing usable four times, so the " +
-          `a11y rule has no tree to grade. It said: ${last.slice(0, 300)}`,
+        'real-input: `uiautomator dump` answered nothing usable four times, so the ' +
+          `a11y rule has no tree to grade. It said: ${last.slice(0, 300)}`
       );
     }
     return parseHierarchy(xml);
@@ -245,7 +245,7 @@ export class SweepDevice {
     if (tab == null) {
       throw new Error(
         `real-input: no example tab "${screen}" in example/src/App.tsx's TABS, so ` +
-          "the a11y sweep cannot reach the screen its case names.",
+          'the a11y sweep cannot reach the screen its case names.'
       );
     }
     const up = () =>
@@ -264,7 +264,7 @@ export class SweepDevice {
       if (target == null) {
         throw new Error(
           `real-input: the "${tab.label}" tab could not be scrolled wholly onto the ` +
-            "screen, so the a11y sweep cannot reach its screen reliably.",
+            'screen, so the a11y sweep cannot reach its screen reliably.'
         );
       }
       this.tap(target);
@@ -277,19 +277,19 @@ export class SweepDevice {
         if (attempt > 1) {
           log.retried?.(
             `navigation: the "${tab.label}" tab answered on tap ${String(attempt)}/` +
-              `${String(TAB_TAPS)} — the earlier tap(s) were never delivered`,
+              `${String(TAB_TAPS)} — the earlier tap(s) were never delivered`
           );
         }
         return;
       }
       log.note?.(
         `navigation: tap ${String(attempt)}/${String(TAB_TAPS)} on the ` +
-          `"${tab.label}" tab left no "${anchor}" in the tree — tapping again`,
+          `"${tab.label}" tab left no "${anchor}" in the tree — tapping again`
       );
     }
     throw new Error(
       `real-input: tapping the "${tab.label}" tab ${String(TAB_TAPS)} times did not ` +
-        `bring up its screen (looking for resource-id "${anchor}").`,
+        `bring up its screen (looking for resource-id "${anchor}").`
     );
   }
 
@@ -316,8 +316,8 @@ export class SweepDevice {
         .filter((entry) => entry.node != null);
       if (visible.length === 0) {
         throw new Error(
-          "real-input: no tab of the example is in the accessibility tree, so the " +
-            `"${tab.label}" tab cannot be scrolled to.`,
+          'real-input: no tab of the example is in the accessibility tree, so the ' +
+            `"${tab.label}" tab cannot be scrolled to.`
         );
       }
       // +1: the tab lies to the right of the window, so the bar's content moves left.
@@ -351,7 +351,7 @@ export class SweepDevice {
         .filter((node) => node.bounds.y1 > this.tabBandY + 8)
         .slice(0, 4)
         .map((node) => `${String(node.bounds.x1)},${String(node.bounds.y1)}`)
-        .join(";");
+        .join(';');
     let previous = signature();
     for (let attempt = 0; attempt < maxSwipes; attempt += 1) {
       this.swipe(x, from, x, to, 400);
@@ -374,7 +374,7 @@ export class SweepDevice {
         (node) =>
           node.contentDesc === tab.label &&
           node.bounds.cy <= this.tabBandY &&
-          node.bounds.width > 0,
+          node.bounds.width > 0
       ) ?? null
     );
   }
@@ -383,7 +383,7 @@ export class SweepDevice {
   tap(node) {
     this.adbShell(
       `input tap ${String(Math.round(node.bounds.cx))} ` +
-        `${String(Math.round(node.bounds.cy))}`,
+        `${String(Math.round(node.bounds.cy))}`
     );
   }
 
@@ -391,7 +391,7 @@ export class SweepDevice {
     this.adbShell(
       `input swipe ${String(Math.round(x1))} ${String(Math.round(y1))} ` +
         `${String(Math.round(x2))} ${String(Math.round(y2))} ` +
-        `${String(durationMs)}`,
+        `${String(durationMs)}`
     );
   }
 
@@ -406,7 +406,7 @@ export class SweepDevice {
   motion(action, x, y) {
     this.adbShell(
       `input motionevent ${action} ${String(Math.round(x))} ` +
-        `${String(Math.round(y))}`,
+        `${String(Math.round(y))}`
     );
   }
 
@@ -424,7 +424,7 @@ export class SweepDevice {
 
   /** Whether a soft keyboard is on screen, from the input method's own report. */
   imeShown() {
-    return imeServiceShown(this.adbShell("dumpsys input_method"));
+    return imeServiceShown(this.adbShell('dumpsys input_method'));
   }
 
   /**
@@ -436,21 +436,21 @@ export class SweepDevice {
    */
   setImeWithHardKeyboard(enabled) {
     this.adbShell(
-      `settings put secure show_ime_with_hard_keyboard ${enabled ? "1" : "0"}`,
+      `settings put secure show_ime_with_hard_keyboard ${enabled ? '1' : '0'}`
     );
   }
 
   /** @returns {boolean} the current `show_ime_with_hard_keyboard`, as written. */
   imeWithHardKeyboard() {
     return /1/.test(
-      this.adbShell("settings get secure show_ime_with_hard_keyboard"),
+      this.adbShell('settings get secure show_ime_with_hard_keyboard')
     );
   }
 
   /** @param {number} x @param {number} y */
   tapAt(x, y) {
     this.adbShell(
-      `input tap ${String(Math.round(x))} ${String(Math.round(y))}`,
+      `input tap ${String(Math.round(x))} ${String(Math.round(y))}`
     );
   }
 
@@ -461,14 +461,16 @@ export class SweepDevice {
    * wins when there is one, because that is what the device lays its controls out at.
    */
   density() {
-    const out = this.adbShell("wm density");
+    const out = this.adbShell('wm density');
     const dpi = Number(
-      (out.match(/Override density:\s*(\d+(?:\.\d+)?)/) ??
-        out.match(/Physical density:\s*(\d+(?:\.\d+)?)/))?.[1],
+      (
+        out.match(/Override density:\s*(\d+(?:\.\d+)?)/) ??
+        out.match(/Physical density:\s*(\d+(?:\.\d+)?)/)
+      )?.[1]
     );
     if (!Number.isFinite(dpi) || dpi <= 0) {
       throw new Error(
-        `real-input: \`adb shell wm density\` said nothing useful: ${out.trim()}`,
+        `real-input: \`adb shell wm density\` said nothing useful: ${out.trim()}`
       );
     }
     return dpi / 160;
@@ -477,8 +479,8 @@ export class SweepDevice {
   /** The app's own popup windows right now (see `countAppPopupWindows`). */
   popupWindowCount() {
     return countAppPopupWindows(
-      this.adbShell("dumpsys window windows"),
-      this.appId,
+      this.adbShell('dumpsys window windows'),
+      this.appId
     );
   }
 
@@ -498,7 +500,7 @@ export class SweepDevice {
         /** @type {{ stdout?: unknown, status?: number, message?: string }} */ (
           /** @type {unknown} */ (error)
         );
-      const stdout = String(failure.stdout ?? "");
+      const stdout = String(failure.stdout ?? '');
       return {
         status: Number(failure.status ?? 1),
         stdout,

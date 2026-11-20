@@ -7,16 +7,16 @@
  *
  * @file
  */
-import { blockMs, runCheck, sleep } from "./support.mjs";
-import { REAL_INPUT_CONTROLS } from "./controls.mjs";
+import { blockMs, runCheck, sleep } from './support.mjs';
+import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import {
   findAllByDescription,
   findAllByText,
   findByDescription,
   findByTestId,
-} from "./uiautomator.mjs";
-import { nativeChecked } from "./android-tree.mjs";
-import { SweepDevice } from "./a11y-sweep-device.mjs";
+} from './uiautomator.mjs';
+import { nativeChecked } from './android-tree.mjs';
+import { SweepDevice } from './a11y-sweep-device.mjs';
 
 /** How long a press gets to show its witness, in ms. */
 const REACT_TIMEOUT = Number(process.env.REAL_INPUT_TIMEOUT ?? 8000);
@@ -70,7 +70,7 @@ function makeContext(device, log) {
       const shown = echo(testID);
       if (shown == null) {
         log.abort(
-          `no on-screen text with testID "${testID}" in the accessibility tree`,
+          `no on-screen text with testID "${testID}" in the accessibility tree`
         );
       }
       return shown;
@@ -84,20 +84,20 @@ function makeContext(device, log) {
       if (node == null) {
         log.abort(
           `no control with accessibilityLabel "${description}" in the ` +
-            "accessibility tree — the hosted control offers nothing a real tap " +
-            "could be aimed at",
+            'accessibility tree — the hosted control offers nothing a real tap ' +
+            'could be aimed at'
         );
       }
       if (node.bounds.width === 0 || node.bounds.height === 0) {
         log.abort(
           `accessibilityLabel "${description}" is named in the tree with no box - ` +
-            "it is composed outside the scroll clip, so no real tap can be aimed " +
-            "at it. Scroll it into view first (`requireControlOnScreen`).",
+            'it is composed outside the scroll clip, so no real tap can be aimed ' +
+            'at it. Scroll it into view first (`requireControlOnScreen`).'
         );
       }
       log.note(
         `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
-          `${node.bounds.x2},${node.bounds.y2}`,
+          `${node.bounds.x2},${node.bounds.y2}`
       );
       return node;
     },
@@ -146,21 +146,21 @@ function makeContext(device, log) {
               if (scrolls > 0) {
                 log.note(
                   `"${description}" needed ${String(scrolls)} scroll` +
-                    `${scrolls === 1 ? "" : "s"} to come on screen` +
+                    `${scrolls === 1 ? '' : 's'} to come on screen` +
                     (namedOffScreen > 0
                       ? ` - after ${String(namedOffScreen)} naming` +
-                        `${namedOffScreen === 1 ? "" : "s"} with no box (composed ` +
-                        "outside the clip)"
-                      : "") +
+                        `${namedOffScreen === 1 ? '' : 's'} with no box (composed ` +
+                        'outside the clip)'
+                      : '') +
                     (clipped > 0
                       ? `, and ${String(clipped)} with a box clipped to ` +
                         `${String(MIN_PRESSABLE_PX)} px or less`
-                      : ""),
+                      : '')
                 );
               }
               log.note(
                 `"${description}" occupies ${node.bounds.x1},${node.bounds.y1} → ` +
-                  `${node.bounds.x2},${node.bounds.y2}`,
+                  `${node.bounds.x2},${node.bounds.y2}`
               );
               return node;
             }
@@ -175,7 +175,7 @@ function makeContext(device, log) {
             direction > 0 ? height * 0.7 : height * 0.32,
             width / 2,
             direction > 0 ? height * 0.32 : height * 0.7,
-            400,
+            400
           );
           await sleep(400);
         }
@@ -185,7 +185,7 @@ function makeContext(device, log) {
           `"${description}" is only ever named with a box of ` +
             `${String(lastClipped.bounds.width)} x ` +
             `${String(lastClipped.bounds.height)} px, which is not a box a finger can ` +
-            "be aimed at — the control is clipped out of the scroll.",
+            'be aimed at — the control is clipped out of the scroll.'
         );
       }
       log.abort(
@@ -193,8 +193,8 @@ function makeContext(device, log) {
           `"${description}" on screen` +
           (namedOffScreen > 0
             ? `, although it was named ${String(namedOffScreen)} time` +
-              `${namedOffScreen === 1 ? "" : "s"} with no box at all`
-            : ""),
+              `${namedOffScreen === 1 ? '' : 's'} with no box at all`
+            : '')
       );
     },
 
@@ -244,8 +244,8 @@ function makeContext(device, log) {
       if (nativeState != null && stateStart == null) {
         log.abort(
           `${waitingFor}: ${what} was given a native-state witness and it read ` +
-            "nothing, so a delivered touch could not be told from a lost event. The " +
-            "control publishes no state to read, or the label names the wrong node.",
+            'nothing, so a delivered touch could not be told from a lost event. The ' +
+            'control publishes no state to read, or the label names the wrong node.'
         );
       }
       for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -257,8 +257,8 @@ function makeContext(device, log) {
             if (attempt > 1) {
               log.retried(
                 `${waitingFor}: ${what} answered on tap ${String(attempt)}/${String(
-                  attempts,
-                )} - the earlier tap(s) were never delivered`,
+                  attempts
+                )} - the earlier tap(s) were never delivered`
               );
             }
             return { delivered: true, shown };
@@ -284,8 +284,8 @@ function makeContext(device, log) {
               if (raised(shown)) {
                 log.note(
                   `${waitingFor}: ${what} answered ${String(windowMs)}ms after its ` +
-                    "press, late enough that the control had already changed - a slow " +
-                    "JS thread, not a lost event",
+                    'press, late enough that the control had already changed - a slow ' +
+                    'JS thread, not a lost event'
                 );
                 return { delivered: true, shown };
               }
@@ -298,15 +298,15 @@ function makeContext(device, log) {
               `${waitingFor}: ${what} took the touch and lost the event - the control's ` +
                 `own state moved from "${stateStart}" to "${moved}" and its echo is ` +
                 `still "${String(shown)}", the value it had before any press, ${String(
-                  windowMs * 2,
+                  windowMs * 2
                 )}ms later. Not retried: a further press would land the event and make a ` +
-                "lost change look like a dropped tap.",
+                'lost change look like a dropped tap.'
             );
           }
         }
         log.note(
           `${waitingFor}: tap ${String(attempt)}/${String(attempts)} on ${what} left ` +
-            `"${String(shown)}" - tapping again`,
+            `"${String(shown)}" - tapping again`
         );
       }
       return { delivered: false, shown };
@@ -335,24 +335,24 @@ function makeContext(device, log) {
     async tapUntilValue(lookUp, testID, expected, waitingFor, options = {}) {
       // An ignored `aim` presses the middle of the control, which fails a segment check and
       // blames delivery, so a mis-shaped option is refused rather than read as "no aim".
-      const known = ["aim", "attempts", "nativeLabel", "atLeast"];
+      const known = ['aim', 'attempts', 'nativeLabel', 'atLeast'];
       const unknown = Object.keys(options).filter((k) => !known.includes(k));
-      if (typeof options === "function" || unknown.length > 0) {
+      if (typeof options === 'function' || unknown.length > 0) {
         log.abort(
           `${waitingFor}: tapUntilValue was given ${
-            typeof options === "function"
-              ? "a positional aim function (it is now { aim })"
-              : `unknown option(s) ${unknown.join(", ")} - the fifth argument is ` +
-                "{ aim, attempts, nativeLabel, atLeast }"
+            typeof options === 'function'
+              ? 'a positional aim function (it is now { aim })'
+              : `unknown option(s) ${unknown.join(', ')} - the fifth argument is ` +
+                '{ aim, attempts, nativeLabel, atLeast }'
           }. Refusing to tap: an ignored aim presses the middle of the control, ` +
-            "which fails a segment check and blames delivery.",
+            'which fails a segment check and blames delivery.'
         );
       }
       const { aim, attempts = 3, nativeLabel, atLeast = false } = options;
       const target = Number(expected);
       if (atLeast && !Number.isInteger(target)) {
         log.abort(
-          `${waitingFor}: atLeast needs a counter, and "${expected}" is not one`,
+          `${waitingFor}: atLeast needs a counter, and "${expected}" is not one`
         );
       }
       const { delivered, shown } = await this.pressUntil({
@@ -368,7 +368,7 @@ function makeContext(device, log) {
               log.abort(
                 `${waitingFor}: nativeLabel "${nativeLabel}" does not name the control ` +
                   `being pressed ("${node.contentDesc}") - the native-state witness ` +
-                  "would read the wrong control",
+                  'would read the wrong control'
               );
             }
           }
@@ -391,10 +391,10 @@ function makeContext(device, log) {
       if (!delivered) {
         log.abort(
           `${waitingFor}: ${String(attempts)} real taps left ${testID} at "${String(
-            shown,
-          )}" rather than ${atLeast ? "at least " : ""}"${expected}" - either the taps were never ` +
-            "delivered or the control ignores a real touch. One delivered " +
-            "tap was enough to pass, so this is not a control that answers sometimes.",
+            shown
+          )}" rather than ${atLeast ? 'at least ' : ''}"${expected}" - either the taps were never ` +
+            'delivered or the control ignores a real touch. One delivered ' +
+            'tap was enough to pass, so this is not a control that answers sometimes.'
         );
       }
       return /** @type {string} */ (shown);
@@ -411,21 +411,21 @@ function makeContext(device, log) {
      */
     async tapUntilUp(lookUp, waitingFor, countUp, options = {}) {
       const { delivered, shown } = await this.pressUntil({
-        what: "its window",
+        what: 'its window',
         waitingFor,
         ...options,
         press: async () => {
           await this.tapNode(await lookUp());
         },
         reading: () => String(countUp()),
-        raised: (current) => current !== "0",
+        raised: (current) => current !== '0',
       });
       if (!delivered) {
         const attempts = String(options.attempts ?? 3);
         log.abort(
           `${waitingFor}: ${attempts} real taps opened nothing - either the taps ` +
-            "were never delivered or the control cannot present. " +
-            "The dump above is the screen a finger would have found.",
+            'were never delivered or the control cannot present. ' +
+            'The dump above is the screen a finger would have found.'
         );
       }
       return shown;
@@ -447,7 +447,7 @@ function makeContext(device, log) {
       testID,
       expected,
       waitingFor,
-      attempts = 3,
+      attempts = 3
     ) {
       const { delivered, shown } = await this.pressUntil({
         what: `menu row "${option}"`,
@@ -461,7 +461,7 @@ function makeContext(device, log) {
             return;
           }
           await this.tapNode(
-            this.waitForOption(option, "the menu row to still be up"),
+            this.waitForOption(option, 'the menu row to still be up')
           );
         },
         reading: () => echo(testID),
@@ -471,7 +471,7 @@ function makeContext(device, log) {
         log.abort(
           `${waitingFor}: ${String(attempts)} real taps on "${option}" left ${testID} ` +
             `"${String(shown)}" rather than "${expected}" - either the taps were never ` +
-            "delivered or the row ignores a real touch.",
+            'delivered or the row ignores a real touch.'
         );
       }
       return /** @type {string} */ (shown);
@@ -507,7 +507,7 @@ function makeContext(device, log) {
       if (moved != null) {
         log.abort(
           `${description}: ${testID} went to "${String(moved)}" when it should ` +
-            `have stayed "${expected}"`,
+            `have stayed "${expected}"`
         );
       }
       return echo(testID);
@@ -567,7 +567,7 @@ function makeContext(device, log) {
         if (Date.now() - startedAt > REACT_TIMEOUT) {
           log.abort(
             `timed out after ${String(REACT_TIMEOUT)}ms waiting for ${description} - ` +
-              `popup windows ${String(count)}, expected ${String(expected)}`,
+              `popup windows ${String(count)}, expected ${String(expected)}`
           );
         }
         blockMs(100);
@@ -576,7 +576,7 @@ function makeContext(device, log) {
       const waitedMs = Date.now() - startedAt;
       if (waitedMs > 250) {
         log.note(
-          `popup windows reached ${String(expected)} after ${String(waitedMs)}ms`,
+          `popup windows reached ${String(expected)} after ${String(waitedMs)}ms`
         );
       }
       return count;
@@ -629,12 +629,12 @@ function makeContext(device, log) {
      * @param {number} [holdMs]
      */
     async holdThenDrag(x, y, dyPx, holdMs = 900) {
-      device.motion("DOWN", x, y);
+      device.motion('DOWN', x, y);
       await sleep(holdMs);
       for (let step = 1; step <= 5; step += 1) {
-        device.motion("MOVE", x, y + (dyPx * step) / 5);
+        device.motion('MOVE', x, y + (dyPx * step) / 5);
       }
-      device.motion("UP", x, y + dyPx);
+      device.motion('UP', x, y + dyPx);
       await sleep(300);
     },
   };
@@ -647,8 +647,8 @@ function makeContext(device, log) {
 function contextEcho(t) {
   /** @type {Record<string, number>} */
   const out = {};
-  for (const part of (t.echo("ctx-echo") ?? "").split(";")) {
-    const [key, value] = part.split("=");
+  for (const part of (t.echo('ctx-echo') ?? '').split(';')) {
+    const [key, value] = part.split('=');
     if (key != null && value != null && /^-?\d+$/.test(value)) {
       out[key] = Number(value);
     }
@@ -684,18 +684,18 @@ function contextPopup(t) {
   const height = t.displayHeight();
   const content = nodes.find(
     (node) =>
-      node.resourceId === "android:id/content" &&
+      node.resourceId === 'android:id/content' &&
       !(
         node.bounds.x1 === 0 &&
         node.bounds.y1 === 0 &&
         node.bounds.x2 === width &&
         node.bounds.y2 === height
-      ),
+      )
   );
   if (content == null) return null;
   return {
     bounds: content.bounds,
-    rows: nodes.filter((node) => node.text !== "").map((node) => node.text),
+    rows: nodes.filter((node) => node.text !== '').map((node) => node.text),
     nodes,
   };
 }
@@ -732,7 +732,7 @@ function pointIn(bounds, fx, fy) {
 async function contextClose(t) {
   if (contextPopup(t) == null) return;
   await t.pressBack();
-  t.waitForPopupCount(0, "Back to close the context menu");
+  t.waitForPopupCount(0, 'Back to close the context menu');
   await sleep(300);
 }
 
@@ -741,7 +741,7 @@ async function contextTop(t) {
   const edge = t.displayWidth() - 8;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     if ((contextEcho(t).scrollY ?? 0) <= 0) return;
-    const view = t.nodeByTestId("ctx-scroll")?.bounds;
+    const view = t.nodeByTestId('ctx-scroll')?.bounds;
     if (view == null) return;
     const from = Math.round(view.y1 + (view.y2 - view.y1) * 0.3);
     await t.swipePx(edge, from, edge, from + 700, 300);
@@ -753,7 +753,7 @@ async function contextTop(t) {
 async function contextReset(t) {
   await contextClose(t);
   await contextTop(t);
-  await t.tapTestId("ctx-reset");
+  await t.tapTestId('ctx-reset');
   await contextEchoWhen(t, (echo) => echo.press === 0 && echo.opens === 0);
 }
 
@@ -766,8 +766,8 @@ async function contextReset(t) {
 async function contextMenuChecks(t) {
   const { log } = t;
   await contextReset(t);
-  const target = t.nodeByTestId("ctx-target")?.bounds;
-  if (target == null) log.abort("no ctx-target on the ContextMenu screen");
+  const target = t.nodeByTestId('ctx-target')?.bounds;
+  if (target == null) log.abort('no ctx-target on the ContextMenu screen');
 
   // Hold, then drag in the same gesture: the menu is up and the page stays still.
   // Back closes it.
@@ -776,22 +776,22 @@ async function contextMenuChecks(t) {
     const before = contextEcho(t);
     await t.holdThenDrag(from.x, from.y, -400);
     const popup = await contextPopupWithin(t, 2000);
-    log.check("a hold then a drag opens the menu", popup != null);
+    log.check('a hold then a drag opens the menu', popup != null);
     await t.pressBack();
-    t.waitForPopupCount(0, "Back to close the menu");
+    t.waitForPopupCount(0, 'Back to close the menu');
     const after = await contextEchoWhen(
       t,
-      (e) => e.closes === before.closes + 1,
+      (e) => e.closes === before.closes + 1
     );
     log.checkEquals(
-      "and the page under it did not move (scrollY)",
+      'and the page under it did not move (scrollY)',
       after.scrollY,
-      before.scrollY,
+      before.scrollY
     );
     log.checkEquals(
-      "Back closes it, reported once",
+      'Back closes it, reported once',
       after.closes - before.closes,
-      1,
+      1
     );
   }
 }
@@ -801,7 +801,7 @@ async function contextMenuChecks(t) {
  * What runs after the suite, in this order: each entry navigates to its control's own
  * screen, so one that leaves a window standing would take the next one's screen down.
  */
-const TREE_CHECKS = [{ id: "context-menu", run: contextMenuChecks }];
+const TREE_CHECKS = [{ id: 'context-menu', run: contextMenuChecks }];
 
 /** The controls these checks cover, so a caller can tell an empty run from a covered one. */
 export const TREE_CHECK_IDS = TREE_CHECKS.map((entry) => entry.id);
@@ -813,7 +813,7 @@ function screenOf(id) {
   const control = REAL_INPUT_CONTROLS.find((entry) => entry.id === id);
   if (control == null) {
     throw new Error(
-      `real-input: the tree check "${id}" names no control in controls.mjs.`,
+      `real-input: the tree check "${id}" names no control in controls.mjs.`
     );
   }
   return control.screen;
@@ -833,7 +833,7 @@ const RETURN_DEADLINE_MS = 30_000;
  */
 export async function returnToAppWindow(
   device,
-  timeoutMs = RETURN_DEADLINE_MS,
+  timeoutMs = RETURN_DEADLINE_MS
 ) {
   await device.awaitApp({ timeoutMs, backs: 3 });
 }

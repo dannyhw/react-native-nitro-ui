@@ -25,29 +25,29 @@
  */
 export function readWindowFocus(dump, appId) {
   const focus = dump.match(
-    /mCurrentFocus=(?:null|Window\{(\S+) u\d+ ([^\n]*)\})/,
+    /mCurrentFocus=(?:null|Window\{(\S+) u\d+ ([^\n]*)\})/
   );
   if (focus?.[1] == null) {
-    return { title: null, owner: "none" };
+    return { title: null, owner: 'none' };
   }
   const [, hash, title] = focus;
   const block = windowBlock(dump, hash);
   if (block == null) {
     return {
       title,
-      owner: title.startsWith(`${appId}/`) ? "activity" : "other",
+      owner: title.startsWith(`${appId}/`) ? 'activity' : 'other',
     };
   }
   if (block.package !== appId) {
-    return { title, owner: "other" };
+    return { title, owner: 'other' };
   }
-  if (block.type === "BASE_APPLICATION") {
-    return { title, owner: "activity" };
+  if (block.type === 'BASE_APPLICATION') {
+    return { title, owner: 'activity' };
   }
-  if (block.type === "APPLICATION_STARTING") {
-    return { title, owner: "starting" };
+  if (block.type === 'APPLICATION_STARTING') {
+    return { title, owner: 'starting' };
   }
-  return { title, owner: "app-window" };
+  return { title, owner: 'app-window' };
 }
 
 /**
@@ -58,7 +58,7 @@ export function readWindowFocus(dump, appId) {
  * @returns {{ package: string | null, type: string | null } | null}
  */
 function windowBlock(dump, hash) {
-  const lines = dump.split("\n");
+  const lines = dump.split('\n');
   const header = new RegExp(`^\\s*Window #\\d+ Window\\{${hash} `);
   const start = lines.findIndex((line) => header.test(line));
   if (start === -1) return null;
