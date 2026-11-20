@@ -33,7 +33,8 @@
  * records the Progress bar that came back 0 px wide for exactly this). Reading every
  * control from the top of its screen would report healthy controls as missing, and the
  * first person to see those failures would add an exemption for the wrong reason. So each
- * case scrolls until its control has a box, and only then reads.
+ * case scrolls until its control's box is wholly inside the window, or until the page ends,
+ * and only then reads.
  *
  * @file Split from `android.mjs` so the pass can be read on its own. The rule it applies
  *       lives in `./a11y.mjs`, is unit-tested against measured dumps in
@@ -56,17 +57,24 @@ const A11Y_FLAG = '--a11y';
 /** @typedef {import('./a11y.mjs').A11yControl} A11yControl */
 
 /**
- * How far to swipe looking for a control before concluding it is not on the page.
+ * Swipes a case may take before the page is called endless rather than long.
  *
- * Eight swipes of 320 px is 2560 px, more than the longest screen in the example app
- * (`HostScreen.tsx` is the deep one, and every hosted case is on it). A control that needs
- * more than that is not on the screen its table row names, which is a finding, not a
- * scroll budget.
+ * Not a budget for finding a control: the probe stops when the control is wholly on screen
+ * or when the page stops moving. The deepest screens end in a 200-row list of rows
+ * up to 131 px tall, roughly 30,000 to 40,000 px of page. A swipe moves an emulator's page
+ * about 350 px; 400 swipes still reach the end of 40,000 px at 100 px a swipe. Reaching the
+ * cap means the tree changed on every dump, and the case fails.
  */
-const SCROLL_PROBE_LIMIT = 8;
+const SCROLL_PROBE_LIMIT = 400;
 
 /** The swipe distance per probe, in pixels. */
 const SCROLL_PROBE_PX = 320;
+
+/**
+ * Swipes in a row that must leave the page unmoved before it counts as ended: a loaded
+ * device can drop one swipe, and that alone must not end a page mid-way.
+ */
+const STILL_SWIPES = 2;
 
 /**
  * Run the a11y sweep over every control in the table.
@@ -88,8 +96,12 @@ const SCROLL_PROBE_PX = 320;
  *   them: a re-press it does not report is a retry no log carries and no summary counts
  *   (X21, where the sweep's navigations were the silent half of the run's tab taps).
  * @param {() => import('./uiautomator.mjs').UiautomatorNode[]} navigation.dump
+ * @param {number} navigation.windowHeight the window's height, in the dump's pixels
  * @param {(pixels: number) => Promise<void>} navigation.scrollPage
  * @param {() => Promise<void>} navigation.scrollToTop
+ * @param {(control: A11yControl) => string | Promise<string>} [navigation.keepEvidence]
+ *   called only for a red case, straight after the verdict: keeps what the verdict was
+ *   made on and answers with a sentence naming it, for the case's `✗` line
  * @param {ReadonlyArray<A11yControl>} [controls] the cases to run: the whole table unless
  *   the run named cases with `--a11y`
  * @returns {Promise<{covered: string[], matched: string[], stale: string[]}>} what the
@@ -113,7 +125,15 @@ export async function runA11ySweep(
       await navigation.goToScreen(control.screen, log);
       screen = control.screen;
     }
-    const tree = await treeShowing(navigation, control.label);
+    const { tree, endless } = await treeShowing(navigation, control.label);
+    if (endless) {
+      log.check(
+        `the page was still moving after ${String(SCROLL_PROBE_LIMIT)} swipes and never ` +
+          `showed "${control.label}" wholly on screen, so the sweep stopped scrolling ` +
+          'and graded the last dump',
+        false
+      );
+    }
     covered.push(control.id);
     const result = checkControlA11y(control, tree);
     for (const problem of result.known) {
@@ -125,7 +145,7 @@ export async function runA11ySweep(
     if (result.exempt) matched.push(control.id);
     // One assertion per case, phrased as the rule: `log.check` prints `✗` plus the
     // description on failure, which is what `gate.mjs` harvests into a run's failure
-    // excerpt — so the description has to carry the finding, not a label.
+    // excerpt — so the description has to carry the finding and its evidence.
     log.check(
       result.failures.length === 0
         ? result.known.length === 0
@@ -133,7 +153,9 @@ export async function runA11ySweep(
           : `${control.hybridView} has no new a11y finding — and no clean pass either: ` +
             `${String(result.known.length)} of its problems match a debt row, printed ` +
             'above, so the rule is answered by the exemption rather than by the dump'
-        : result.failures.join(' | '),
+        : [result.failures.join(' | '), await evidence(navigation, control)]
+            .filter(Boolean)
+            .join(' — '),
       result.failures.length === 0
     );
   }
@@ -164,31 +186,85 @@ export async function runA11ySweep(
 }
 
 /**
- * A dump in which `label` has a box, scrolling to find it.
+ * What a red case leaves for a reader, as one sentence, or '' when the device keeps
+ * nothing. A failure to keep it is said in the line, never instead of the verdict.
  *
- * Stops as soon as the name appears with one, so a control near the top costs a single
- * dump. Returns the last tree even when the name never had a box: that is a finding the
- * rule has to report (either the control is not on this screen or it is drawn at nothing),
- * and swallowing it here would turn a failure back into a scroll timeout.
- *
- * @param {{dump: () => any[], scrollPage: (pixels: number) => Promise<void>, scrollToTop: () => Promise<void>}} navigation
- * @param {string} label
+ * @param {{keepEvidence?: (control: A11yControl) => string | Promise<string>}} navigation
+ * @param {A11yControl} control
  */
-async function treeShowing(navigation, label) {
-  await navigation.scrollToTop();
-  let tree = navigation.dump();
-  for (let probe = 0; probe < SCROLL_PROBE_LIMIT; probe += 1) {
-    const hasBox = tree.some(
-      (node) =>
-        node.contentDesc === label &&
-        node.bounds.width > 0 &&
-        node.bounds.height > 0
-    );
-    if (hasBox) return tree;
-    await navigation.scrollPage(SCROLL_PROBE_PX);
-    tree = navigation.dump();
+async function evidence(navigation, control) {
+  if (navigation.keepEvidence == null) return '';
+  try {
+    return await navigation.keepEvidence(control);
+  } catch (error) {
+    return `no evidence kept: ${String(/** @type {Error} */ (error)?.message ?? error)}`;
   }
-  return tree;
 }
 
-export { SCROLL_PROBE_LIMIT, SCROLL_PROBE_PX };
+/**
+ * A dump in which `label` has a box, scrolling to find it.
+ *
+ * The box has to be wholly inside the window. Stops as soon as it is, so a control near
+ * the top costs a single dump, or once {@link STILL_SWIPES} swipes in a row leave the page
+ * where it was. Returns the
+ * last tree either way: a name with no box there is a finding the rule has to report, and
+ * swallowing it here would turn a failure back into a scroll timeout. `endless` is set only when the page was still moving after
+ * {@link SCROLL_PROBE_LIMIT} swipes.
+ *
+ * @param {{dump: () => any[], scrollPage: (pixels: number) => Promise<void>, scrollToTop: () => Promise<void>, windowHeight: number}} navigation
+ * @param {string} label
+ * @returns {Promise<{tree: any[], endless: boolean}>}
+ */
+async function treeShowing(navigation, label) {
+  const { windowHeight } = navigation;
+  if (!(windowHeight > 0)) {
+    throw new TypeError(
+      `a11y sweep: the navigation's windowHeight is ${String(windowHeight)}, so no box ` +
+        'can be called on screen'
+    );
+  }
+  await navigation.scrollToTop();
+  let tree = await navigation.dump();
+  let still = 0;
+  for (let probe = 0; probe < SCROLL_PROBE_LIMIT; probe += 1) {
+    if (tree.some((node) => whollyInside(node, label, windowHeight))) {
+      return { tree, endless: false };
+    }
+    const before = pageSignature(tree);
+    await navigation.scrollPage(SCROLL_PROBE_PX);
+    tree = await navigation.dump();
+    still = pageSignature(tree) === before ? still + 1 : 0;
+    if (still === STILL_SWIPES) return { tree, endless: false };
+  }
+  return {
+    tree,
+    endless: !tree.some((node) => whollyInside(node, label, windowHeight)),
+  };
+}
+
+/**
+ * `uiautomator` clips a box to the window, so a box that ends on the window's bottom edge
+ * may be cut off there: only one that ends above it is known to be whole.
+ */
+function whollyInside(node, label, windowHeight) {
+  return (
+    node.contentDesc === label &&
+    node.bounds.width > 0 &&
+    node.bounds.height > 0 &&
+    node.bounds.y2 < windowHeight
+  );
+}
+
+/** Which nodes sit at which boxes: equal before and after a swipe means it moved nothing. */
+function pageSignature(tree) {
+  return tree
+    .map(
+      (node) =>
+        `${String(node.className)}|${String(node.resourceId)}|${String(node.contentDesc)}@` +
+        `${String(node.bounds.x1)},${String(node.bounds.y1)},` +
+        `${String(node.bounds.x2)},${String(node.bounds.y2)}`
+    )
+    .join(';');
+}
+
+export { SCROLL_PROBE_LIMIT, SCROLL_PROBE_PX, STILL_SWIPES };

@@ -863,8 +863,78 @@ describe('the a11y sweep, against a fake device', () => {
         this.scrolls += 1;
       },
       dump,
+      windowHeight: WINDOW_HEIGHT,
     };
   }
+
+  const WINDOW_HEIGHT = 2424;
+
+  /**
+   * A page taller than the window, as `uiautomator` reports it: each node's box is cut at
+   * the window's bottom edge, and a node wholly below the window is a zero-sized box at
+   * the origin, the way a Spinner below the fold came back on a slow runner. Each swipe
+   * moves the page `step` px, until it reaches its end; the swipes numbered in `dropped`
+   * (from 1) move nothing, as a dropped input does. Rows of text fill the page between
+   * the named nodes, as a screen's titles and captions do, so a swipe that moves it shows.
+   */
+  function scrollingPage(named, { step, end, dropped = [] }) {
+    const rows = Array.from(
+      { length: Math.ceil((end + WINDOW_HEIGHT) / 250) },
+      (_, i) => ({
+        label: '',
+        top: i * 250,
+        height: 40,
+      })
+    );
+    const nodes = [...rows, ...named];
+    const page = {
+      offset: 0,
+      scrolls: 0,
+      dumps: [],
+      async goToScreen() {},
+      async scrollToTop() {
+        page.offset = 0;
+      },
+      async scrollPage() {
+        page.scrolls += 1;
+        if (dropped.includes(page.scrolls)) return;
+        page.offset = Math.min(end, page.offset + step);
+      },
+      dump() {
+        const tree = nodes.map(({ label, top, height }) => {
+          const y1 = top - page.offset;
+          const y2 = Math.min(WINDOW_HEIGHT, y1 + height);
+          return y1 >= WINDOW_HEIGHT
+            ? node(label, { width: 0, height: 0 })
+            : placed(node(label), { y1, y2 });
+        });
+        page.dumps.push(tree);
+        return tree;
+      },
+      windowHeight: WINDOW_HEIGHT,
+    };
+    return page;
+  }
+
+  function placed(entry, { y1, y2 }) {
+    const { x1, x2 } = entry.bounds;
+    return {
+      ...entry,
+      bounds: {
+        x1,
+        y1,
+        x2,
+        y2,
+        cx: (x1 + x2) / 2,
+        cy: (y1 + y2) / 2,
+        width: x2 - x1,
+        height: y2 - y1,
+      },
+    };
+  }
+
+  const boxOf = (tree, label) =>
+    tree.find((entry) => entry.contentDesc === label)?.bounds;
 
   function collector() {
     /** @type {Array<{id: string, log: any}>} */
@@ -949,15 +1019,111 @@ describe('the a11y sweep, against a fake device', () => {
     });
   });
 
-  it('judges the last tree after the scroll budget runs out, and says what it saw', () => {
+  it('judges the last tree once two swipes leave the page unmoved, and says what it saw', () => {
     const { begin, logs } = collector();
     const navigation = fakeNavigation(() => [
       node('Controlled switch', { width: 0, height: 0 }),
     ]);
     return runA11ySweep(begin, navigation, switchCase()).then(() => {
-      expect(navigation.scrolls).toBe(SCROLL_PROBE_LIMIT);
+      expect(navigation.scrolls).toBe(2);
       expect(logs[0].log.failures.join('\n')).toContain('zero-sized box');
     });
+  });
+
+  it('keeps scrolling a page whose swipes move it less than asked, past eight swipes', async () => {
+    const { begin, logs } = collector();
+    // 200 px per swipe: eight swipes leave the picker below the window, the ninth shows it.
+    const page = scrollingPage(
+      [
+        { label: 'Hosted segmented', top: 3900, height: 95 },
+        { label: 'Hosted picker', top: 4100, height: 95 },
+      ],
+      { step: 200, end: 4000 }
+    );
+    await runA11ySweep(begin, page, only('hosted-picker'));
+    expect(page.scrolls).toBe(9);
+    const graded = boxOf(page.dumps.at(-1), 'Hosted picker');
+    expect(graded.height).toBe(95);
+    expect(graded.y2).toBeLessThan(WINDOW_HEIGHT);
+    expect(logs[0].log.failures).toEqual([]);
+  });
+
+  it('keeps scrolling past one dropped swipe mid-page', async () => {
+    const { begin, logs } = collector();
+    // Nine moving swipes show the picker; the third swipe is dropped, so it takes ten.
+    const page = scrollingPage(
+      [{ label: 'Hosted picker', top: 4100, height: 95 }],
+      { step: 200, end: 4000, dropped: [3] }
+    );
+    await runA11ySweep(begin, page, only('hosted-picker'));
+    expect(page.scrolls).toBe(10);
+    const graded = boxOf(page.dumps.at(-1), 'Hosted picker');
+    expect(graded.height).toBe(95);
+    expect(graded.y2).toBeLessThan(WINDOW_HEIGHT);
+    expect(logs[0].log.failures).toEqual([]);
+  });
+
+  it('scrolls once more when the control only touches the window’s bottom edge', async () => {
+    const { begin, logs } = collector();
+    // The runner's dump: `[42,2329][535,2424]`, cut at the edge, not the whole control.
+    const page = scrollingPage(
+      [{ label: 'Hosted segmented', top: 2329, height: 140 }],
+      { step: 200, end: 2000 }
+    );
+    expect(boxOf(page.dump(), 'Hosted segmented').y2).toBe(WINDOW_HEIGHT);
+    await runA11ySweep(begin, page, only('hosted-segmented'));
+    expect(page.scrolls).toBe(1);
+    const graded = boxOf(page.dumps.at(-1), 'Hosted segmented');
+    expect(graded).toMatchObject({ y1: 2129, y2: 2269, height: 140 });
+    expect(logs[0].log.failures).toEqual([]);
+  });
+
+  it('ends the probe where the page ends, and reports a missing control as today', async () => {
+    const { begin, logs } = collector();
+    // Three swipes reach the end, the next two move nothing; the case's name is never drawn.
+    const page = scrollingPage(
+      [{ label: 'Something else', top: 100, height: 40 }],
+      {
+        step: 300,
+        end: 900,
+      }
+    );
+    await runA11ySweep(begin, page, only('hosted-picker'));
+    expect(page.scrolls).toBe(5);
+    expect(logs[0].log.failures.join('\n')).toContain(
+      'announces this control as nothing'
+    );
+    expect(logs[0].log.failures.join('\n')).not.toContain('still moving');
+  });
+
+  it('fails a case whose page never stops changing, saying the cap was reached', async () => {
+    const { begin, logs } = collector();
+    let dumps = 0;
+    const navigation = fakeNavigation(() => {
+      dumps += 1;
+      return [
+        node('Controlled switch', {
+          width: 0,
+          height: 0,
+          resourceId: String(dumps),
+        }),
+      ];
+    });
+    await runA11ySweep(begin, navigation, switchCase());
+    expect(navigation.scrolls).toBe(SCROLL_PROBE_LIMIT);
+    expect(logs[0].log.failures[0]).toContain(
+      `still moving after ${String(SCROLL_PROBE_LIMIT)} swipes`
+    );
+    expect(logs[0].log.failures.join('\n')).toContain('zero-sized box');
+  });
+
+  it('refuses a navigation that does not say how tall its window is', async () => {
+    const { begin } = collector();
+    const navigation = fakeNavigation(() => [node('Controlled switch')]);
+    delete navigation.windowHeight;
+    await expect(runA11ySweep(begin, navigation, switchCase())).rejects.toThrow(
+      'windowHeight'
+    );
   });
 
   it('reports a control that never appears as a failure, not as a scroll timeout', () => {

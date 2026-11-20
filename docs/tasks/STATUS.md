@@ -15,6 +15,10 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-20 Nothing user-visible: the Android a11y sweep grades a control only once it is wholly on
+  screen, scrolling until then or until the page ends (X63, #122), and a red case keeps its
+  final dump and a screenshot and names the nearest drawn ancestor of a name with no box
+  (X62, #120).
 - 11-20 Nothing user-visible: when the Android Form keyboard test fails, it records whether the
   keyboard closed while the field stayed focused (FIX25, #119).
 - 11-20 Nothing user-visible: the Android ContextMenu bottom-edge test waits for the device's own

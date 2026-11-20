@@ -126,6 +126,7 @@ describe('a full Android run whose only failure is one a11y case', () => {
           scrollToTop: async () => {},
           scrollPage: async () => {},
           dump: () => [node('Controlled switch')],
+          windowHeight: 2424,
         },
         A11Y_CONTROLS.filter((entry) =>
           ['switch', 'hosted-date-picker'].includes(entry.id)

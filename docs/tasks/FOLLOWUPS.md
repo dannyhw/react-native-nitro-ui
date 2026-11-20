@@ -397,6 +397,11 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - The focus read takes the first display's `mCurrentFocus`; with more than one display, `mTopFocusedDisplayId`'s block is the right one.
   - A Back sent to the app's own window is a second adb command after the focus read; a popup closing in between passes it to the activity.
   - The window-focus fixtures are written by hand, not trimmed from a real dump.
+  - An a11y sweep case that throws before its verdict (dump refused four times, tab unreachable) keeps no evidence; the same capture could run where the error is caught.
+  - A control truly missing from a 200-row screen costs about 100 swipes before the sweep fails it (minutes on a hosted runner); today every case's control sits above the lists.
+  - On a hosted runner, the dev LogBox toast "Open debugger to view warnings" sits over the bottom of the window.
+  - On a hosted runner, agent-device's own `app.open()` once failed with `ENGINE_FAILURE: ... remained foreground after close` (first test of the run).
+  - agent-device once returned a tree with two identical popup subtrees and no page nodes 51 ms after a hold opened one ContextMenu popup.
   - The `check` scan of tooling tests' `nitrogen/` reads sees only literal paths; `test:library` has no such scan of its own reads.
   - `pressableItem` rejecting a clickable node outside the group's box is never shown red; a unit test with a stand-in driver would cover it.
   - `android-tree-checks.mjs`: `makeContext` keeps helpers nothing calls (`requireControl`, `requireControlOnScreen`, `nodesNamed`), and two comments there tell history or document nothing.
