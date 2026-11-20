@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-20 Nothing user-visible: the Android ContextMenu bottom-edge test waits for the device's own
+  popup window and holds clear of the system gesture area (FIX24, #121).
 - 11-20 Nothing user-visible: the iOS split Menu test waits for the tap's action instead of a fixed
   400 ms (FIX23, #116).
 - 11-20 Nothing user-visible: the SearchField clear-button, hosted Picker menu and Slider drag tests

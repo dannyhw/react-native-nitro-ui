@@ -1,7 +1,7 @@
 import { test } from '@e2e-dev/mobile';
 import { expect, type Screen } from 'e2e';
 
-import { displayDensity, popupWindowCount } from './device-read';
+import { adbShell, displayDensity, popupWindowCount } from './device-read';
 import { actionFlags } from './os-tree';
 import { boxOf, openScreen, reveal, type Box, type Point } from './support';
 
@@ -102,6 +102,31 @@ async function popupsReach(count: number): Promise<void> {
       message: `the app's popup windows never reached ${String(count)}`,
     })
     .toBe(count);
+}
+
+/**
+ * The window manager's answer to "did the hold's menu come up", asked before the tree.
+ *
+ * A tree read straight after a hold can catch the window change itself: it has carried
+ * the open menu's subtree twice, and a locator that expects one node calls that
+ * ambiguous instead of waiting for the change to end.
+ */
+async function popupWindowUp(): Promise<void> {
+  await expect
+    .poll(() => popupWindowCount(), {
+      timeout: WINDOW_GONE_MS,
+      interval: 250,
+      message:
+        'the hold put no popup window up: the ContextMenu never opened, so no ' +
+        'placement was ever asked for',
+    })
+    .toBeGreaterThan(0);
+  const up = popupWindowCount();
+  expect(
+    up,
+    `the hold put ${String(up)} popup windows up. One open ContextMenu owns exactly ` +
+      'one: two windows is the menu drawn twice, not a slower read of one menu'
+  ).toBe(1);
 }
 
 function pointIn(box: Box, fx: number, fy: number): Point {
@@ -379,6 +404,7 @@ test('a menu that is not accessible offers TalkBack no long-click and no stop', 
 }) => {
   await app.open();
   await openScreen(screen, 'contextmenu');
+  await screen.getByTestId('ctx-bottom').waitFor({ state: 'visible' });
   const plain = actionFlags({ testId: 'ctx-bottom' });
   expect(
     { longClickable: plain?.longClickable, focusable: plain?.focusable },
@@ -386,21 +412,96 @@ test('a menu that is not accessible offers TalkBack no long-click and no stop', 
   ).toEqual({ longClickable: 'false', focusable: 'false' });
 });
 
+/** How far above the system's bottom strip the finger sits, in dp. */
+const CLEAR_OF_STRIP_DP = 12;
+
+/** One visible `navigationBars` or `mandatorySystemGestures` source, with its frame. */
+const SYSTEM_BOTTOM_INSET =
+  /\bInsetsSource\b[^\n]*?\btype=(?:navigationBars|mandatorySystemGestures)\b[^\n]*?\bframe=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\][^\n]*?\bvisible=(true|false)/g;
+
+/**
+ * The top edge of the strip the system keeps along the bottom of the screen, which takes
+ * a touch that starts inside it.
+ *
+ * This is the app's own inset, read out of its window's `InsetsState` the way the
+ * keyboard's edge is read: the strip is one height in button navigation and another in
+ * gesture navigation, so a hardcoded line would be a guess about the system image.
+ */
+function systemStripTopPx(contentBottom: number): number {
+  const dump = adbShell(['dumpsys', 'activity', 'top']);
+  const seen: string[] = [];
+  let top = Number.POSITIVE_INFINITY;
+  for (const match of dump.matchAll(SYSTEM_BOTTOM_INSET)) {
+    seen.push((match[0] ?? '').trim().slice(0, 160));
+    const sourceTop = Number(match[2]);
+    const bottom = Number(match[4]);
+    if (match[5] !== 'true' || bottom < contentBottom) continue;
+    // A source over the whole window is the insets host, not a strip at an edge.
+    if (sourceTop <= 0 || bottom - sourceTop > contentBottom / 2) continue;
+    top = Math.min(top, sourceTop);
+  }
+  if (!Number.isFinite(top)) {
+    throw new Error(
+      'real-input: the device named no bottom system strip, so this case has no line to ' +
+        `hold clear of. Its own strip lines: ${seen.length > 0 ? seen.join(' ~ ') : 'none at all'}.`
+    );
+  }
+  return top;
+}
+
+/**
+ * The lowest point inside `row` that a touch reaches the app with: at `stripTop` the
+ * system's strip begins, and a hold there is the gesture handle's, not the app's.
+ */
+function lowestHoldInRow(row: Box, stripTop: number, density: number): Point {
+  const at = {
+    x: Math.round(row.x + row.width * 0.3),
+    y: stripTop - Math.round(CLEAR_OF_STRIP_DP * density),
+  };
+  expect(
+    at.y > row.y && at.y < row.y + row.height,
+    `"ctx-bottom" spans ${String(row.y)}..${String(row.y + row.height)} and the system's ` +
+      `bottom strip starts at ${String(stripTop)}, so a hold clear of the handle never ` +
+      `lands inside the row: it would sit at ${String(at.y)}. The row has to reach above ` +
+      'the strip for anything to be held at the bottom edge.'
+  ).toBe(true);
+  return at;
+}
+
 test('at the bottom edge the menu opens above the finger', async ({
   app,
   screen,
 }) => {
   await app.open();
   await openScreen(screen, 'contextmenu');
-  const low = pointIn(await boxOfTestId(screen, 'ctx-bottom'), 0.3, 0.5);
+  const row = await boxOfTestId(screen, 'ctx-bottom');
+  // Read before the hold: while the popup is up the tree is its window's alone, and the
+  // content view's bottom is the edge the menu has to fit its whole height above.
+  const content = await boxOfTestId(screen, 'android:id/content');
+  const low = lowestHoldInRow(
+    row,
+    systemStripTopPx(content.y + content.height),
+    displayDensity()
+  );
   const before = await counts(screen);
 
   await holdAt(screen, low);
-  const popup = await popupBox(screen, 'Bottom one');
+  await popupWindowUp();
+  // The popup's box, from the one read that cannot catch the window change: a tree taken
+  // during it holds the menu's subtree twice, and only a settled one answers one.
+  await expect(screen.getByText('Bottom one')).toHaveCount(1);
+  const popup = await boxOfTestId(screen, 'android:id/content');
   expect(
     popup.y + popup.height,
     `the popup ${JSON.stringify(popup)} reaches below the finger at ${String(low.y)}`
   ).toBeLessThanOrEqual(low.y);
+  const below = content.y + content.height - low.y;
+  expect(
+    popup.height,
+    `the menu is ${String(popup.height)} px tall with ${String(below)} px below the ` +
+      'finger, so it could have opened downwards: this hold is no longer at an edge that ' +
+      'leaves the menu one way to go'
+  ).toBeGreaterThan(below);
   await app.back();
   await popupsReach(0);
   await countReaches(screen, 'bottom', before.bottom + 1);
