@@ -186,6 +186,34 @@ async function reportedWhen(
   );
 }
 
+/**
+ * Wait until the app's log for `id` holds as many entries as `expected`, then return it.
+ * A field's native report settles as the event is sent, so a log read as soon as native
+ * looks done can still be short of the events that are on their way to JS.
+ */
+async function logReached(
+  id: string,
+  expected: readonly string[],
+  timeoutMs = 5000
+): Promise<string[]> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const logged = eventsOf(id);
+    if (logged.length >= expected.length) return logged;
+    if (Date.now() > deadline) {
+      const missing = expected.filter((entry) => !logged.includes(entry));
+      throw new Error(
+        `SearchField ${id}: log holds ${JSON.stringify(
+          logged
+        )} after ${String(timeoutMs)}ms; still missing ${JSON.stringify(
+          missing
+        )}`
+      );
+    }
+    await sleep(20);
+  }
+}
+
 /** Focus `id` through its `ref`-backed native method, and wait for it to land. */
 async function focusField(id: string) {
   const handle = await handleOf(id);
@@ -563,14 +591,15 @@ describe('SearchField', () => {
       (current) => !current.focused,
       'the blur after the submit'
     );
-    expect(eventsOf('submitted')).toEqual([
+    const submitted = [
       'focus',
       'change:t',
       'change:te',
       'change:tea',
       'submit:tea',
       'blur',
-    ]);
+    ];
+    expect(await logReached('submitted', submitted)).toEqual(submitted);
     expect(after.returnKeyType).toBe('search');
 
     // A fresh empty field, not this one: submitting does not clear the query, so "tea"
