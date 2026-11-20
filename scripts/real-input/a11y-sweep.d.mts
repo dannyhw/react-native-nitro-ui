@@ -22,6 +22,8 @@ export interface A11ySweepNavigation {
     | Promise<ReadonlyArray<UiautomatorNode>>;
   scrollPage(pixels: number): void | Promise<void>;
   scrollToTop(): void | Promise<void>;
+  /** A red case's evidence, kept; answers with a sentence naming it. */
+  keepEvidence?(control: A11yControl): string | Promise<string>;
 }
 
 export function runA11ySweep(
