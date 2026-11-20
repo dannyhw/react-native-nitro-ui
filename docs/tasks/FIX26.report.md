@@ -38,17 +38,19 @@ the two full harness gates.
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
 | `check` | **PASS** | 2214 tests / 100 suites | `723e4719144d` | 1 m 02 s | start 105.8 / med 69.3 / max 105.8 |
-| `harness:ios` | missing | — | — | — | — |
-| `harness:android` | missing | — | — | — | — |
+| `harness:ios` | **PASS** | 620 tests / 30 suites + isolated 6 tests / 3 suites | `723e4719144d` (harness:ios digest) | 14 m 36 s | start 7.4 / med 6.9 / max 15.3 |
+| `harness:android` | **PASS** | 678 tests / 31 suites + isolated 6 tests / 3 suites | `723e4719144d` (harness:android digest) | 18 m 21 s | start 7.4 / med 6.4 / max 15.2 |
 | `real-input:ios` | **PASS** (from `merge/FIX22-FIX23`) | — | `af6676d243db` (real-input:ios digest) | 45 m 19 s | start 3.3 / med 6.0 / max 66.7 |
 | `real-input:android` | **PASS** (from `merge/FIX22-FIX23`) | 76 tests / 28 suites | `af6676d243db` (real-input:android digest) | 37 m 46 s | start 9.8 / med 5.9 / max 12.2 |
+| `harness:android:HostPopups` | stale | 1 failed of 24 tests / 1 suites | e44df39de477 (not this tree) | 54.5 s | start 15.2 / med 11.4 / max 15.2 |
+| `harness:android:SearchField` | stale | 1 failed of 18 tests / 1 suites | 9aa15845e8bb (not this tree) | 45.4 s | start 13.0 / med 17.1 / max 19.1 |
 
-`need --for review`: need: 2 gate(s) missing for review: harness:ios, harness:android.
+`need --for review`: need: review is satisfied on this code tree.
 
 ## Red proofs
 
-Not run: both mutations need a device and no lease came. Prepared, JS-only, one line each, reverted
-the same run — the app stamps stay fresh through them because neither touches native code:
+Round one ran neither: both mutations need a device and no lease came. Prepared, JS-only, one line
+each, reverted the same run — each one moves the code tree, so the run needs a `build-app` restamp:
 
 - `SearchField › submits on the Search key, then blurs` -> in `src/components/SearchField/SearchField.tsx`,
   `useStableCallback(onSubmitEditing ?? onSubmitNotProvided)` becomes `useStableCallback(onSubmitNotProvided)`,
@@ -81,3 +83,22 @@ the same run — the app stamps stay fresh through them because neither touches 
   back — recommended, since nothing else is left to do and the tree is stable so one build of each
   app serves all four runs; (b) re-base onto whatever `main` is then, which costs a rebuild of both
   apps and a fresh `check`.
+
+## Fix round 1
+
+The owed device work only, from one both-platform lease with both apps built first; the tree is
+unchanged at `723e4719144d`. The Gates table is the regenerated one, so its two filtered rows are
+these red proofs.
+
+- `SearchField › submits on the Search key, then blurs - and never on an empty field` ->
+  `submitCallback` built from `onSubmitNotProvided` alone, so no `submit:` reaches the log -> red at
+  the `logReached` assertion: `log holds ["focus","change:t","change:te","change:tea","blur"] after
+  5000ms; still missing ["submit:tea"]`; 1 failed / 17 passed.
+- `Host › a hosted Picker's menu is a window of the Host › opens two popup owners in one Host, one
+  after the other` -> `TwoPopupOwners`' `onChange` refusing index 2, so the app's write never reaches
+  the control -> red at `indexReached(picker, 2)`: `No answer for "the hosted picker to hold index 2"
+  within 8000ms`; 1 failed / 23 passed.
+
+Each mutation was reverted before the next step and both apps restamped on the clean tree. Nothing
+else went red and no assertion moved. Both harness gates then ran full, side by side on that tree,
+and are green above; `need --for review` is satisfied.
