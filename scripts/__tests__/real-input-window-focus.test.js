@@ -94,21 +94,20 @@ const LAUNCHER_XML =
 function scriptedDevice(steps) {
   const sent = [];
   let step = 0;
-  const now = () => steps[Math.min(step, steps.length - 1)];
+  // The state the last focus read saw, and the first one before any read.
+  const shown = () => steps[Math.min(Math.max(step - 1, 0), steps.length - 1)];
   const adbShell = (command) => {
     sent.push(command);
     if (command === 'wm size') return 'Physical size: 1080x2400\n';
     if (command === 'dumpsys window') {
-      const shown = now();
       step += 1;
-      return dumpsysWindow(shown.focus);
+      return dumpsysWindow(shown().focus);
     }
     if (command.startsWith('uiautomator dump'))
       return 'UI hierchary dumped to: /sdcard/x.xml\n';
-    if (command.startsWith('cat '))
-      return steps[Math.min(step - 1, steps.length - 1)].xml;
+    if (command.startsWith('cat ')) return shown().xml;
     if (command === 'dumpsys input_method') {
-      return steps[Math.min(step - 1, steps.length - 1)].ime === true
+      return shown().ime === true
         ? 'mInputShown=true\n'
         : 'mInputShown=false\n';
     }
