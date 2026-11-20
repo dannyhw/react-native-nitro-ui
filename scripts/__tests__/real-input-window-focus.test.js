@@ -4,7 +4,7 @@ import { SweepDevice } from '../real-input/a11y-sweep-device.mjs';
 import { returnToAppWindow } from '../real-input/android-tree-checks.mjs';
 import { readWindowFocus } from '../real-input/window-focus.mjs';
 
-const APP = 'com.nitroui.example';
+const APP = 'nitroui.example';
 const LAUNCHER =
   'com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity';
 
@@ -90,34 +90,38 @@ function dumpsysWindow(focused) {
   return `${displaysSection(focused)}\n${windowsSection()}`;
 }
 
-const SEPARATOR = '-'.repeat(79);
-
 /**
- * A whole `dumpsys window` on a device that saved an ANR: the copy of the display
- * contents and window list taken at the ANR comes first, focused on `stale`, and the
- * live sections, focused on `live`, come later in their own order.
+ * A whole `dumpsys window` on a device that saved an ANR, in the order the window
+ * manager prints it. The saved copy comes first: the focus at the ANR, `stale`, printed
+ * as `mCurrentFocus=` (as some platform versions do), and that moment's window list.
+ * The live display contents, focused on `live`, and window list come later.
  */
 function fullDumpAfterAnr(stale, live) {
   return [
     'WINDOW MANAGER LAST ANR (dumpsys window lastanr)',
-    '  ANR time: 11/20/26 01:12:44.031',
+    '  ANR time: Nov 20, 2026 1:36:51 AM',
     `  Application at fault: ActivityRecord{9e1 u0 ${APP}/.MainActivity t12}`,
+    `  Window at fault: ${APP}/${APP}.MainActivity`,
     '  Reason: Application does not have a focused window',
     '',
-    '  Last ANR continued',
-    displaysSection(stale),
+    `  mCurrentFocus=${focusOf(stale)}`,
+    ...Object.values(WINDOWS),
     '',
-    windowsSection(),
-    SEPARATOR,
     'WINDOW MANAGER POLICY STATE (dumpsys window policy)',
     '    mSafeMode=false mSystemReady=true mSystemBooted=true',
-    SEPARATOR,
+    '',
+    'WINDOW MANAGER ANIMATOR STATE (dumpsys window animator)',
+    '',
+    'WINDOW MANAGER SESSIONS (dumpsys window sessions)',
+    '',
     displaysSection(live),
-    SEPARATOR,
+    '',
     'WINDOW MANAGER TOKENS (dumpsys window tokens)',
     '  All tokens:',
-    SEPARATOR,
+    '',
     windowsSection(),
+    '',
+    'WINDOW MANAGER TRACE (dumpsys window trace)',
   ].join('\n');
 }
 
@@ -224,7 +228,7 @@ describe('readWindowFocus after a saved ANR', () => {
 });
 
 describe('readWindowFocus with another package that starts with the app id', () => {
-  it('does not take a focused activity of `<app id>.dev` as the app', () => {
+  it('does not take a focused activity of `nitroui.example.dev` as the app', () => {
     const dev = `${APP}.dev`;
     const title = `${dev}/${dev}.MainActivity`;
     const listed = [
