@@ -37,10 +37,15 @@ function blockJs(ms: number) {
 export default function SliderScreen() {
   const ink = useInk();
   const [controlled, setControlled] = useState(0.25);
+  const [controlledCompletes, setControlledCompletes] = useState(0);
   const [rejections, setRejections] = useState(0);
   const [slowMs, setSlowMs] = useState(0);
   const [events, setEvents] = useState(0);
   const [lastComplete, setLastComplete] = useState<number | null>(null);
+
+  const noteControlledComplete = useCallback(() => {
+    setControlledCompletes((count) => count + 1);
+  }, []);
 
   const rejectChange = useCallback(() => {
     setRejections((count) => count + 1);
@@ -119,6 +124,7 @@ export default function SliderScreen() {
         <Slider
           value={controlled}
           onValueChange={setControlled}
+          onSlidingComplete={noteControlledComplete}
           testID="slider-controlled"
           accessibilityLabel="Controlled slider"
         />
@@ -128,6 +134,12 @@ export default function SliderScreen() {
             style={[styles.value, { color: ink.ink }]}
           >
             {controlled.toFixed(3)}
+          </Text>
+          <Text
+            testID="slider-controlled-complete-count"
+            style={[styles.value, { color: ink.muted }]}
+          >
+            {`controlledComplete=${controlledCompletes}`}
           </Text>
         </Row>
         <Pressable
