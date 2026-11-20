@@ -2028,7 +2028,8 @@ describe('Menu · Split trigger (E3)', () => {
       expectUnanswerable(before);
       expect(before.split).toBeNull();
       await pressTrigger('split');
-      await settle(400);
+      await waitForLog(primaryLog, 1, 'the split trigger tap');
+      await settle(250);
       expect(primaryLog).toEqual(['split:action']);
       expect(stateLog).toEqual([]);
       expect(report('split').split).toBeNull();
