@@ -29,9 +29,11 @@ that was there before: same expected values, same counts, same "no other event" 
   moved off the value the drag started from and two reads 250 ms apart agree — the value at rest —
   with a 20 s budget, and the two number assertions are untouched.
 
-No library code changed, and nothing was loosened: no fixed sleep replaced a wait, no timeout was
-raised, no retry added. The waits poll the value each case asserts a moment later, so a value that
-never arrives fails with a message naming the drag or the pick it was waiting for.
+No library code changed, and nothing was loosened: no fixed sleep replaced a wait, no retry added.
+What round 1 did raise was one timeout — the 20 s budget on the Slider wait — which Fix round 1
+took out, so nothing on this branch waits longer than the timeout its file already used. The waits
+poll the value each case asserts a moment later, so a value that never arrives fails with a message
+naming the drag or the pick it was waiting for.
 
 ## Gates
 
