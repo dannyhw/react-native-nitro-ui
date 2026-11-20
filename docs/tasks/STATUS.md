@@ -15,6 +15,11 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-19 Nothing user-visible: the Android real-input suite reads the accessibility tree from the
+  driver through a file, so a large answer on a loaded machine no longer arrives cut short, and a
+  failed read carries the driver's reason (X58, #110). The suite's own e2e tests now check the
+  ContextMenu, ButtonGroup and Picker accessibility actions off driver `agent-device` 0.21.40,
+  which the separate `uiautomator` pass used to check (X59, #112).
 - 11-19 A disabled iOS ButtonGroup keeps the items its row showed while enabled, with its overflow
   control dimmed in place, instead of fitting one more item (FIX18, #109).
 - 11-19 On iOS, a `BottomSheet` that UIKit silently refused to present reports

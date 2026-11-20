@@ -819,25 +819,23 @@ function screenOf(id) {
   return control.screen;
 }
 
+/** How long the app's window gets to come back between two checks, in ms. */
+const RETURN_DEADLINE_MS = 30_000;
+
 /**
- * Press Back until the app's own window is on top again.
+ * Bring the app's own window back on top, with its tab bar.
  *
  * A check that ends with a dialog up leaves the next one tapping a tab through the
  * dialog's scrim, which reads that screen as unreachable.
  *
  * @param {SweepDevice} device
+ * @param {number} [timeoutMs]
  */
-async function returnToAppWindow(device) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const nodes = device.hierarchy();
-    const tabStrip = nodes.some((node) => node.resourceId === 'example-tabs');
-    const ownWindow = nodes.some(
-      (node) => node.resourceId === 'android:id/content'
-    );
-    if (tabStrip && ownWindow) return;
-    device.key(KEY_BACK);
-    await sleep(700);
-  }
+export async function returnToAppWindow(
+  device,
+  timeoutMs = RETURN_DEADLINE_MS
+) {
+  await device.awaitApp({ timeoutMs, backs: 3 });
 }
 
 /**
