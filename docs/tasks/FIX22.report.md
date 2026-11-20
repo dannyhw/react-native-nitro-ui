@@ -39,13 +39,13 @@ naming the drag or the pick it was waiting for.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2191 tests / 97 suites | `f01e11f8da75` | 59.4 s | start 4.5 / med 7.1 / max 7.9 |
+| `check` | **PASS** | 2191 tests / 97 suites | `bc1f1632872f` | 56.9 s | start 8.3 / med 9.6 / max 10.2 |
 | `harness:ios` | **PASS** | 620 tests / 30 suites + isolated 6 tests / 3 suites | `f01e11f8da75` (harness:ios digest) | 16 m 42 s | start 6.8 / med 6.2 / max 11.6 |
 | `harness:android` | **PASS** (completed: 1 of 31 units re-run, attempt 1) | 27 tests / 1 suites | `f01e11f8da75` (harness:android digest) | 32.9 s + full run 18 m 18 s | start 7.5 / med 8.0 / max 9.7 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 | `harness:android:SearchField:HostPopups` | stale | 7 failed of 42 tests / 2 suites | efc0e4dd1d50 (not this tree) | 1 m 43 s | start 10.3 / med 10.6 / max 15.5 |
-| `real-input:android:--control:slider` | **PASS** | 1 tests / 1 suites | `f01e11f8da75` (real-input:android digest) | 10 m 11 s | start 10.8 / med 7.5 / max 15.8 |
+| `real-input:android:--control:slider` | **PASS** | 1 tests / 1 suites | `bc1f1632872f` (real-input:android digest) | 10 m 09 s | start 5.6 / med 8.2 / max 14.5 |
 
 `need --for review`: `need: review is satisfied on this code tree.` The two real-input gates are
 deliberately left for merge; the brief's `real-input:android -- --control slider` row above is the
@@ -105,3 +105,21 @@ places`. Neither mutation is on the branch.
 - The brief's out-of-scope cases are untouched, and none of them is this pattern: the Menu
   split-trigger case, the HostPopups "closes when the control is disabled" case (its CI failure is
   the `expanded` read after re-enabling), and the TextField and SearchField "round-trips" reads.
+
+## Fix round 1
+
+M1: the Slider wait no longer brings a timeout of its own. `example/src/SliderScreen.tsx:127` gives
+the Controlled slider an `onSlidingComplete` that raises `controlledComplete=N` beside the value
+echo, as the Phases slider shows `complete=`; `example/e2e/real-input/slider.e2e.ts:42` waits for
+that count to reach 1 and then 2 — the library's own word that a drag's values have all reached JS —
+each with the file's usual 10 s assertion timeout, and reads the echo only after it. The two number
+assertions are the ones that were there before. `settledValue`, `ECHO_SETTLES_MS`, `AT_REST_MS` and
+their comments are gone, which is what makes the Summary's "no timeout was raised" true: round 1 had
+raised a 20 s budget there, and the review caught it.
+
+Red proof: `real-input/slider.e2e.ts > a real drag moves the Slider and the value JS echoes follows
+it` -> `HybridNitroUiSlider.kt`'s `endDrag` no longer invokes `onSlidingComplete`, so a drag never
+completes while its value still arrives -> red at the new wait:
+`locator: getByTestId("slider-controlled-complete-count")`, `expected: text
+"controlledComplete=1"`, `observed: text "controlledComplete=0"`. The regenerated `gate.mjs table`
+is above; the filtered green run on this tree is its `--control slider` row.
