@@ -319,6 +319,35 @@ function probeHits(report: string): number {
   return hits == null ? 0 : Number(hits[1]);
 }
 
+/** The nearest colour the sampler found on screen, or `''` for a refusal line. */
+function closestOf(report: string): string {
+  return / closest=(#[0-9A-Fa-f]{6})/.exec(report)?.[1]?.toUpperCase() ?? '';
+}
+
+/** How many pixels the sampled control covers, from the same report line. */
+function sampledArea(report: string): number {
+  const size = / size=(\d+)x(\d+)/.exec(report);
+  return size == null ? 0 : Number(size[1]) * Number(size[2]);
+}
+
+/** The sampler's own scale: the summed per-channel difference. */
+function colourDistance(a: string, b: string): number {
+  const channels = (value: string): number[] => {
+    const digits = value.replace('#', '');
+    return [
+      parseInt(digits.slice(0, 2), 16),
+      parseInt(digits.slice(2, 4), 16),
+      parseInt(digits.slice(4, 6), 16),
+    ];
+  };
+  const left = channels(a);
+  const right = channels(b);
+  return left.reduce(
+    (sum, value, index) => sum + Math.abs(value - (right[index] ?? 0)),
+    0
+  );
+}
+
 // Must match the sizing key `IconButton.tsx` builds. Written out rather than
 // imported, so a wrong key helper cannot pass its own test.
 function sizingKey(
@@ -1150,6 +1179,162 @@ describe('IconButton · G23', () => {
         boxes.get(rungId('medium')) ?? null
       )
     ).toBe(true);
+  });
+
+  it('draws a tinted outlined border in the tint, dimmed while disabled, and not at all when checked', async () => {
+    // The `outlined` variant puts a `tintColor` in the content colour, so a glyph that
+    // drew would answer the probe next to the border. A glyph the app does not have
+    // draws nothing, which leaves the border as the only ink these controls own: what the
+    // probe counts here is the border.
+    const TINT = '#FF00A0';
+    const tint = processColor(TINT) as number;
+    // The mid-grey the native sampler paints behind the control it draws, which is what
+    // a translucent border blends with.
+    const BACKDROP = '#808080';
+    const ids = [
+      'outline-enabled',
+      'outline-disabled',
+      'outline-toggle-off',
+      'outline-toggle-on',
+    ];
+    const outlineProps = {
+      androidIcon: NOT_SHIPPED,
+      size: 'large' as const,
+      systemImage: DEFAULT_GLYPH.systemImage,
+      tintColor: TINT,
+      variant: 'outlined' as const,
+    };
+    function OutlinedRow() {
+      return (
+        <View style={rowStyle}>
+          <IconButton
+            {...outlineProps}
+            accessibilityLabel="Enabled outline"
+            hybridRef={captureHybrid('outline-enabled')}
+            testID="outline-enabled"
+          />
+          <IconButton
+            {...outlineProps}
+            accessibilityLabel="Disabled outline"
+            disabled
+            hybridRef={captureHybrid('outline-disabled')}
+            testID="outline-disabled"
+          />
+          <IconButton
+            {...outlineProps}
+            accessibilityLabel="Toggle that is off"
+            checked={false}
+            hybridRef={captureHybrid('outline-toggle-off')}
+            onCheckedChange={recordChecked('outline-toggle-off')}
+            testID="outline-toggle-off"
+          />
+          <IconButton
+            {...outlineProps}
+            accessibilityLabel="Toggle that is on"
+            checked
+            hybridRef={captureHybrid('outline-toggle-on')}
+            onCheckedChange={recordChecked('outline-toggle-on')}
+            testID="outline-toggle-on"
+          />
+        </View>
+      );
+    }
+    await render(<OutlinedRow />, { timeout: 20000 });
+    await settleEach(ids);
+    await waitForDisplayed('outline-toggle-off', '0');
+    await waitForDisplayed('outline-toggle-on', '1');
+    const reports = new Map<string, string>();
+    for (const id of ids) {
+      reports.set(id, await pixelProbe(id, tint, id));
+    }
+    console.log(`outlined border probes: ${JSON.stringify([...reports])}`);
+    const lineOf = (id: string): string => {
+      const report = reports.get(id);
+      if (report == null) {
+        throw new Error(`"${id}" never produced a probe report.`);
+      }
+      return report;
+    };
+
+    if (Platform.OS === 'android') {
+      expect(
+        probeHits(lineOf('outline-enabled')),
+        `an enabled tinted outlined button has no ink in ${TINT}, so its border never ` +
+          `reached the screen: ${lineOf('outline-enabled')}`
+      ).toBeGreaterThan(0);
+
+      // Material dims a disabled outline rather than dropping it: the full tint is no
+      // longer on screen, and the ink that is there sits nearer the sampler's grey than
+      // the tint itself.
+      const disabled = lineOf('outline-disabled');
+      expect(
+        probeHits(disabled),
+        `a disabled tinted outlined button is still drawn in the full ${TINT}, so its ` +
+          `border reads as enabled: ${disabled}`
+      ).toBe(0);
+      const dim = closestOf(disabled);
+      expect(
+        dim.length,
+        `no colour could be read from a disabled outlined button: ${disabled}`
+      ).toBe(7);
+      expect(
+        colourDistance(dim, BACKDROP),
+        `the disabled control drew nothing but the sampler's own backdrop (${dim}), so ` +
+          `its border was dropped rather than dimmed: ${disabled}`
+      ).toBeGreaterThan(30);
+      expect(
+        colourDistance(dim, BACKDROP) < colourDistance(dim, TINT),
+        `the disabled border (${dim}) is nearer the tint than the backdrop, so it is not ` +
+          `drawn at Material's disabled strength: ${disabled}`
+      ).toBe(true);
+      const dimLine = await pixelProbe(
+        'outline-disabled',
+        processColor(dim) as number,
+        'the dimmed border'
+      );
+      const dimHits = probeHits(dimLine);
+      expect(
+        dimHits,
+        `the colour this disabled border is drawn in (${dim}) is not on screen at all: ` +
+          `${dimLine}`
+      ).toBeGreaterThan(0);
+      expect(
+        dimHits < sampledArea(disabled) * 0.5,
+        `${dim} covers ${String(dimHits)} of ${String(
+          sampledArea(disabled)
+        )} pixels - that is a filled box, not an outline: ${dimLine}`
+      ).toBe(true);
+      // The same ring, only weaker: a border that thinned itself away would cover a
+      // fraction of what the enabled one does.
+      expect(
+        dimHits > probeHits(lineOf('outline-enabled')) * 0.3,
+        `the disabled border (${String(dimHits)} px) is a fraction of the enabled one ` +
+          `(${String(probeHits(lineOf('outline-enabled')))} px): ${dimLine}`
+      ).toBe(true);
+
+      // Material draws no outline on a toggle that is on, so a tinted one draws none.
+      expect(
+        probeHits(lineOf('outline-toggle-off')),
+        `an unchecked tinted outlined toggle has no ink in ${TINT}, so its border never ` +
+          `reached the screen: ${lineOf('outline-toggle-off')}`
+      ).toBeGreaterThan(0);
+      const checked = lineOf('outline-toggle-on');
+      expect(
+        probeHits(checked),
+        `a tinted outlined toggle that is on is still drawn in the full ${TINT}, so it ` +
+          `wears an outline Material's own toggle does not draw: ${checked}`
+      ).toBe(0);
+      expect(
+        colourDistance(closestOf(checked), BACKDROP),
+        `the checked toggle drew nothing but the sampler's own backdrop, so the answer ` +
+          `above is an empty control rather than a borderless one: ${checked}`
+      ).toBeGreaterThan(30);
+    } else {
+      // iOS has no Android glyph to sample, so the probe refuses.
+      for (const id of ids) {
+        expect(reports.get(id) ?? '').toContain('no pixels');
+      }
+    }
   });
 
   it('takes no press while disabled, on either form', async () => {

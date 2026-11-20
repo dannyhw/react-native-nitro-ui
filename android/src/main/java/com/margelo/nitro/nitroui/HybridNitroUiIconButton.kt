@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.semantics.SemanticsActions
@@ -539,7 +540,10 @@ private fun outlinedBorder(
     }
   // Material draws no outline for a toggle that is on, so neither does a tinted one.
   base ?: return null
-  return BorderStroke(base.width, color.copy(alpha = color.alpha * base.color.alpha))
+  // The state's strength is in the stroke's own colour: whole while enabled, dimmed while
+  // disabled. Only the hue is the control's.
+  val strength = (base.brush as? SolidColor)?.value?.alpha ?: 1f
+  return BorderStroke(base.width, color.copy(alpha = color.alpha * strength))
 }
 
 /**
