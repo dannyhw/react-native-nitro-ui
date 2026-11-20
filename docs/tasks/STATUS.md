@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-20 Nothing user-visible: a red Android a11y sweep case keeps its final dump and a
+  screenshot in the run's output folder, and names the nearest drawn ancestor of a name that
+  has no box (X62, #120).
 - 11-20 Nothing user-visible: the Android real-input gate's tree checks press Back only on a
   window the app owns, so a relaunch on a slow machine no longer closes the app it started
   (X60, #117); `check` no longer runs the tooling tests while `prepare` regenerates `nitrogen/`

@@ -90,6 +90,9 @@ const SCROLL_PROBE_PX = 320;
  * @param {() => import('./uiautomator.mjs').UiautomatorNode[]} navigation.dump
  * @param {(pixels: number) => Promise<void>} navigation.scrollPage
  * @param {() => Promise<void>} navigation.scrollToTop
+ * @param {(control: A11yControl) => string | Promise<string>} [navigation.keepEvidence]
+ *   called only for a red case, straight after the verdict: keeps what the verdict was
+ *   made on and answers with a sentence naming it, for the case's `✗` line
  * @param {ReadonlyArray<A11yControl>} [controls] the cases to run: the whole table unless
  *   the run named cases with `--a11y`
  * @returns {Promise<{covered: string[], matched: string[], stale: string[]}>} what the
@@ -125,7 +128,7 @@ export async function runA11ySweep(
     if (result.exempt) matched.push(control.id);
     // One assertion per case, phrased as the rule: `log.check` prints `✗` plus the
     // description on failure, which is what `gate.mjs` harvests into a run's failure
-    // excerpt — so the description has to carry the finding, not a label.
+    // excerpt — so the description has to carry the finding and its evidence.
     log.check(
       result.failures.length === 0
         ? result.known.length === 0
@@ -133,7 +136,9 @@ export async function runA11ySweep(
           : `${control.hybridView} has no new a11y finding — and no clean pass either: ` +
             `${String(result.known.length)} of its problems match a debt row, printed ` +
             'above, so the rule is answered by the exemption rather than by the dump'
-        : result.failures.join(' | '),
+        : [result.failures.join(' | '), await evidence(navigation, control)]
+            .filter(Boolean)
+            .join(' — '),
       result.failures.length === 0
     );
   }
@@ -161,6 +166,22 @@ export async function runA11ySweep(
     }
   }
   return { covered, matched, stale };
+}
+
+/**
+ * What a red case leaves for a reader, as one sentence, or '' when the device keeps
+ * nothing. A failure to keep it is said in the line, never instead of the verdict.
+ *
+ * @param {{keepEvidence?: (control: A11yControl) => string | Promise<string>}} navigation
+ * @param {A11yControl} control
+ */
+async function evidence(navigation, control) {
+  if (navigation.keepEvidence == null) return '';
+  try {
+    return await navigation.keepEvidence(control);
+  } catch (error) {
+    return `no evidence kept: ${String(/** @type {Error} */ (error)?.message ?? error)}`;
+  }
 }
 
 /**
