@@ -202,3 +202,17 @@ describe('returning to the app window after a relaunch', () => {
     expect(backs()).toBe(0);
   });
 });
+
+describe('launching the app for the a11y sweep and the tree checks', () => {
+  it('waits for the app to hold focus, though the closing task still shows a tab bar', async () => {
+    const { device, sent, backs } = scriptedDevice([
+      { focus: 'launcher', xml: TABS_XML },
+      { focus: null, xml: TABS_XML },
+      { focus: 'activity', xml: TABS_XML },
+    ]);
+    await device.startFromLaunch();
+    expect(sent).toContain(`am start -W -n ${APP}/.MainActivity`);
+    expect(sent.filter((c) => c === 'dumpsys window')).toHaveLength(3);
+    expect(backs()).toBe(0);
+  });
+});
