@@ -829,13 +829,20 @@ const RETURN_DEADLINE_MS = 30_000;
  * dialog's scrim, which reads that screen as unreachable.
  *
  * @param {SweepDevice} device
+ * @param {{ note: (line: string) => void }} log the check about to run, told when the
+ *   app had to be launched again
  * @param {number} [timeoutMs]
  */
 export async function returnToAppWindow(
   device,
+  log,
   timeoutMs = RETURN_DEADLINE_MS
 ) {
-  await device.awaitApp({ timeoutMs, backs: 3 });
+  await device.awaitApp({
+    timeoutMs,
+    backs: 3,
+    note: (line) => log.note(line),
+  });
 }
 
 /**
@@ -871,7 +878,7 @@ export async function runTreeChecksOnDevice(begin, device) {
     if (only != null && !only.includes(entry.id)) continue;
     const title = `uiautomator checks for ${entry.id}`;
     const log = begin(`${entry.id} (tree)`, title);
-    await returnToAppWindow(harness);
+    await returnToAppWindow(harness, log);
     await harness.goToScreen(screenOf(entry.id), log);
     await runCheck(log, () => entry.run(makeContext(harness, log)));
     covered.push(entry.id);

@@ -121,7 +121,13 @@ export class SweepDevice {
 
   /** The focused window, from the window manager (see `readWindowFocus`). */
   windowFocus() {
-    return readWindowFocus(this.adbShell('dumpsys window'), this.appId);
+    // Not a bare `dumpsys window`: that one opens with the window state saved at the
+    // last ANR, which these two sections leave out.
+    const dump =
+      this.adbShell('dumpsys window displays') +
+      '\n' +
+      this.adbShell('dumpsys window windows');
+    return readWindowFocus(dump, this.appId);
   }
 
   /**
@@ -133,10 +139,12 @@ export class SweepDevice {
    * is moved off instead: the shade collapsed, another app's activity replaced by
    * bringing this one to the front.
    *
-   * @param {{ timeoutMs: number, backs: number }} options `backs`: how many Back
-   *   presses the app's own windows may take before this stops sending them
+   * @param {{ timeoutMs: number, backs: number, note?: (line: string) => void }} options
+   *   `backs`: how many Back presses the app's own windows may take before this stops
+   *   sending them. `note`: told each time the app is started again because its process
+   *   was gone.
    */
-  async awaitApp({ timeoutMs, backs }) {
+  async awaitApp({ timeoutMs, backs, note }) {
     const deadline = Date.now() + timeoutMs;
     let backsLeft = backs;
     let broughtForwardAt = -Infinity;
@@ -169,11 +177,17 @@ export class SweepDevice {
         broughtForwardAt = Date.now();
         // An activity's window is named `package/class`; a system window (the shade,
         // the status bar) is named without a slash and is not an app to replace.
-        this.adbShell(
-          focus.title?.includes('/') === true
-            ? `am start -n ${this.appId}/.MainActivity`
-            : 'cmd statusbar collapse'
-        );
+        if (focus.title?.includes('/') === true) {
+          if (this.tryShell(`pidof ${this.appId}`).stdout.trim() === '') {
+            note?.(
+              `${this.appId} was not running and "${focus.title}" held focus, ` +
+                'so the app was launched again'
+            );
+          }
+          this.adbShell(`am start -n ${this.appId}/.MainActivity`);
+        } else {
+          this.adbShell('cmd statusbar collapse');
+        }
       }
       if (Date.now() > deadline) {
         throw new Error(
