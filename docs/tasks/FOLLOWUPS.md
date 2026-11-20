@@ -48,7 +48,7 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   machine, seen once.
 - `a11y:hosted-date-picker`, the one node named "Hosted date picker" read with a zero-sized box,
   2026-11-17, `real-input:android` started 16:41 UTC at a load peak of 43 beside another merge
-  run's app builds, seen twice (first on 2026-11-13 in a filtered `--control hosted-picker` run).
+  run's app builds, seen twice (first on 2026-11-13 in a filtered `--control hosted-picker` run). A third sighting on GitHub-hosted CI on 2026-11-20. Cause found: the a11y sweep scrolls a fixed 8 swipes and grades a control that is still off screen (a saved dump showed the Picker's Spinner at `[0,0][0,0]` below the window on a page scrolled partway); the sweep's scroll is being fixed in the tooling, not the DatePicker.
 
 ## Quarantined tests
 
@@ -427,3 +427,4 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - SearchField strings: they follow a language change only once the activity restarts (the field does not read `LocalConfiguration`); `SearchFieldStrings.forLocale` is public Kotlin only for the example probe; the device check cannot tell the drawing context from the application context, which differs below API 33 with AppCompat's per-app language.
 - Harness reads that race the value they read, the same shape as the three fixed for CI: `HostPopups.harness.tsx` about line 911 ("opens two popup owners in one Host") reads `picker.selectedIndex` right after a pick; `SearchField.harness.tsx` about line 566 ("submits on the Search key, then blurs") reads the event log right after the native blur and was two events short on CI run 44504146726, and no counter covers submit and blur.
 - ContextMenu bottom-edge case (Android): the hold point is proven on one emulator in one navigation mode; on the CI image the system's bottom strip is assumed, not shown, to be one of the two inset types the case reads (it fails loudly if not); the inset parsing is an inline regex in the test, not a shared parser. `support.ts`'s `tapBand` bottom is the screen's bottom on an edge-to-edge app, inside the system gesture strip, where a tap may never reach the app.
+- Form keyboard case evidence (Android): the raw `uiautomator` node cannot be read on the failure path while the driver holds the device's accessibility connection, so that line prints its own failed read; the Form's `ime=` and `scroll=` are not readable outside the app on Android (`FormScreen.tsx` polls them on iOS only). Echoing them on Android would complete the evidence.
