@@ -908,7 +908,7 @@ if (Platform.OS === 'android') {
       );
       expect(dialog.livePresentations).toBe(1);
       expect(parseMenuReport(picker.nuiTestMenuReport()).live).toBe(0);
-      expect(picker.selectedIndex).toBe(2);
+      expect(await indexReached(picker, 2)).toBe(2);
       log.setDateDisabledTwo?.(true);
       const closed = await waitForDialogGone(date, 'hosted dialog + menu gate');
       expect(closed.livePresentations).toBe(0);
