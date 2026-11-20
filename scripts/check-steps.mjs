@@ -84,8 +84,8 @@ export const CHECK_STEPS = Object.freeze([
     needs: [],
     group: null,
     writes: ['node_modules/.vite'],
-    reads: [],
-    note: 'vitest over scripts/__tests__ and eslint-rules/__tests__ (vitest.config.mjs); its results cache is node_modules/.vite/vitest',
+    reads: [FINDINGS.nitrogenDir, FINDINGS.generatedDir],
+    note: 'vitest over scripts/__tests__ and eslint-rules/__tests__ (vitest.config.mjs); its results cache is node_modules/.vite/vitest; patch-nitrogen and app-stamp tests read the committed nitrogen/generated',
   },
   {
     name: 'test:native:android',
@@ -135,6 +135,7 @@ export const CHECK_STEPS = Object.freeze([
       'test:library',
       'perf:renders',
       'test:native:android',
+      'test:tooling',
       // These two ignore only `nitrogen/generated`, so they read the rest of
       // `nitrogen/`, which this step deletes.
       'lint',

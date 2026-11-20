@@ -391,6 +391,11 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - `check-runner.test.js` "runs no more steps at once than --jobs" failed once at load 77 and passed on rerun.
   - A tree read interrupted by a signal (Ctrl-C, a killed worker) leaves its temp directory in the OS temp folder.
   - No test guards that the tree read closes its snapshot file.
+  - `lease.mjs acquire --out <file>` inside a worktree writes a file `.gitignore` does not cover.
+  - The focus read takes the first display's `mCurrentFocus`; with more than one display, `mTopFocusedDisplayId`'s block is the right one.
+  - A Back sent to the app's own window is a second adb command after the focus read; a popup closing in between passes it to the activity.
+  - The window-focus fixtures are written by hand, not trimmed from a real dump.
+  - The `check` scan of tooling tests' `nitrogen/` reads sees only literal paths; `test:library` has no such scan of its own reads.
   - `pressableItem` rejecting a clickable node outside the group's box is never shown red; a unit test with a stand-in driver would cover it.
   - `android-tree-checks.mjs`: `makeContext` keeps helpers nothing calls (`requireControl`, `requireControlOnScreen`, `nodesNamed`), and two comments there tell history or document nothing.
   - `check` was red once right after `bun install` rebuilt `nitrogen/` (`patch-nitrogen.test.js` ENOENT on a generated header), green on the next run.

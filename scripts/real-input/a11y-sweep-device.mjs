@@ -14,6 +14,7 @@ import { imeServiceShown } from './ime-frame.mjs';
 import { findByTestId, parseHierarchy } from './uiautomator.mjs';
 import { runA11ySweep } from './a11y-sweep.mjs';
 import { countAppPopupWindows } from './popup-windows.mjs';
+import { readWindowFocus } from './window-focus.mjs';
 
 /** Taps one tab gets before its screen is called unreachable. */
 const TAB_TAPS = 3;
@@ -23,6 +24,15 @@ const SCREEN_DEADLINE_MS = 15_000;
 
 /** How far the tab bar is probed sideways for a tab scrolled out of the window. */
 const TAB_SWIPES = 10;
+
+/** How long a cold launch gets to put the app's tab bar on screen, in ms. */
+const LAUNCH_DEADLINE_MS = 120_000;
+
+/** How often the app is brought forward while another window keeps focus, in ms. */
+const BRING_FORWARD_EVERY_MS = 3000;
+
+/** `KEYCODE_BACK`. */
+const KEY_BACK = 4;
 
 /**
  * Run the a11y pass over its cases, on the device `adbShell` speaks to.
@@ -105,18 +115,90 @@ export class SweepDevice {
   async startFromLaunch() {
     this.adbShell(`am force-stop ${this.appId}`);
     this.adbShell('cmd statusbar collapse');
-    this.adbShell(`am start -n ${this.appId}/.MainActivity`);
-    const firstTab = () =>
-      this.hierarchy().some((node) => node.resourceId === 'example-tabs');
-    const deadline = Date.now() + 120_000;
-    while (Date.now() < deadline) {
-      if (firstTab()) return;
+    this.adbShell(`am start -W -n ${this.appId}/.MainActivity`);
+    await this.awaitApp({ timeoutMs: LAUNCH_DEADLINE_MS, backs: 0 });
+  }
+
+  /** The focused window, from the window manager (see `readWindowFocus`). */
+  windowFocus() {
+    // Not a bare `dumpsys window`: that one opens with the window state saved at the
+    // last ANR, which these two sections leave out.
+    const dump =
+      this.adbShell('dumpsys window displays') +
+      '\n' +
+      this.adbShell('dumpsys window windows');
+    return readWindowFocus(dump, this.appId);
+  }
+
+  /**
+   * Wait until the app's activity holds focus and its tab bar is in the tree.
+   *
+   * Back is only sent while the app's own windows hold focus: to a popup or dialog it
+   * put up, or to its keyboard. Sent while a launch is still settling it lands on the
+   * activity underneath, or on the launcher, and closes the app. Anything else on top
+   * is moved off instead: the shade collapsed, another app's activity replaced by
+   * bringing this one to the front.
+   *
+   * @param {{ timeoutMs: number, backs: number, note?: (line: string) => void }} options
+   *   `backs`: how many Back presses the app's own windows may take before this stops
+   *   sending them. `note`: told each time the app is started again because its process
+   *   was gone.
+   */
+  async awaitApp({ timeoutMs, backs, note }) {
+    const deadline = Date.now() + timeoutMs;
+    let backsLeft = backs;
+    let broughtForwardAt = -Infinity;
+    for (;;) {
+      const focus = this.windowFocus();
+      if (focus.owner === 'activity') {
+        const nodes = this.hierarchy();
+        const tabStrip = nodes.some(
+          (node) => node.resourceId === 'example-tabs'
+        );
+        const ownWindow = nodes.some(
+          (node) => node.resourceId === 'android:id/content'
+        );
+        if (tabStrip && ownWindow) return;
+        if (backsLeft > 0 && this.imeShown()) {
+          backsLeft -= 1;
+          this.key(KEY_BACK);
+          await sleep(700);
+          continue;
+        }
+      } else if (focus.owner === 'app-window' && backsLeft > 0) {
+        backsLeft -= 1;
+        this.key(KEY_BACK);
+        await sleep(700);
+        continue;
+      } else if (
+        focus.owner === 'other' &&
+        Date.now() - broughtForwardAt >= BRING_FORWARD_EVERY_MS
+      ) {
+        broughtForwardAt = Date.now();
+        // An activity's window is named `package/class`; a system window (the shade,
+        // the status bar) is named without a slash and is not an app to replace.
+        if (focus.title?.includes('/') === true) {
+          if (this.tryShell(`pidof ${this.appId}`).stdout.trim() === '') {
+            note?.(
+              `${this.appId} was not running and "${focus.title}" held focus, ` +
+                'so the app was launched again'
+            );
+          }
+          this.adbShell(`am start -n ${this.appId}/.MainActivity`);
+        } else {
+          this.adbShell('cmd statusbar collapse');
+        }
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `real-input: ${this.appId} did not come back to its tab bar within ` +
+            `${String(Math.round(timeoutMs / 1000))} s. The focused window was ` +
+            `${focus.title == null ? 'none' : `"${focus.title}"`} (${focus.owner}), ` +
+            'as `dumpsys window` reports mCurrentFocus.'
+        );
+      }
       await sleep(500);
     }
-    throw new Error(
-      `real-input: launching ${this.appId} left no tab bar in the accessibility ` +
-        'tree, so the a11y sweep has no screen to walk from.'
-    );
   }
 
   /** @returns {{ width: number, height: number }} the window, in device px. */

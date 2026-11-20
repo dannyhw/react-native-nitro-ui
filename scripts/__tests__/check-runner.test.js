@@ -150,6 +150,8 @@ describe('steps that share an output are ordered', () => {
       'prepare writes nitrogen while lint reads it',
       'prepare writes nitrogen while format reads it',
       'prepare writes nitrogen/generated while test:library reads it',
+      'prepare writes nitrogen while test:tooling reads it',
+      'prepare writes nitrogen/generated while test:tooling reads it',
       // The Android JVM test compiles the library, whose autolinking adds
       // `nitrogen/generated/android/kotlin` to the Kotlin source set.
       'prepare writes nitrogen/generated while test:native:android reads it',
@@ -233,6 +235,42 @@ describe('steps that share an output are ordered', () => {
     // The app module is *not* written by this step, and saying it was would put a phantom
     // conflict on a step that builds the app.
     expect(step.writes).not.toContain('example/android/app/build');
+  });
+
+  it('test:tooling declares every nitrogen/ region its tests name', () => {
+    // A tooling test that names a path under `nitrogen/` may read the committed tree,
+    // which `prepare` deletes and regenerates; an undeclared read hides that from
+    // findOutputConflicts. Fixture trees are copied out before use, and this file names
+    // regions rather than reading them, so both are skipped.
+    const regionOf = (relative) =>
+      relative === 'generated' || relative.startsWith('generated/')
+        ? FINDINGS.generatedDir
+        : FINDINGS.nitrogenDir;
+    const named = new Map();
+    for (const dir of ['scripts/__tests__', 'eslint-rules/__tests__']) {
+      const files = fs
+        .readdirSync(path.join(root, dir), { recursive: true })
+        .filter(
+          (file) =>
+            file.endsWith('.js') &&
+            file !== 'check-runner.test.js' &&
+            !file.split(path.sep).includes('fixtures')
+        );
+      for (const file of files) {
+        const source = fs.readFileSync(path.join(root, dir, file), 'utf8');
+        for (const match of source.matchAll(/['"`]nitrogen\/([^'"`\s]*)/g)) {
+          const region = regionOf(match[1]);
+          if (!named.has(region)) named.set(region, `${dir}/${file}`);
+        }
+      }
+    }
+    expect(named.has(FINDINGS.generatedDir)).toBe(true);
+    const tooling = CHECK_STEPS.find((step) => step.name === 'test:tooling');
+    for (const [region, file] of named) {
+      expect(tooling.reads, `${file} names a path under ${region}`).toContain(
+        region
+      );
+    }
   });
 
   it('the lib readers wait for the build', () => {

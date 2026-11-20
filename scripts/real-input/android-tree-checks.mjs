@@ -819,25 +819,30 @@ function screenOf(id) {
   return control.screen;
 }
 
+/** How long the app's window gets to come back between two checks, in ms. */
+const RETURN_DEADLINE_MS = 30_000;
+
 /**
- * Press Back until the app's own window is on top again.
+ * Bring the app's own window back on top, with its tab bar.
  *
  * A check that ends with a dialog up leaves the next one tapping a tab through the
  * dialog's scrim, which reads that screen as unreachable.
  *
  * @param {SweepDevice} device
+ * @param {{ note: (line: string) => void }} log the check about to run, told when the
+ *   app had to be launched again
+ * @param {number} [timeoutMs]
  */
-async function returnToAppWindow(device) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const nodes = device.hierarchy();
-    const tabStrip = nodes.some((node) => node.resourceId === 'example-tabs');
-    const ownWindow = nodes.some(
-      (node) => node.resourceId === 'android:id/content'
-    );
-    if (tabStrip && ownWindow) return;
-    device.key(KEY_BACK);
-    await sleep(700);
-  }
+export async function returnToAppWindow(
+  device,
+  log,
+  timeoutMs = RETURN_DEADLINE_MS
+) {
+  await device.awaitApp({
+    timeoutMs,
+    backs: 3,
+    note: (line) => log.note(line),
+  });
 }
 
 /**
@@ -873,7 +878,7 @@ export async function runTreeChecksOnDevice(begin, device) {
     if (only != null && !only.includes(entry.id)) continue;
     const title = `uiautomator checks for ${entry.id}`;
     const log = begin(`${entry.id} (tree)`, title);
-    await returnToAppWindow(harness);
+    await returnToAppWindow(harness, log);
     await harness.goToScreen(screenOf(entry.id), log);
     await runCheck(log, () => entry.run(makeContext(harness, log)));
     covered.push(entry.id);
