@@ -3,6 +3,8 @@
 package com.margelo.nitro.nitroui
 
 import android.app.Activity
+import android.content.Context
+import android.content.res.Configuration
 import android.content.res.Resources
 import android.view.View
 import android.view.ViewGroup
@@ -37,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -49,6 +53,7 @@ import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.nitroui.core.nitroUiIcon
 import com.margelo.nitro.views.RecyclableView
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 // The SearchField component: Material's search `InputField` in a `Surface`, sharing
@@ -59,22 +64,68 @@ internal const val SEARCH_FIELD_GLYPH_TAG = "nitroui.searchfield.glyph"
 
 /**
  * The platform's localized "Search…" and "Clear query". Both are private framework
- * strings, so they are looked up by name once, with English fallbacks.
+ * strings, so they are looked up by name, with English fallbacks.
+ *
+ * They are read from the configuration a field draws in, not from the device's: an app
+ * shown in another language than the device's, including a per-app language on Android 13
+ * and later, gets its own words. Cached per locale list, and bounded, so rendering under many
+ * locales cannot grow the cache for the life of the process.
  */
-private object SearchFieldStrings {
-  private fun frameworkResId(name: String): Int =
-    FRAMEWORK_RESOURCES.getIdentifier(name, "string", "android")
+object SearchFieldStrings {
+  /** The prompt a field with no `placeholder` draws for [context]. */
+  internal fun hint(
+    context: Context,
+  ): String = entryFor(context).first
 
-  private val FRAMEWORK_RESOURCES: Resources = Resources.getSystem()
+  /** The clear button's screen-reader label for [context]. */
+  internal fun clear(
+    context: Context,
+  ): String = entryFor(context).second
 
-  val hint: String by lazy {
-    val id = frameworkResId("search_hint")
-    if (id != 0) FRAMEWORK_RESOURCES.getString(id) else "Search"
+  /**
+   * The pair a field draws for [context], or for the language [localeTag] names when one
+   * is given. Public for the example app's probe, which asks what a field would draw in
+   * another language; an app reads its own strings through a field.
+   */
+  fun forLocale(
+    context: Context,
+    localeTag: String,
+  ): Pair<String, String> {
+    if (localeTag.isEmpty()) {
+      return hint(context) to clear(context)
+    }
+    val configuration = Configuration(context.resources.configuration)
+    configuration.setLocale(Locale.forLanguageTag(localeTag))
+    val other = context.createConfigurationContext(configuration)
+    return hint(other) to clear(other)
   }
 
-  val clear: String by lazy {
-    val id = frameworkResId("searchview_description_clear")
-    if (id != 0) FRAMEWORK_RESOURCES.getString(id) else "Clear query"
+  private const val MAX_ENTRIES = 8
+
+  private val cache = HashMap<String, Pair<String, String>>()
+
+  @Synchronized
+  private fun entryFor(context: Context): Pair<String, String> {
+    val resources = context.resources
+    val key = resources.configuration.locales.toLanguageTags()
+    cache[key]?.let { return it }
+    val built =
+      frameworkString(resources, "search_hint", "Search") to
+        frameworkString(resources, "searchview_description_clear", "Clear query")
+    if (cache.size >= MAX_ENTRIES) {
+      cache.clear()
+    }
+    cache[key] = built
+    return built
+  }
+
+  private fun frameworkString(
+    resources: Resources,
+    name: String,
+    fallback: String,
+  ): String {
+    val id = resources.getIdentifier(name, "string", "android")
+    return if (id != 0) resources.getString(id) else fallback
   }
 }
 
@@ -136,13 +187,17 @@ private class SearchFieldHost(
 
   @Composable
   override fun Component(model: TextFieldModel) {
-    SearchFieldContent(model)
+    InterceptPlatformTextInput(remember(model) { NitroUiAutoCorrectInterceptor(model) }) {
+      SearchFieldContent(model)
+    }
   }
 }
 
 @Composable
 private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
   val state = model.textState
+  // The configuration this composition draws in: where the framework's strings come from.
+  val context = LocalContext.current
   val limit = remember(model) { NitroUiTextLimit(model) }
   val focusRequester = remember { FocusRequester() }
   val focusManager = LocalFocusManager.current
@@ -231,7 +286,9 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
           onClick = { state.clearText() },
           // The name goes on the button, not the glyph: Compose does not merge the glyph's
           // description into the clickable node, which would leave that node unnamed.
-          modifier = Modifier.semantics { contentDescription = SearchFieldStrings.clear },
+          modifier = Modifier.semantics {
+            contentDescription = SearchFieldStrings.clear(context)
+          },
         ) {
           Icon(imageVector = nitroUiIcon(R.drawable.nitroui_close), contentDescription = null)
         }
@@ -272,7 +329,7 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
       onSearch = onSearch,
       modifier = modifier,
       enabled = model.editable,
-      placeholder = { Text(model.placeholder ?: SearchFieldStrings.hint) },
+      placeholder = { Text(model.placeholder ?: SearchFieldStrings.hint(context)) },
       leadingIcon = {
         Icon(
           imageVector = nitroUiIcon(R.drawable.nitroui_search),
@@ -303,7 +360,7 @@ class HybridNitroUiSearchField(
   private var snapshot =
     NitroUiSearchFieldTestState(
       "", false, false, 0.0, 0.0, "none", true, -1.0, "", "", "search",
-      "default", "none", true, false, false,
+      "default", "none", true, false, false, SUGGESTIONS_UNKNOWN,
     )
 
   init {
@@ -322,6 +379,11 @@ class HybridNitroUiSearchField(
   companion object {
     // Must match the component name in the generated view manager.
     private const val SIZING_COMPONENT_NAME = "NitroUiSearchField"
+
+    // What the test state reports for `suggestions`.
+    private const val SUGGESTIONS_OFFERED = "offered"
+    private const val SUGGESTIONS_REFUSED = "refused"
+    private const val SUGGESTIONS_UNKNOWN = "unknown"
 
     // The size before anything is measured, in dp: Material's 56 dp input field height,
     // and the width a field draws at under a parent that gives it none.
@@ -582,10 +644,11 @@ class HybridNitroUiSearchField(
     val keyboardType: String,
     val autoCapitalize: String,
     val autoCorrect: Boolean,
+    val suggestions: String,
   )
 
   // A focused field whose `EditorInfo` is not read yet. `pending` is a value no prop can have.
-  private val PENDING_KEYBOARD = AppliedKeyboard("pending", "pending", true)
+  private val PENDING_KEYBOARD = AppliedKeyboard("pending", "pending", true, SUGGESTIONS_UNKNOWN)
 
   // The keyboard the options describe, without walking the view tree.
   private fun optionsKeyboard(): AppliedKeyboard =
@@ -595,6 +658,8 @@ class HybridNitroUiSearchField(
       autoCapitalize =
         NitroUiKeyboardNames.nameOfCapitalization(capitalizationOf(model.autoCapitalize)),
       autoCorrect = model.autoCorrect,
+      // What the IME is told is only known from a focused field's `EditorInfo`.
+      suggestions = SUGGESTIONS_UNKNOWN,
     )
 
   // Unfocused: the options. Focused: the last read-back for the current stamp, or pending.
@@ -625,6 +690,12 @@ class HybridNitroUiSearchField(
         keyboardType = NitroUiKeyboardNames.nameOfInputType(info.inputType),
         autoCapitalize = NitroUiKeyboardNames.nameOfCapitalization(info.inputType),
         autoCorrect = NitroUiKeyboardNames.autoCorrectOf(info.inputType, model.autoCorrect),
+        suggestions =
+          if (NitroUiKeyboardNames.suggestionsOf(info.inputType)) {
+            SUGGESTIONS_OFFERED
+          } else {
+            SUGGESTIONS_REFUSED
+          },
       )
     probedKeyboard = read
     probedStamp = keyboardStamp
@@ -669,7 +740,7 @@ class HybridNitroUiSearchField(
         model.editable,
         (model.maxLength ?: -1).toDouble(),
         // What the field draws: the app's placeholder, or the platform's localized one.
-        model.placeholder ?: SearchFieldStrings.hint,
+        model.placeholder ?: SearchFieldStrings.hint(host.context),
         model.accessibilityLabel ?: "",
         model.returnKeyType,
         keyboard.keyboardType,
@@ -677,6 +748,7 @@ class HybridNitroUiSearchField(
         keyboard.autoCorrect,
         host.expanded,
         model.editable && text.isNotEmpty(),
+        keyboard.suggestions,
       )
   }
 
@@ -722,7 +794,8 @@ class HybridNitroUiSearchField(
     if (
       current.keyboardType == keyboard.keyboardType &&
         current.autoCapitalize == keyboard.autoCapitalize &&
-        current.autoCorrect == keyboard.autoCorrect
+        current.autoCorrect == keyboard.autoCorrect &&
+        current.suggestions == keyboard.suggestions
     ) {
       return
     }
@@ -731,6 +804,7 @@ class HybridNitroUiSearchField(
         keyboardType = keyboard.keyboardType,
         autoCapitalize = keyboard.autoCapitalize,
         autoCorrect = keyboard.autoCorrect,
+        suggestions = keyboard.suggestions,
       )
   }
 

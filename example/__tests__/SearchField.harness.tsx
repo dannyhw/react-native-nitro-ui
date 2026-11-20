@@ -38,6 +38,20 @@ type ProbeModule = {
   ): Promise<string>;
   /** Android only: `NitroUiProbeModule.searchGlyphPixels`. */
   searchGlyphPixels(): Promise<string>;
+  /** Android only: `NitroUiProbeModule.searchFieldStrings`. */
+  searchFieldStrings(localeTag: string): Promise<{
+    appHint: string;
+    appClear: string;
+    localeHint: string;
+    localeClear: string;
+    deviceHint: string;
+    deviceClear: string;
+    appLocale: string;
+    deviceLocale: string;
+    requestedLocale: string;
+    hostHint: string;
+    hostClear: string;
+  }>;
 };
 const probe = (): ProbeModule =>
   TurboModuleRegistry.getEnforcing('NitroUiProbe') as unknown as ProbeModule;
@@ -74,6 +88,7 @@ type FieldState = {
   autoCorrect: boolean;
   expanded: boolean;
   canClear: boolean;
+  suggestions: string;
 };
 
 /**
@@ -683,6 +698,50 @@ describe('SearchField', () => {
     expect(unprompted?.placeholder).not.toBe('Search recipes');
   });
 
+  /*
+   * The default prompt and the clear button's label are the framework's private strings,
+   * so the question is which configuration they are read from: the app's views are drawn
+   * in one, the device in another, and a per-app language on Android 13 and later makes
+   * them differ. German is what the framework translates both strings into.
+   */
+  it('reads its prompt and clear label in the app’s language', async () => {
+    // Android only: the strings are Android framework resources, and iOS draws no prompt.
+    if (iOS) return;
+    render(<Controlled id="localized" initial="" />);
+    await waitForTestId('localized');
+    const drawn = await stateWhen(
+      'localized',
+      (current) => current.placeholder !== '',
+      'the framework prompt'
+    );
+
+    const inGerman = await probe().searchFieldStrings('de');
+    expect(inGerman.requestedLocale).toBe('de');
+    // The check only means something if the emulator itself is not in German.
+    expect(inGerman.requestedLocale).not.toBe(inGerman.appLocale);
+    expect(inGerman.localeHint).toBe('Suchen…');
+    expect(inGerman.localeClear).toBe('Anfrage löschen');
+    expect(inGerman.localeHint).not.toBe(inGerman.deviceHint);
+    expect(inGerman.localeClear).not.toBe(inGerman.deviceClear);
+
+    // Reading a language leaves every other answer alone, and reading it again gives the
+    // same words: the strings belong to a configuration, not to the process.
+    const readAgain = await probe().searchFieldStrings('de');
+    expect(readAgain.localeHint).toBe(inGerman.localeHint);
+    expect(readAgain.localeClear).toBe(inGerman.localeClear);
+    expect(readAgain.appHint).toBe(inGerman.appHint);
+    expect(readAgain.appClear).toBe(inGerman.appClear);
+
+    // What the mounted field draws is what its own context resolves.
+    expect(drawn.placeholder).toBe(inGerman.appHint);
+    expect(inGerman.hostHint).toBe(inGerman.appHint);
+    expect(inGerman.hostClear).toBe(inGerman.appClear);
+    console.log(
+      `search field strings: app ${inGerman.appLocale} prompt ` +
+        `"${inGerman.appHint}", de prompt "${inGerman.localeHint}"`
+    );
+  });
+
   it('draws its search glyph as a magnifier: a painted ring around an unpainted lens', async () => {
     // Android only: reads the pixels the search glyph paints, which no other test
     // looks at. iOS draws UIKit's own glyph.
@@ -834,6 +893,52 @@ describe('SearchField', () => {
     // keyboard reports none whatever was asked; iOS has one trait either way.
     expect(together.autoCapitalize).toBe(iOS ? 'characters' : 'none');
     expect(together.returnKeyType).toBe('search');
+  });
+
+  /*
+   * What the keyboard was told about suggestions and autocorrections, read back rather than
+   * from the prop that asked for it: on Android the `EditorInfo` a focused field hands the
+   * IME, on iOS the autocorrection trait it carries. `'unknown'` means nothing has been read
+   * yet, so every wait below goes past it and never reads a wish as an answer.
+   */
+  it('tells the keyboard what autoCorrect asked for', async () => {
+    const { rerender } = await render(<Keyboard />);
+    await waitForTestId('keyboard');
+    await focusField('keyboard');
+
+    const asFound = await stateWhen(
+      'keyboard',
+      (current) => current.suggestions !== 'unknown',
+      'the focused field to read its keyboard back'
+    );
+    expect(asFound.focused).toBe(true);
+    expect(asFound.suggestions).toBe('offered');
+
+    // `autoCorrect={false}` has to send Android's `TYPE_TEXT_FLAG_NO_SUGGESTIONS`: a text
+    // keyboard left without the autocorrect flag alone still draws its suggestion strip.
+    await rerender(<Keyboard autoCorrect={false} />);
+    const refused = await stateWhen(
+      'keyboard',
+      (current) => current.suggestions === 'refused',
+      'the keyboard to be told no suggestions',
+      8000
+    );
+    expect(refused.focused).toBe(true);
+    expect(refused.autoCorrect).toBe(false);
+    console.log(
+      `search field autoCorrect=false read back ${refused.suggestions}`
+    );
+
+    // On a field that never lost focus: the change reaches the keyboard that is already up.
+    await rerender(<Keyboard autoCorrect />);
+    const offered = await stateWhen(
+      'keyboard',
+      (current) => current.suggestions === 'offered',
+      'the keyboard to be told suggestions are back',
+      8000
+    );
+    expect(offered.focused).toBe(true);
+    expect(offered.autoCorrect).toBe(true);
   });
 
   it('comes back from the pool with none of its previous owner', async () => {

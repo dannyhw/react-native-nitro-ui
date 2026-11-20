@@ -181,7 +181,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G14 (re-review): `BottomSheet.harness`'s "dropped 0 ms after presenting" is vacuous - the `isPresented` write and the unmount batch into one commit, so no sheet is ever asked for; drop between the commit and the present instead (a main-turn wait), or remove the case.
 - G14 (re-review): `NitroUiPresentation.controller` keeps a dialog's last `UIAlertController` alive in a pooled `NitroUiDialog` until it presents again; BottomSheet now calls `forgetController()` after its teardown and its sheet's exit, and the dialogs could do the same.
 - TextField Android: `observe` pays an owed `maxLength` cut before `settle`, so the cut's event makes a write held through the composition stale. Unreachable today (the input transformation already cuts composing text), but the order should be settle first.
-- SearchField Android: `autoCorrect={false}` still sends no `TYPE_TEXT_FLAG_NO_SUGGESTIONS`, so its keyboard keeps drawing a suggestion strip; TextField's `NitroUiAutoCorrectInterceptor` (`HybridNitroUiTextField.kt`) wraps the request and could be shared, and the field then wants the same read-back in its test state.
 - TextField Android harness: `commits a keystroke about as fast as RN TextInput` failed twice at load1 3-5 with `nitro: "ab" never committed` (G13 fix round 2). The merge makes the probe's `commit` finish any composing region first and prints the field's state on failure; if it recurs, the state says whether the key landed on a keyboard-opened composition (`b`) or never arrived (`a`).
 - `lease.mjs list` pairs the stale `x16_avd` record with `emulator-5574`, the serial pair-a's `nitroui_a` boots on, so one console reads as both an unowned pool device and a leased one (D4).
 - G14 (merge re-review): `BottomSheet.harness.tsx`'s comment at the 50-cycle block (~881-883) says the probe is never the cycling view handed back by the recycle pool; a probe mounted at the start of a round can still be a pooled view from an earlier round - say "never the view dropped in this round".
@@ -221,7 +220,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - real-input Android (G17): the clear button is located by geometry (the one clickable node in the field's right half) because Material 3 gives it no stable `resource-id`; a tree change would make it report "two candidates" rather than mis-tap, but a named route would be better.
 - gate.mjs (G17): `wait --gate <g>` prints "last log line" from the newest log for the gate name, so in the seconds before a re-run writes its own log it shows the *previous* run's failure line — reads as if the new run were already red.
 - G17 review: move Android SearchField to material3 1.5's stateful `InputField` in a plain `Surface`, not `SearchBar`, which wraps the field in `DisableSoftKeyboard`. Keyboard props come with it.
-- G17 review: `SearchFieldStrings` reads `Resources.getSystem()` once per process, so it ignores an app's own language setting.
 - G17 review: the declared-fallback constants aren't checked against the native constants (the harness poisons the cache).
 - G17 review: Android `hasText` uses `derivedStateOf` without `remember`; there's no SearchField IME composition test on Android.
 - G18 review: iOS Tooltip's own window calls `makeKeyAndVisible`, which may close the keyboard beside a focused field. Measure it.
@@ -393,6 +391,11 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - `check-runner.test.js` "runs no more steps at once than --jobs" failed once at load 77 and passed on rerun.
   - A tree read interrupted by a signal (Ctrl-C, a killed worker) leaves its temp directory in the OS temp folder.
   - No test guards that the tree read closes its snapshot file.
+  - `lease.mjs acquire --out <file>` inside a worktree writes a file `.gitignore` does not cover.
+  - The focus read takes the first display's `mCurrentFocus`; with more than one display, `mTopFocusedDisplayId`'s block is the right one.
+  - A Back sent to the app's own window is a second adb command after the focus read; a popup closing in between passes it to the activity.
+  - The window-focus fixtures are written by hand, not trimmed from a real dump.
+  - The `check` scan of tooling tests' `nitrogen/` reads sees only literal paths; `test:library` has no such scan of its own reads.
   - `pressableItem` rejecting a clickable node outside the group's box is never shown red; a unit test with a stand-in driver would cover it.
   - `android-tree-checks.mjs`: `makeContext` keeps helpers nothing calls (`requireControl`, `requireControlOnScreen`, `nodesNamed`), and two comments there tell history or document nothing.
   - `check` was red once right after `bun install` rebuilt `nitrogen/` (`patch-nitrogen.test.js` ENOENT on a generated header), green on the next run.
@@ -418,3 +421,5 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - iOS `HybridNitroUiButtonGroup.swift`: `inControlGroup ? nil : model.tint` is dead for a toggle.
   - Android: each overflow row reports its painted colour (`overflowIcons=`) on every composition, as `Menu` does; the report can go stale across reopenings, and a `Pending` glyph's tint is not reported.
 - Form harness, the Android keyboard opt-out cases: the default-path checks accept a 2 dp lift and a 1 dp scroll; asserting that the focused field ends above the keyboard by the reveal margin, and that the requested row ends inside the viewport, would make them prove the default behaviour too (CodeRabbit on #106).
+- SearchField autoCorrect: the harness step that turns `autoCorrect` off cannot catch a missing keyboard restart (the interceptor reads the prop live); no SearchField number or phone keyboard case; the new case waits 8000 ms where the file default is 5000 ms.
+- SearchField strings: they follow a language change only once the activity restarts (the field does not read `LocalConfiguration`); `SearchFieldStrings.forLocale` is public Kotlin only for the example probe; the device check cannot tell the drawing context from the application context, which differs below API 33 with AppCompat's per-app language.

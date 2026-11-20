@@ -19,19 +19,24 @@
  */
 
 /**
- * @param {string} dump the stdout of `dumpsys window`
+ * Reads only the live display contents and window list. A full `dumpsys window` opens
+ * with a copy of both as they were at the last ANR, kept for two hours, whose focus
+ * may name a window long gone; the live sections are the last ones printed.
+ *
+ * @param {string} dump the stdout of `dumpsys window displays` and `dumpsys window windows`
+ *   (a full `dumpsys window` reads the same)
  * @param {string} appId the app's package
  * @returns {WindowFocus}
  */
 export function readWindowFocus(dump, appId) {
-  const focus = dump.match(
+  const focus = lastSection(dump, 'DISPLAY CONTENTS').match(
     /mCurrentFocus=(?:null|Window\{(\S+) u\d+ ([^\n]*)\})/
   );
   if (focus?.[1] == null) {
     return { title: null, owner: 'none' };
   }
   const [, hash, title] = focus;
-  const block = windowBlock(dump, hash);
+  const block = windowBlock(lastSection(dump, 'WINDOWS'), hash);
   if (block == null) {
     return {
       title,
@@ -48,6 +53,24 @@ export function readWindowFocus(dump, appId) {
     return { title, owner: 'starting' };
   }
   return { title, owner: 'app-window' };
+}
+
+/**
+ * The text under the last `WINDOW MANAGER <name>` header, up to the next header.
+ *
+ * @param {string} dump
+ * @param {string} name
+ * @returns {string} empty when the dump has no such section
+ */
+function lastSection(dump, name) {
+  const lines = dump.split('\n');
+  const start = lines.findLastIndex((line) =>
+    line.startsWith(`WINDOW MANAGER ${name} `)
+  );
+  if (start === -1) return '';
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => line.startsWith('WINDOW MANAGER '));
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n');
 }
 
 /**
