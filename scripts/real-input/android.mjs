@@ -476,6 +476,7 @@ async function main() {
         tabs,
         appId: BUNDLE_ID,
         cases: plan.a11yCases,
+        out,
         stopDaemon: () => stopAgentDeviceDaemon(env, stateDir),
       }
     );

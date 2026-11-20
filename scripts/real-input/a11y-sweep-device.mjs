@@ -15,6 +15,7 @@ import { findByTestId, parseHierarchy } from './uiautomator.mjs';
 import { runA11ySweep } from './a11y-sweep.mjs';
 import { countAppPopupWindows } from './popup-windows.mjs';
 import { readWindowFocus } from './window-focus.mjs';
+import { clearSweepEvidence, keepSweepEvidence } from './a11y-evidence.mjs';
 
 /** Taps one tab gets before its screen is called unreachable. */
 const TAB_TAPS = 3;
@@ -54,6 +55,8 @@ const KEY_BACK = 4;
  * @param {string} device.appId the example's package, relaunched before the first dump
  * @param {ReadonlyArray<import('./a11y.mjs').A11yControl>} [device.cases] the cases to
  *   read; every case when left out
+ * @param {string} [device.out] the run's output folder, where a red case's final dump
+ *   and screenshot are written; nothing is kept when left out
  * @returns {Promise<{covered: string[], matched: string[], stale: string[]}>}
  */
 export async function runA11ySweepOnDevice(begin, device) {
@@ -63,6 +66,8 @@ export async function runA11ySweepOnDevice(begin, device) {
   } catch {
     // A daemon that is already down is the state this pass needs in any case.
   }
+  const out = device.out;
+  if (out != null) clearSweepEvidence(out);
   await harness.startFromLaunch();
   return await runA11ySweep(
     begin,
@@ -78,6 +83,17 @@ export async function runA11ySweepOnDevice(begin, device) {
         harness.swipe(width - 8, y, width - 8, y - pixels, 400);
         await sleep(500);
       },
+      keepEvidence:
+        out == null
+          ? undefined
+          : (control) =>
+              keepSweepEvidence({
+                out,
+                id: control.id,
+                label: control.label,
+                xml: harness.lastXml,
+                adbShell: device.adbShell,
+              }),
     },
     device.cases
   );
@@ -99,6 +115,8 @@ export class SweepDevice {
     this.tabs = tabs;
     this.appId = appId;
     this.remoteDump = '/sdcard/nitro-ui-a11y-sweep.xml';
+    /** The text of the last dump `hierarchy` answered with. */
+    this.lastXml = '';
     // The tab bar is the strip at the top of the window: 12% of its height covers the
     // tabs at any density without ever reaching the content below them.
     this.tabBandY = Math.round(this.size().height * 0.12);
@@ -246,6 +264,7 @@ export class SweepDevice {
           `a11y rule has no tree to grade. It said: ${last.slice(0, 300)}`
       );
     }
+    this.lastXml = xml;
     return parseHierarchy(xml);
   }
 
