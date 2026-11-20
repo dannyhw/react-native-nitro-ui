@@ -69,6 +69,7 @@ export async function runA11ySweepOnDevice(begin, device) {
     {
       goToScreen: (screen, log) => harness.goToScreen(screen, log),
       dump: () => harness.hierarchy(),
+      windowHeight: harness.size().height,
       scrollToTop: () => harness.scrollToTop(),
       scrollPage: async (pixels) => {
         // The empty strip at the right edge: anywhere else the swipe can start on
