@@ -49,10 +49,10 @@ import {
   checkControlA11y,
   exemptionsFor,
   staleExemptions,
-} from "./a11y.mjs";
+} from './a11y.mjs';
 
 /** The runner flag that reads one case on its own. */
-const A11Y_FLAG = "--a11y";
+const A11Y_FLAG = '--a11y';
 
 /** @typedef {import('./a11y.mjs').A11yControl} A11yControl */
 
@@ -100,7 +100,7 @@ const SCROLL_PROBE_PX = 320;
 export async function runA11ySweep(
   begin,
   navigation,
-  controls = A11Y_CONTROLS,
+  controls = A11Y_CONTROLS
 ) {
   /** @type {string[]} */
   const covered = [];
@@ -120,8 +120,8 @@ export async function runA11ySweep(
       log.check(
         `the page was still moving after ${String(SCROLL_PROBE_LIMIT)} swipes and never ` +
           `showed "${control.label}" wholly on screen, so the sweep stopped scrolling ` +
-          "and graded the last dump",
-        false,
+          'and graded the last dump',
+        false
       );
     }
     covered.push(control.id);
@@ -142,9 +142,9 @@ export async function runA11ySweep(
           ? `${control.hybridView} is named on one node a person can act on`
           : `${control.hybridView} has no new a11y finding — and no clean pass either: ` +
             `${String(result.known.length)} of its problems match a debt row, printed ` +
-            "above, so the rule is answered by the exemption rather than by the dump"
-        : result.failures.join(" | "),
-      result.failures.length === 0,
+            'above, so the rule is answered by the exemption rather than by the dump'
+        : result.failures.join(' | '),
+      result.failures.length === 0
     );
   }
 
@@ -155,16 +155,16 @@ export async function runA11ySweep(
   const stale = staleExemptions(covered, matched);
   if (stale.length > 0) {
     const log = begin(
-      "a11y:debt",
-      "the a11y debt list still describes this code",
+      'a11y:debt',
+      'the a11y debt list still describes this code',
       {
         rerun: covered
           .filter(
             (id) =>
-              !matched.includes(id) && exemptionsFor(id, "android").length > 0,
+              !matched.includes(id) && exemptionsFor(id, 'android').length > 0
           )
           .flatMap((id) => [A11Y_FLAG, id]),
-      },
+      }
     );
     for (const line of stale) {
       log.check(line, false);
@@ -191,7 +191,7 @@ async function treeShowing(navigation, label) {
   if (!(windowHeight > 0)) {
     throw new TypeError(
       `a11y sweep: the navigation's windowHeight is ${String(windowHeight)}, so no box ` +
-        "can be called on screen",
+        'can be called on screen'
     );
   }
   await navigation.scrollToTop();
@@ -231,9 +231,9 @@ function pageSignature(tree) {
       (node) =>
         `${String(node.className)}|${String(node.resourceId)}|${String(node.contentDesc)}@` +
         `${String(node.bounds.x1)},${String(node.bounds.y1)},` +
-        `${String(node.bounds.x2)},${String(node.bounds.y2)}`,
+        `${String(node.bounds.x2)},${String(node.bounds.y2)}`
     )
-    .join(";");
+    .join(';');
 }
 
 export { SCROLL_PROBE_LIMIT, SCROLL_PROBE_PX };
