@@ -1,5 +1,5 @@
 import { test } from '@e2e-dev/mobile';
-import { expect, type Screen } from 'e2e';
+import { expect, type Locator, type Screen } from 'e2e';
 
 import {
   boxOf,
@@ -13,12 +13,18 @@ import {
   textOf,
 } from './support';
 import { actsOnOneNamedNode } from './reader';
+import { adbShell } from './device-read';
+import { tree } from './os-tree';
 import {
   expectKeyboard,
   fieldAboveKeyboard,
   focusField,
   withRealKeyboard,
 } from './keyboard';
+import {
+  imeInsetSample,
+  imeInsetTop,
+} from '../../../scripts/real-input/ime-frame.mjs';
 
 const ROW = 'Row with onPress';
 
@@ -164,7 +170,14 @@ test('a field the keyboard would cover is moved clear of it', async ({
         'ever covered and "it stayed above the keyboard" would be true of a Form ' +
         'that does nothing at all'
     ).toBeGreaterThan(keyboardTop);
-    await fieldAboveKeyboard(field);
+    try {
+      await fieldAboveKeyboard(field);
+    } catch (failure) {
+      throw withKeyboardEvidence(
+        failure,
+        await keyboardEvidence(screen, field)
+      );
+    }
   });
 });
 
@@ -356,4 +369,270 @@ async function revealLowInPage(
       { x: box.x + box.width / 2, y: box.y + 160 }
     );
   }
+}
+
+/**
+ * The failure-path reads of the keyboard case.
+ *
+ * `fieldAboveKeyboard` fails with what the *locator* could not resolve, which is not the
+ * same claim as "the field sits under the keyboard". The two come apart exactly as this
+ * case cannot tell them apart on its own: a keyboard can go away while the app still
+ * echoes a focused field, and a focused field can be there in the accessibility tree and
+ * still be one the driver will not name. The device's own dumps and the raw dump answer
+ * that, so they are read here — and only once a read has already failed.
+ */
+
+/** The class that holds a caret, in the tree's own words. */
+const EDITABLE_CLASS = /EditText/;
+
+/** How many nodes below the field one failure prints. */
+const EVIDENCE_NODES = 10;
+
+/** The example app's package: a dump node from another one is another window's. */
+const APP_PACKAGE = 'nitroui.example';
+
+/** One failure-path read, or the reason it has no answer. */
+async function evidenceLine(
+  what: string,
+  read: () => string | Promise<string>
+): Promise<string> {
+  try {
+    return `- ${what}: ${await read()}`;
+  } catch (error) {
+    const reason = String((error as Error)?.message ?? error).split('\n')[0];
+    return `- ${what}: this read failed - ${reason ?? 'nothing said'}`;
+  }
+}
+
+/**
+ * The device's own account of the keyboard, from two places that disagree usefully.
+ *
+ * The inset is the number the app is told and the one this case measures against; the
+ * input method service's `mInputShown` is whether a person can see a keyboard. A keyboard
+ * that closed while the field stayed focused reads differently in the two than a keyboard
+ * that never went away does.
+ */
+function deviceKeyboardEvidence(): string[] {
+  const activity = adbShell(['dumpsys', 'activity', 'top']);
+  const inset = imeInsetTop(activity);
+  return [
+    `- keyboard, the window manager's ime inset for this app: ${
+      inset == null
+        ? 'no visible keyboard to measure'
+        : `top at ${String(Math.round(inset))} px`
+    }; the dump says "${imeInsetSample(activity)}"`,
+    `- keyboard, the input method service says: ${inputMethodServiceSays()}`,
+  ];
+}
+
+/** The keys of the service's own state that say what it is showing, and to whom. */
+const SERVICE_STATE = /\b(mInputShown|mInputEditorInfo|visibleTopInsets)\b/;
+
+/**
+ * The service's own lines, printed rather than parsed.
+ *
+ * The harness reads these, but the typed bridge in front of those readers carries the
+ * inset alone; a failure gets the dump's words, so a renamed line shows up as a line that
+ * is simply missing instead of a wrong answer.
+ */
+function inputMethodServiceSays(): string {
+  const lines = adbShell(['dumpsys', 'input_method'])
+    .split('\n')
+    .filter((line) => SERVICE_STATE.test(line))
+    .map((line) => line.trim());
+  if (lines.length === 0) {
+    return 'nothing: the dump carries no mInputShown or mInputEditorInfo line';
+  }
+  return lines.slice(0, 4).join(' / ').slice(0, 400);
+}
+
+/** One element of a `uiautomator dump`, with every attribute the platform wrote. */
+interface DumpNode {
+  attributes: Record<string, string>;
+  children: DumpNode[];
+}
+
+/** A dump node and how deep in the dump it sits. */
+interface DumpEntry {
+  node: DumpNode;
+  depth: number;
+}
+
+/**
+ * The dump as a tree, attributes and all.
+ *
+ * The harness's `parseHierarchy` keeps the handful of flags the green path reads; a
+ * failure has to be read out of what the dump actually wrote, `visible-to-user` included
+ * on the images that write it.
+ */
+function dumpTree(xml: string): DumpNode[] {
+  const roots: DumpNode[] = [];
+  const open: DumpNode[] = [];
+  for (const element of xml.matchAll(/<node\b([^>]*)>|<\/node>/g)) {
+    if (element[0] === '</node>') {
+      open.pop();
+      continue;
+    }
+    const written = element[1] ?? '';
+    const attributes: Record<string, string> = {};
+    for (const attribute of written.matchAll(/([\w:-]+)="([^"]*)"/g)) {
+      const name = attribute[1];
+      if (name != null) attributes[name] = attribute[2] ?? '';
+    }
+    const node: DumpNode = { attributes, children: [] };
+    const parent = open[open.length - 1];
+    if (parent == null) roots.push(node);
+    else parent.children.push(node);
+    if (!written.trimEnd().endsWith('/')) open.push(node);
+  }
+  return roots;
+}
+
+function dumpEntries(nodes: DumpNode[], depth = 0): DumpEntry[] {
+  return nodes.flatMap((node) => [
+    { node, depth },
+    ...dumpEntries(node.children, depth + 1),
+  ]);
+}
+
+/** The dump of the screen as it is, without the trailer `uiautomator` prints. */
+function accessibilityDump(): string {
+  const dump = adbShell(['uiautomator', 'dump', '/dev/tty']);
+  const start = dump.indexOf('<?xml');
+  if (start < 0) {
+    throw new Error(`uiautomator answered "${dump.slice(0, 200)}"`);
+  }
+  const xml = dump.slice(start);
+  const end = xml.lastIndexOf('</hierarchy>');
+  return end < 0 ? xml : xml.slice(0, end);
+}
+
+/** One dump node, as much of it as a failure line can carry. */
+function dumpLine(node: DumpNode): string {
+  const words =
+    (node.attributes['content-desc'] ?? '') ||
+    (node.attributes.text ?? '') ||
+    '(nothing announced)';
+  return (
+    `${node.attributes.class ?? 'no class'} ` +
+    `bounds=${node.attributes.bounds ?? '?'} ` +
+    `visible-to-user=${node.attributes['visible-to-user'] ?? 'not written by this dump'} ` +
+    `focused=${node.attributes.focused ?? '?'} words="${words}"`
+  );
+}
+
+/**
+ * The focused field as the accessibility service serves it: its own node, then the
+ * nodes inside it, then which windows the dump carries at all.
+ */
+function dumpedField(): string {
+  const entries = dumpEntries(dumpTree(accessibilityDump()));
+  const others = new Set<string>();
+  let owned = 0;
+  for (const entry of entries) {
+    const owner = entry.node.attributes.package ?? 'no package';
+    if (owner === APP_PACKAGE) owned += 1;
+    else others.add(owner);
+  }
+  const focused = entries.find(
+    (entry) => entry.node.attributes.focused === 'true'
+  );
+  const target =
+    focused ??
+    entries.find((entry) =>
+      EDITABLE_CLASS.test(entry.node.attributes.class ?? '')
+    );
+  const windows = `the dump carries ${String(entries.length)} nodes, ${String(
+    owned
+  )} of them the app's own and the rest ${
+    others.size === 0 ? "nobody else's" : `from ${[...others].join(', ')}`
+  }`;
+  if (target == null) {
+    return (
+      `nothing in the dump is focused or editable - no node a caret is in; ` +
+      `${windows}`
+    );
+  }
+  const lines = [
+    `the node a caret is in is ${dumpLine(target.node)}`,
+    ...linesInside(entries, target),
+    windows,
+  ];
+  return lines.join('\n    ');
+}
+
+/** The nodes under the field's own node, which is where its label lives. */
+function linesInside(entries: DumpEntry[], target: DumpEntry): string[] {
+  const start = entries.indexOf(target) + 1;
+  const lines: string[] = [];
+  for (let index = start; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (entry == null || entry.depth <= target.depth) break;
+    if (lines.length >= EVIDENCE_NODES) {
+      lines.push('  … the node has more children than this prints');
+      break;
+    }
+    lines.push(
+      `${'  '.repeat(entry.depth - target.depth)}${dumpLine(entry.node)}`
+    );
+  }
+  return lines;
+}
+
+/** The editable nodes the driver itself can see, with the boxes it would answer with. */
+function driverTree(): string {
+  const nodes = tree({ unmerged: true });
+  const editable = nodes.filter((node) => EDITABLE_CLASS.test(node.className));
+  const shown = editable
+    .slice(0, EVIDENCE_NODES)
+    .map(
+      (node) =>
+        `${node.className} "${node.contentDesc || node.text || '(no words)'}" ` +
+        `focusable=${node.focusable || 'not written'} ` +
+        `bounds=[${String(node.bounds.x1)},${String(node.bounds.y1)}]` +
+        `[${String(node.bounds.x2)},${String(node.bounds.y2)}]`
+    )
+    .join('; ');
+  return (
+    `its snapshot holds ${String(nodes.length)} node(s), ` +
+    `${String(editable.length)} of them editable` +
+    (shown === '' ? '' : `: ${shown}`)
+  );
+}
+
+/** What the app and the device say while the field cannot be read. */
+async function keyboardEvidence(
+  screen: Screen,
+  field: Locator
+): Promise<string> {
+  return [
+    'Did the keyboard close while the field stayed focused? These are the reads that ' +
+      'answer it, taken while the field could not be read:',
+    ...deviceKeyboardEvidence(),
+    await evidenceLine("the app's focus echo", () =>
+      textOf(screen, 'form-field-focus')
+    ),
+    await evidenceLine("the app's avoidance echo", () =>
+      textOf(screen, 'form-avoid-echo')
+    ),
+    await evidenceLine('what the driver resolves now', async () => {
+      const named = String(await field.count());
+      const any = String(await screen.getByRole('textbox').count());
+      return `the field this case reads: ${named} node(s); every textbox on the screen: ${any} node(s)`;
+    }),
+    await evidenceLine("the driver's own tree", () => driverTree()),
+    await evidenceLine('the raw accessibility dump', () => dumpedField()),
+  ].join('\n');
+}
+
+/**
+ * The evidence on the failure itself, so the driver's own verdict stays the first line.
+ *
+ * The error object goes back unchanged - its code is what the run's trace headlines with.
+ */
+function withKeyboardEvidence(failure: unknown, evidence: string): Error {
+  const message = String((failure as Error | null)?.message ?? failure);
+  const error = failure instanceof Error ? failure : new Error(message);
+  error.message = `${message}\n\n${evidence}`;
+  return error;
 }
