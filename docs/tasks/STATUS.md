@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-20 Nothing user-visible: the iOS split Menu test waits for the tap's action instead of a fixed
+  400 ms (FIX23, #116).
 - 11-20 Nothing user-visible: the SearchField clear-button, hosted Picker menu and Slider drag tests
   wait for the value they read, so slower machines no longer race them (FIX22, #115).
 - 11-20 Nothing user-visible: the Android real-input gate's tree checks press Back only on a

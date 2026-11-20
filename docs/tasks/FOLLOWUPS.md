@@ -6,8 +6,6 @@ One line per test that went red and then green on the same tree: test name, date
 run time of the failed run, times seen. Copied from task reports at merge. The rules are in
 `.claude/skills/flake/SKILL.md`.
 
-- `Menu · Split trigger › is two halves, and each one does only its own job`, 2026-11-15,
-  `harness:ios` started 12:26 UTC, seen once.
 - App crash in the worklets runtime (SIGSEGV) during the BottomSheet and Popover suites,
   2026-11-15, `harness:ios` on a merge run; again 2026-11-18 as `worklets::cleanupRuntimeAware`
   at teardown after `Popover.harness.tsx` on a task branch, green on `--rerun-failed`. Seen twice.
