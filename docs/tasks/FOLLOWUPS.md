@@ -35,6 +35,10 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
 - `Tooltip.harness.tsx` (iOS), the suite lost to an app-process exit with no crash log,
   2026-11-19, `harness:ios` on a task branch while another task's real-input run loaded the
   machine, green on `--rerun-failed`, seen once.
+- `Form.harness.tsx` "Form section drawing (E2, Android) › reserves a band with its padding and
+  draws into a layer as tall as its section", 2026-11-20, `harness:android` started 00:05 UTC on a
+  task branch, failed in the full run and passed alone on the one rerun, seen once. Passing alone
+  and failing after other files is the shape the flake rules call a bug if it is seen again.
 - `SearchField.harness.tsx` "takes no submit from a Return pressed on a query it has just cleared"
   (Android), a stray `change:` event, 2026-11-19, `harness:android` on a merge run started 10:35
   UTC, green on `--rerun-failed`, seen once.
@@ -423,3 +427,4 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - Form harness, the Android keyboard opt-out cases: the default-path checks accept a 2 dp lift and a 1 dp scroll; asserting that the focused field ends above the keyboard by the reveal margin, and that the requested row ends inside the viewport, would make them prove the default behaviour too (CodeRabbit on #106).
 - SearchField autoCorrect: the harness step that turns `autoCorrect` off cannot catch a missing keyboard restart (the interceptor reads the prop live); no SearchField number or phone keyboard case; the new case waits 8000 ms where the file default is 5000 ms.
 - SearchField strings: they follow a language change only once the activity restarts (the field does not read `LocalConfiguration`); `SearchFieldStrings.forLocale` is public Kotlin only for the example probe; the device check cannot tell the drawing context from the application context, which differs below API 33 with AppCompat's per-app language.
+- Harness reads that race the value they read, the same shape as the three fixed for CI: `HostPopups.harness.tsx` about line 911 ("opens two popup owners in one Host") reads `picker.selectedIndex` right after a pick; `SearchField.harness.tsx` about line 566 ("submits on the Search key, then blurs") reads the event log right after the native blur and was two events short on CI run 44504146726, and no counter covers submit and blur.

@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-20 Nothing user-visible: the SearchField clear-button, hosted Picker menu and Slider drag tests
+  wait for the value they read, so slower machines no longer race them (FIX22, #115).
 - 11-20 Nothing user-visible: the Android real-input gate's tree checks press Back only on a
   window the app owns, so a relaunch on a slow machine no longer closes the app it started
   (X60, #117); `check` no longer runs the tooling tests while `prepare` regenerates `nitrogen/`
