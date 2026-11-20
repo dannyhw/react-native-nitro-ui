@@ -176,10 +176,10 @@ export async function runA11ySweep(
 /**
  * A dump in which `label` has a box, scrolling to find it.
  *
- * The box has to be wholly inside the window. Stops as soon as it is, so a control near the top costs a single dump, or once a
- * swipe leaves the page where it was. Returns the last tree either way: a name with no box
- * there is a finding the rule has to report, and swallowing it here would turn a failure
- * back into a scroll timeout. `endless` is set only when the page was still moving after
+ * The box has to be wholly inside the window. Stops as soon as it is, so a control near
+ * the top costs a single dump, or once a swipe leaves the page where it was. Returns the
+ * last tree either way: a name with no box there is a finding the rule has to report, and
+ * swallowing it here would turn a failure back into a scroll timeout. `endless` is set only when the page was still moving after
  * {@link SCROLL_PROBE_LIMIT} swipes.
  *
  * @param {{dump: () => any[], scrollPage: (pixels: number) => Promise<void>, scrollToTop: () => Promise<void>, windowHeight: number}} navigation
