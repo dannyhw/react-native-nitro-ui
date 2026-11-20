@@ -12,7 +12,11 @@ import { blockMs, sleep } from './support.mjs';
 import { screenTab } from './screens.mjs';
 import { imeServiceShown } from './ime-frame.mjs';
 import { findByTestId, parseHierarchy } from './uiautomator.mjs';
-import { runA11ySweep } from './a11y-sweep.mjs';
+import {
+  runA11ySweep,
+  SCROLL_PROBE_LIMIT,
+  STILL_SWIPES,
+} from './a11y-sweep.mjs';
 import { countAppPopupWindows } from './popup-windows.mjs';
 import { readWindowFocus } from './window-focus.mjs';
 
@@ -69,6 +73,7 @@ export async function runA11ySweepOnDevice(begin, device) {
     {
       goToScreen: (screen, log) => harness.goToScreen(screen, log),
       dump: () => harness.hierarchy(),
+      windowHeight: harness.size().height,
       scrollToTop: () => harness.scrollToTop(),
       scrollPage: async (pixels) => {
         // The empty strip at the right edge: anywhere else the swipe can start on
@@ -351,11 +356,12 @@ export class SweepDevice {
   }
 
   /**
-   * Swipe the page back to its top, until a swipe stops moving anything.
+   * Swipe the page back to its top, until {@link STILL_SWIPES} swipes in a row move nothing.
    *
-   * @param {number} [maxSwipes]
+   * Each swipe asks for half the window, more than a probe's swipe down, so the probe's cap
+   * also covers the way back from the deepest page it can reach. Reaching it throws.
    */
-  async scrollToTop(maxSwipes = 8) {
+  async scrollToTop() {
     const { width, height } = this.size();
     const x = width - 8;
     const from = Math.round(height * 0.25);
@@ -367,13 +373,19 @@ export class SweepDevice {
         .map((node) => `${String(node.bounds.x1)},${String(node.bounds.y1)}`)
         .join(';');
     let previous = signature();
-    for (let attempt = 0; attempt < maxSwipes; attempt += 1) {
+    let still = 0;
+    for (let attempt = 0; attempt < SCROLL_PROBE_LIMIT; attempt += 1) {
       this.swipe(x, from, x, to, 400);
       await sleep(400);
       const now = signature();
-      if (now === previous) return;
+      still = now === previous ? still + 1 : 0;
+      if (still === STILL_SWIPES) return;
       previous = now;
     }
+    throw new Error(
+      `real-input: the page was still moving after ${String(SCROLL_PROBE_LIMIT)} swipes ` +
+        'up, so the a11y sweep never found its top.'
+    );
   }
 
   /**

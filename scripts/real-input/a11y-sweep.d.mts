@@ -14,12 +14,14 @@ export interface A11ySweepLog {
   retried(message: string): void;
 }
 
-/** What the pass needs from the device: a screen, a dump, and two scrolls. */
+/** What the pass needs from the device: a screen, a dump, its window, and two scrolls. */
 export interface A11ySweepNavigation {
   goToScreen(screen: string, log: A11ySweepLog): void | Promise<void>;
   dump():
     | ReadonlyArray<UiautomatorNode>
     | Promise<ReadonlyArray<UiautomatorNode>>;
+  /** The window's height, in the dump's pixels: a box ending on it may be clipped. */
+  readonly windowHeight: number;
   scrollPage(pixels: number): void | Promise<void>;
   scrollToTop(): void | Promise<void>;
 }
