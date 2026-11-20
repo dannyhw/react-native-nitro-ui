@@ -873,10 +873,11 @@ describe('the a11y sweep, against a fake device', () => {
    * A page taller than the window, as `uiautomator` reports it: each node's box is cut at
    * the window's bottom edge, and a node wholly below the window is a zero-sized box at
    * the origin, the way a Spinner below the fold came back on a slow runner. Each swipe
-   * moves the page `step` px, until it reaches its end. Rows of text fill the page between
+   * moves the page `step` px, until it reaches its end; the swipes numbered in `dropped`
+   * (from 1) move nothing, as a dropped input does. Rows of text fill the page between
    * the named nodes, as a screen's titles and captions do, so a swipe that moves it shows.
    */
-  function scrollingPage(named, { step, end }) {
+  function scrollingPage(named, { step, end, dropped = [] }) {
     const rows = Array.from(
       { length: Math.ceil((end + WINDOW_HEIGHT) / 250) },
       (_, i) => ({
@@ -896,6 +897,7 @@ describe('the a11y sweep, against a fake device', () => {
       },
       async scrollPage() {
         page.scrolls += 1;
+        if (dropped.includes(page.scrolls)) return;
         page.offset = Math.min(end, page.offset + step);
       },
       dump() {
@@ -1017,13 +1019,13 @@ describe('the a11y sweep, against a fake device', () => {
     });
   });
 
-  it('judges the last tree once a swipe leaves the page unmoved, and says what it saw', () => {
+  it('judges the last tree once two swipes leave the page unmoved, and says what it saw', () => {
     const { begin, logs } = collector();
     const navigation = fakeNavigation(() => [
       node('Controlled switch', { width: 0, height: 0 }),
     ]);
     return runA11ySweep(begin, navigation, switchCase()).then(() => {
-      expect(navigation.scrolls).toBe(1);
+      expect(navigation.scrolls).toBe(2);
       expect(logs[0].log.failures.join('\n')).toContain('zero-sized box');
     });
   });
@@ -1040,6 +1042,21 @@ describe('the a11y sweep, against a fake device', () => {
     );
     await runA11ySweep(begin, page, only('hosted-picker'));
     expect(page.scrolls).toBe(9);
+    const graded = boxOf(page.dumps.at(-1), 'Hosted picker');
+    expect(graded.height).toBe(95);
+    expect(graded.y2).toBeLessThan(WINDOW_HEIGHT);
+    expect(logs[0].log.failures).toEqual([]);
+  });
+
+  it('keeps scrolling past one dropped swipe mid-page', async () => {
+    const { begin, logs } = collector();
+    // Nine moving swipes show the picker; the third swipe is dropped, so it takes ten.
+    const page = scrollingPage(
+      [{ label: 'Hosted picker', top: 4100, height: 95 }],
+      { step: 200, end: 4000, dropped: [3] }
+    );
+    await runA11ySweep(begin, page, only('hosted-picker'));
+    expect(page.scrolls).toBe(10);
     const graded = boxOf(page.dumps.at(-1), 'Hosted picker');
     expect(graded.height).toBe(95);
     expect(graded.y2).toBeLessThan(WINDOW_HEIGHT);
@@ -1063,7 +1080,7 @@ describe('the a11y sweep, against a fake device', () => {
 
   it('ends the probe where the page ends, and reports a missing control as today', async () => {
     const { begin, logs } = collector();
-    // Three swipes reach the end, the fourth moves nothing; the case's name is never drawn.
+    // Three swipes reach the end, the next two move nothing; the case's name is never drawn.
     const page = scrollingPage(
       [{ label: 'Something else', top: 100, height: 40 }],
       {
@@ -1072,7 +1089,7 @@ describe('the a11y sweep, against a fake device', () => {
       }
     );
     await runA11ySweep(begin, page, only('hosted-picker'));
-    expect(page.scrolls).toBe(4);
+    expect(page.scrolls).toBe(5);
     expect(logs[0].log.failures.join('\n')).toContain(
       'announces this control as nothing'
     );

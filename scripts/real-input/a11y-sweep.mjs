@@ -60,7 +60,7 @@ const A11Y_FLAG = '--a11y';
  * Swipes a case may take before the page is called endless rather than long.
  *
  * Not a budget for finding a control: the probe stops when the control is wholly on screen
- * or when a swipe leaves the page unmoved. The deepest screens end in a 200-row list of rows
+ * or when the page stops moving. The deepest screens end in a 200-row list of rows
  * up to 131 px tall, roughly 30,000 to 40,000 px of page. A swipe moves an emulator's page
  * about 350 px; 400 swipes still reach the end of 40,000 px at 100 px a swipe. Reaching the
  * cap means the tree changed on every dump, and the case fails.
@@ -69,6 +69,12 @@ const SCROLL_PROBE_LIMIT = 400;
 
 /** The swipe distance per probe, in pixels. */
 const SCROLL_PROBE_PX = 320;
+
+/**
+ * Swipes in a row that must leave the page unmoved before it counts as ended: a loaded
+ * device can drop one swipe, and that alone must not end a page mid-way.
+ */
+const STILL_SWIPES = 2;
 
 /**
  * Run the a11y sweep over every control in the table.
@@ -178,7 +184,8 @@ export async function runA11ySweep(
  * A dump in which `label` has a box, scrolling to find it.
  *
  * The box has to be wholly inside the window. Stops as soon as it is, so a control near
- * the top costs a single dump, or once a swipe leaves the page where it was. Returns the
+ * the top costs a single dump, or once {@link STILL_SWIPES} swipes in a row leave the page
+ * where it was. Returns the
  * last tree either way: a name with no box there is a finding the rule has to report, and
  * swallowing it here would turn a failure back into a scroll timeout. `endless` is set only when the page was still moving after
  * {@link SCROLL_PROBE_LIMIT} swipes.
@@ -197,6 +204,7 @@ async function treeShowing(navigation, label) {
   }
   await navigation.scrollToTop();
   let tree = await navigation.dump();
+  let still = 0;
   for (let probe = 0; probe < SCROLL_PROBE_LIMIT; probe += 1) {
     if (tree.some((node) => whollyInside(node, label, windowHeight))) {
       return { tree, endless: false };
@@ -204,7 +212,8 @@ async function treeShowing(navigation, label) {
     const before = pageSignature(tree);
     await navigation.scrollPage(SCROLL_PROBE_PX);
     tree = await navigation.dump();
-    if (pageSignature(tree) === before) return { tree, endless: false };
+    still = pageSignature(tree) === before ? still + 1 : 0;
+    if (still === STILL_SWIPES) return { tree, endless: false };
   }
   return {
     tree,
@@ -237,4 +246,4 @@ function pageSignature(tree) {
     .join(';');
 }
 
-export { SCROLL_PROBE_LIMIT, SCROLL_PROBE_PX };
+export { SCROLL_PROBE_LIMIT, SCROLL_PROBE_PX, STILL_SWIPES };
