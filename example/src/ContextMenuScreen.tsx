@@ -309,9 +309,12 @@ const styles = StyleSheet.create({
   },
   spacer: { height: 900 },
   bottom: {
-    height: 56,
+    // Tall, and its label kept at its top: the last strip of the screen belongs to the
+    // system's gesture handle, which takes a touch that starts inside it, so a hold has
+    // to have room inside the row and above that strip to be the app's at all.
+    height: 96,
+    paddingTop: 12,
     backgroundColor: '#fff7d6',
-    justifyContent: 'center',
     paddingHorizontal: 12,
   },
 });
