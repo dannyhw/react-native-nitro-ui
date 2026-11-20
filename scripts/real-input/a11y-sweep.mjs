@@ -60,11 +60,12 @@ const A11Y_FLAG = '--a11y';
  * Swipes a case may take before the page is called endless rather than long.
  *
  * Not a budget for finding a control: the probe stops when the control is wholly on screen
- * or when a swipe leaves the page unmoved. `HostScreen.tsx`, the deepest screen, ends about
- * 2600 px below the window, so even a runner whose swipe moves the page only 80 px stops
- * long before 40. Reaching it means the tree changes on every dump, and the case fails.
+ * or when a swipe leaves the page unmoved. The deepest screens end in a 200-row list of rows
+ * up to 131 px tall, roughly 30,000 to 40,000 px of page. A swipe moves an emulator's page
+ * about 350 px; 400 swipes still reach the end of 40,000 px at 100 px a swipe. Reaching the
+ * cap means the tree changed on every dump, and the case fails.
  */
-const SCROLL_PROBE_LIMIT = 40;
+const SCROLL_PROBE_LIMIT = 400;
 
 /** The swipe distance per probe, in pixels. */
 const SCROLL_PROBE_PX = 320;
