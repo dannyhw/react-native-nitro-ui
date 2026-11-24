@@ -341,6 +341,15 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void()>("nuiTestProbeAccessibility");
     method(_javaPart);
   }
+  void JHybridNitroUiButtonGroupSpec::nuiTestPixelProbe(double color) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(double /* color */)>("nuiTestPixelProbe");
+    method(_javaPart, color);
+  }
+  std::string JHybridNitroUiButtonGroupSpec::nuiTestPixelReport() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("nuiTestPixelReport");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
   std::string JHybridNitroUiButtonGroupSpec::nuiTestStateReport() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("nuiTestStateReport");
     auto __result = method(_javaPart);

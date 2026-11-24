@@ -175,6 +175,24 @@ export interface NitroUiButtonGroupMethods extends HybridViewMethods {
   nuiTestProbeAccessibility(): void;
 
   /**
+   * Test-only: sample the drawn pixels for `color` on the UI thread and store the
+   * answer for `nuiTestPixelReport()`. iOS has nothing to sample.
+   *
+   * @internal Not app API.
+   */
+  nuiTestPixelProbe(color: number): void;
+
+  /**
+   * Test-only: the last `nuiTestPixelProbe`'s result, empty before the first probe.
+   * Android: `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
+   * closest=#<RRGGBB>`, where the box is the whole group. iOS: `n=<probes> no
+   * pixels`.
+   *
+   * @internal Not app API.
+   */
+  nuiTestPixelReport(): string;
+
+  /**
    * Test-only: what the control is showing, as one line:
    * `checked=<a,b|none>;visible=<n>;overflow=<0|1>;row=<r>;menu=<open|closed>;`
    * `probes=<n>;a11y=<...>`.

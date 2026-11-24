@@ -57,6 +57,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridMethod("nuiTestOpenOverflow", &HybridNitroUiButtonGroupSpec::nuiTestOpenOverflow);
       prototype.registerHybridMethod("nuiTestProbeRow", &HybridNitroUiButtonGroupSpec::nuiTestProbeRow);
       prototype.registerHybridMethod("nuiTestProbeAccessibility", &HybridNitroUiButtonGroupSpec::nuiTestProbeAccessibility);
+      prototype.registerHybridMethod("nuiTestPixelProbe", &HybridNitroUiButtonGroupSpec::nuiTestPixelProbe);
+      prototype.registerHybridMethod("nuiTestPixelReport", &HybridNitroUiButtonGroupSpec::nuiTestPixelReport);
       prototype.registerHybridMethod("nuiTestStateReport", &HybridNitroUiButtonGroupSpec::nuiTestStateReport);
     });
   }

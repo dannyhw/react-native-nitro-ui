@@ -100,6 +100,8 @@ namespace margelo::nitro::nitroui {
       virtual void nuiTestOpenOverflow() = 0;
       virtual void nuiTestProbeRow() = 0;
       virtual void nuiTestProbeAccessibility() = 0;
+      virtual void nuiTestPixelProbe(double color) = 0;
+      virtual std::string nuiTestPixelReport() = 0;
       virtual std::string nuiTestStateReport() = 0;
 
     protected:

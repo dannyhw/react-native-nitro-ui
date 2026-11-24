@@ -59,6 +59,13 @@ export interface NitroUiButtonGroupHandle {
   /** Test-only: reads the accessibility nodes. */
   nuiTestProbeAccessibility(): void;
   /**
+   * Test-only: samples the drawn pixels for `color`. Android only; iOS has nothing
+   * to sample and its report says `no pixels`.
+   */
+  nuiTestPixelProbe(color: number): void;
+  /** Test-only: the last `nuiTestPixelProbe`'s answer. */
+  nuiTestPixelReport(): string;
+  /**
    * Test-only:
    * `checked=…;visible=…;overflow=…;row=…;menu=…;probes=…;a11y=…`.
    */

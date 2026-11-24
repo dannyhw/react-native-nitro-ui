@@ -154,6 +154,8 @@ export interface ButtonGroupProps extends ViewProps {
         nuiTestOpenOverflow(): void;
         nuiTestProbeRow(): void;
         nuiTestProbeAccessibility(): void;
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
         nuiTestStateReport(): string;
       }) => void)
     | undefined;

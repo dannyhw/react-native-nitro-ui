@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.node.RootForTest
@@ -54,14 +55,15 @@ import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.NitroUiPixelProbes
 import com.margelo.nitro.nitroui.core.toRgbHex
+import com.margelo.nitro.nitroui.core.nitroUiSamplePixels
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -308,6 +310,15 @@ internal class ButtonGroupModel : NitroUiModel() {
     }
   }
 
+  /** The pixel probe's answer, on its own count so a row probe cannot be read as one. */
+  private val pixelProbes = NitroUiPixelProbes()
+
+  fun publishPixelReport(report: String) {
+    pixelProbes.publish(report)
+  }
+
+  fun readPixelReport(): String = pixelProbes.read()
+
   // Recorded from the composition, the only place Material exposes the menu's state.
   var menuOpen = false
     private set
@@ -354,6 +365,7 @@ internal class ButtonGroupModel : NitroUiModel() {
       overflowIconTints.clear()
       probes = 0
     }
+    pixelProbes.clear()
   }
 }
 
@@ -480,7 +492,7 @@ internal fun NitroUiM3ToggleButton(
         enabled = enabled,
         shapes = shapes,
         colors = colors,
-        border = toggleOutlinedBorder(variant, tint, checked, !enabled),
+        border = toggleOutlinedBorder(variant, tint, checked, enabled),
         contentPadding = contentPadding,
         content = content,
       )
@@ -529,20 +541,30 @@ internal fun toggleButtonColors(
   return built
 }
 
+/**
+ * The border of an `outlined` or `text` toggle item, which both compose as Material's
+ * `OutlinedToggleButton` and take it explicitly.
+ *
+ * A `text` item draws none. An `outlined` one draws Material's own for its state: an
+ * untinted item keeps it, and a tinted one keeps its width and its colour's alpha -- the
+ * state's strength -- and only swaps the hue. Where Material draws no border, none is
+ * drawn, and passing `null` for an untinted item would drop the default.
+ */
 @Composable
 private fun toggleOutlinedBorder(
   variant: ButtonVariant,
   tint: Int?,
   checked: Boolean,
-  disabled: Boolean,
-): androidx.compose.foundation.BorderStroke? {
-  if (variant != ButtonVariant.Outlined && variant != ButtonVariant.Text) {
+  enabled: Boolean,
+): BorderStroke? {
+  if (variant != ButtonVariant.Outlined) {
     return null
   }
-  val color = tint?.let { ComposeColor(it) } ?: return null
-  val base = OutlinedToggleButtonDefaults.border(checked = checked, enabled = !disabled)
-  // Material may return no border to copy the width from; its outline token is 1 dp.
-  return BorderStroke(base?.width ?: 1.dp, color)
+  val base = OutlinedToggleButtonDefaults.border(checked = checked, enabled = enabled)
+    ?: return null
+  val color = tint?.let { ComposeColor(it) } ?: return base
+  val strength = (base.brush as? SolidColor)?.value?.alpha ?: 1f
+  return BorderStroke(base.width, color.copy(alpha = color.alpha * strength))
 }
 
 private object ToggleColorsCache {
@@ -1168,6 +1190,18 @@ class HybridNitroUiButtonGroup(
       model.publishAccessibilityReport(describeAccessibility())
     }
   }
+
+  // Posted: reading pixels needs the UI thread, and a Nitro method may not block for it.
+  override fun nuiTestPixelProbe(color: Double) {
+    val run = { model.publishPixelReport(host.nitroUiSamplePixels(color)) }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      run()
+    } else {
+      host.post { run() }
+    }
+  }
+
+  override fun nuiTestPixelReport(): String = model.readPixelReport()
 
   override fun nuiTestStateReport(): String = model.stateReport()
 

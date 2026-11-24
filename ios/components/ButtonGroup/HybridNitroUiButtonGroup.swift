@@ -1058,6 +1058,25 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     model.publishAccessibilityReport("unavailable")
   }
 
+  private let pixelProbesLock = NSLock()
+
+  private var pixelProbes = 0
+
+  /// iOS has no Android icon glyph to sample, so the report says `no pixels`, which the
+  /// tests treat as a failure.
+  func nuiTestPixelProbe(color: Double) throws {
+    pixelProbesLock.lock()
+    pixelProbes += 1
+    pixelProbesLock.unlock()
+  }
+
+  func nuiTestPixelReport() throws -> String {
+    pixelProbesLock.lock()
+    let probes = pixelProbes
+    pixelProbesLock.unlock()
+    return "n=\(probes) no pixels platform=ios"
+  }
+
   func nuiTestStateReport() throws -> String {
     return model.stateReport()
   }
