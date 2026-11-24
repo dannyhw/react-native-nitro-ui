@@ -37,12 +37,12 @@ claim was false, and the run said so.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2214 tests / 100 suites | `c8fe044f480f` | 55.6 s | start 2.4 / med 5.6 / max 6.6 |
-| `harness:ios` | **PASS** | 621 tests / 30 suites + isolated 6 tests / 3 suites | `c8fe044f480f` (harness:ios digest) | 14 m 46 s | start 9.9 / med 3.1 / max 9.9 |
-| `harness:android` | **PASS** | 679 tests / 31 suites + isolated 6 tests / 3 suites | `c8fe044f480f` (harness:android digest) | 19 m 41 s | start 3.9 / med 2.9 / max 22.2 |
+| `check` | **PASS** | 2214 tests / 100 suites | `2ce7e9b78089` | 55.4 s | start 2.5 / med 5.5 / max 6.0 |
+| `harness:ios` | **PASS** | 621 tests / 30 suites + isolated 6 tests / 3 suites | `2ce7e9b78089` (harness:ios digest) | 14 m 29 s | start 3.5 / med 3.1 / max 5.2 |
+| `harness:android` | **PASS** | 679 tests / 31 suites + isolated 6 tests / 3 suites | `2ce7e9b78089` (harness:android digest) | 18 m 33 s | start 6.0 / med 5.3 / max 12.5 |
 | `real-input:ios` | **PASS** (from `merge/FIX24-FIX25`) | — | `7ea50279e125` (real-input:ios digest) | 45 m 11 s | start 3.1 / med 6.5 / max 41.5 |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:android:IconButton` | **FAIL** | — | `c8fe044f480f` (harness:android digest) | 0.9 s | start 3.5 / med 3.5 / max 3.5 |
+| `harness:android:IconButton` | **PASS** | 11 tests / 1 suites | `2ce7e9b78089` (harness:android digest) | 17.0 s | start 6.9 / med 6.8 / max 6.9 |
 
 `need --for review`: "review is satisfied on this code tree."
 
@@ -58,13 +58,9 @@ claim was false, and the run said so.
   the full #FF00A0 … hits=1330 … expected 1330 to be +0" at
   `example/__tests__/IconButton.harness.tsx:1326`.
 
-Both were run as filtered `harness:android:IconButton` runs, and the case is green again on the
-restored tree, in the full run above.
-
-The `harness:android:IconButton` row above is the newest filtered run on this code tree, and it is
-the run the harness refused in 0.9 s because the installed app carried another tree's stamp — a
-setup refusal, not a test result. The two mutation runs sit on their own code trees, and the full
-`harness:android` run above is the case green on the restored one.
+Both were run as filtered `harness:android:IconButton` runs, and the case was green again on the
+restored tree in that round's full `harness:android` run. The table above prints one row per
+gate, so it now carries fix round 1's runs on code tree `2ce7e9b78089`.
 
 ## Files changed
 
@@ -84,3 +80,24 @@ setup refusal, not a test result. The two mutation runs sit on their own code tr
 - iOS: the `outlined` ring is `UIColor.separator` at 1 pt with no state branch, so it neither dims
   while disabled nor disappears on a checked toggle — though it never claims the tint either, so
   it is not the same gap (`ios/components/IconButton/HybridNitroUiIconButton.swift:276`).
+
+## Fix round 1
+
+Both blocking findings, nothing else.
+
+The case renders four untinted `outlined` controls beside the tinted four — enabled, disabled,
+toggle off, toggle on — and reads their rings against each other: the enabled ring is further from
+the sampler's grey than the disabled one, the disabled control still owns ink off that grey rather
+than nothing, and the toggle that is on owns no ring where its unchecked twin owns one. No Kotlin
+changed.
+
+The changeset's untinted sentences now say what an app developer sees: an enabled button drew its
+ring as faintly as a disabled one and the other way round too, and a toggle drew a full ring while
+on, a faint one while off, and none at all while disabled.
+
+Red proof: `main`'s fallback arguments put back — `outlinedIconButtonBorder(!enabled)` and
+`outlinedIconToggleButtonBorder(selected, !enabled)` — -> "an enabled outlined button with no tint
+has no ring in its content colour (#000000) … hits=0 closest=#4F4F4F: expected 0 to be greater than
+0", Material's disabled 38% over the sampler's grey. Restored, and green in the runs under
+**Gates** - that table prints the newest run per gate, and its `harness:android:IconButton` row is
+the filtered case green on `2ce7e9b78089`.
