@@ -53,7 +53,9 @@ import {
   explainNeedRow,
   formatCompletion,
   formatFrom,
+  aloneWaitCeilingMs,
   gateEvidenceStoreDir,
+  gateLiveStoreDir,
   gateLogStoreDir,
   gateTreesFromEntries,
   gatesTouchedByPaths,
@@ -97,6 +99,7 @@ import {
   storedLogFailed,
   summarizeGates,
   summarizeLoad,
+  waitForMachine,
 } from './gate-core.mjs';
 import {
   GATE_DEATH_EXIT,
@@ -1219,7 +1222,103 @@ function changedCodePaths({ base }) {
  * Metro port is checked separately, because a server can outlive the lease
  * that started it and then no claim exists to conflict with.
  */
+/** The live-run markers' directory: beside the log store, or the worktree fallback. */
+function liveStoreDir() {
+  const { commonDir } = store();
+  return commonDir == null
+    ? path.join(repoRoot, LEDGER_DIR, 'live')
+    : gateLiveStoreDir(commonDir);
+}
+
+/** Reads, writes and removes the live-run markers, one `<pid>.json` each. */
+function liveStoreIo(dir = liveStoreDir()) {
+  const fileOf = (marker) =>
+    path.join(dir, `${String(Number(marker.pid))}.json`);
+  return {
+    list() {
+      let names = [];
+      try {
+        names = fs.readdirSync(dir);
+      } catch {
+        return [];
+      }
+      return names
+        .filter((name) => /^\d+\.json$/.test(name))
+        .map((name) => readBackgroundRecord(path.join(dir, name)))
+        .filter((marker) => marker != null);
+    },
+    write(marker) {
+      fs.mkdirSync(dir, { recursive: true });
+      writeJsonAtomic(fileOf(marker), marker);
+    },
+    remove(marker) {
+      fs.rmSync(fileOf(marker), { force: true });
+    },
+  };
+}
+
+/**
+ * Holds a device gate until it may share the machine with every live device gate
+ * from this clone, and returns how to give the machine back, or the exit code of
+ * a gate that waited to its ceiling. Nothing is recorded for a refusal; a
+ * backgrounded run marks its record done, so `wait` returns its code.
+ */
+async function takeMachine(name, resolved, options = {}) {
+  if (!isDeviceGate(resolved)) return { code: 0, leave: () => {} };
+  const io = liveStoreIo();
+  const me = { pid: process.pid };
+  const answer = await waitForMachine({
+    gate: name,
+    pid: process.pid,
+    meta: { branch: currentBranch(), worktree: store().worktree },
+    io,
+    isAlive: pidMayBeRunning,
+    now: Date.now,
+    sleep: (ms) =>
+      new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+    ceilingMs: aloneWaitCeilingMs(process.env),
+    say: (line) => process.stderr.write(`${line}\n`),
+  });
+  if (!answer.ok) {
+    process.stderr.write(`gate: refused before the run - ${answer.message}\n`);
+    if (options.logFile != null) {
+      const recordPath = backgroundRecordPath(options.logFile);
+      const record = readBackgroundRecord(recordPath);
+      if (record != null && record.done !== true) {
+        writeJsonAtomic(recordPath, {
+          ...record,
+          done: true,
+          finishedAt: Date.now(),
+          exitCode: 1,
+          error: answer.message,
+        });
+      }
+    }
+    return { code: 1, leave: () => {} };
+  }
+  const leave = () => {
+    process.removeListener('exit', leave);
+    try {
+      io.remove(me);
+    } catch {
+      /* a process that is gone counts as ended anyway */
+    }
+  };
+  process.once('exit', leave);
+  return { code: 0, leave };
+}
+
 async function runGate(name, resolved, options = {}) {
+  const machine = await takeMachine(name, resolved, options);
+  if (machine.code !== 0) return machine.code;
+  try {
+    return await runGateOnMachine(name, resolved, options);
+  } finally {
+    machine.leave();
+  }
+}
+
+async function runGateOnMachine(name, resolved, options = {}) {
   let claim = null;
   if (resolved.platform != null) {
     // Everything below, the runner included, reads `METRO_PORT`.
