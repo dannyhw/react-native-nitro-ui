@@ -377,20 +377,29 @@ async function pressWitnessedAndOpen(
 }
 
 /**
- * One read, asserted as one line: what a control reports when its menu has closed and its
- * window has gone. `opens` is the count the caller already saw — a menu that opened again
- * between the two reads is a different answer from one that never came back.
+ * One read, five fields, each asserted on its own line so a red names the field and shows the
+ * number it got. What a control reports when its menu has closed and its window has gone.
+ * `opens` is the count the caller already saw: a menu that opened again between the reads is a
+ * different answer.
  */
 function expectStillClosed(handle: PickerHandle, after: string, opens: number) {
   const report = parseMenuReport(handle.nuiTestMenuReport());
-  expect(
-    `${after}: expanded=${String(report.expanded)} live=${String(report.live)} ` +
-      `windows=${String(report.windows)} opens=${String(report.opens)} ` +
-      `menu=${report.menu.join(',')}`
-  ).toBe(
-    `${after}: expanded=false live=0 windows=0 opens=${String(opens)} ` +
-      `menu=-1,-1,-1,-1`
-  );
+  const seen: Record<string, string> = {
+    expanded: String(report.expanded),
+    live: String(report.live),
+    windows: String(report.windows),
+    opens: String(report.opens),
+    menu: report.menu.join(','),
+  };
+  for (const [name, closed] of Object.entries({
+    expanded: 'false',
+    live: '0',
+    windows: '0',
+    opens: String(opens),
+    menu: '-1,-1,-1,-1',
+  })) {
+    expect(`${name}=${seen[name]} ${after}`).toBe(`${name}=${closed} ${after}`);
+  }
 }
 
 /**
