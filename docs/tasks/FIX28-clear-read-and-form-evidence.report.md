@@ -30,19 +30,10 @@ The green path of the Form case is untouched, and no library code changed.
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2226 tests / 102 suites | `07fc219e17a9` | 57.3 s | start 1.9 / med 7.7 / max 9.4 |
-| `harness:ios` | **PASS** | 621 tests / 30 suites + isolated 6 tests / 3 suites | `07fc219e17a9` (harness:ios digest) | 14 m 33 s | start 7.1 / med 5.2 / max 12.0 |
-| `harness:android` | **PASS** | 679 tests / 31 suites + isolated 6 tests / 3 suites | `07fc219e17a9` (harness:android digest) | 18 m 28 s | start 4.7 / med 2.7 / max 4.9 |
-| `real-input:ios` | **PASS** (from `merge/X62-X63`) | — | `3c9fa9b83cf7` (real-input:ios digest) | 44 m 53 s | start 4.8 / med 4.8 / max 15.0 |
-| `real-input:android` | missing | — | — | — | — |
-| `harness:ios:SearchField` | stale | 2 failed of 18 tests / 1 suites | 3b8401b31e9e (not this tree) | 35.3 s | start 4.0 / med 7.4 / max 7.6 |
-| `real-input:android:--control:form` | **PASS** | 7 tests / 1 suites | `07fc219e17a9` (real-input:android digest) | 16 m 07 s | start 4.7 / med 4.1 / max 6.3 |
-
-`need --for review`: `need: review is satisfied on this code tree.` - `check`, `harness:ios` and
-`harness:android` green, and the filtered `real-input:android:--control:form` proof green on its own
-digest. The full `real-input:android` is deliberately left for merge.
+One table, in "Fix round 1" below: `gate.mjs table` prints a gate once, so the round-1 rows for
+`check`, `harness:ios`, `harness:android` and the filtered `real-input:android:--control:form` were
+replaced by the current ledger's own numbers there. Round one's runs were all green: `check`,
+`harness:ios`, `harness:android` and the filtered Form run, on the tree of commit `5a8ba82`.
 
 ## Red proofs
 
@@ -76,3 +67,32 @@ digest. The full `real-input:android` is deliberately left for merge.
 - agents: a proof edit to `src/` or `example/` moves the code tree, so each of the two proofs here
   cost an app rebuild before the gate would start; two rebuilds per proof round may be worth
   counting in the estimate.
+
+## Fix round 1
+
+Finding 1 only. Both clear cases now take their log count from a log that has caught up with the
+typing: `before` in the clear case is `(await logReached('cleared', ['focus', 'change:h',
+'change:hi'])).length`, and `typed` in the sibling is the same for `['focus', 'change:r',
+'change:ru']` - what each case actually types. The wait after either count can no longer be met by a
+typed entry that lands late. Assertions, timeouts and sleeps are unchanged, and nothing else moved.
+
+Red proof (timing, in the test field's own logger): the last typed `change:` is written 300 ms late
+and the clear's empty `change:` 900 ms late, so the typed entry lands between the count and the
+clear's event. With the anchor removed the filtered run goes red at
+`expected [ 'change:hi' ] to deeply equal [ 'change:' ]` (1 failed, 17 passed); with the anchor the
+same mutation passes (30 s). An earlier mutation that only delayed the typed entry stayed green: the
+wait reads the slice as soon as one entry follows the count, so only the ordering above breaks it.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2226 tests / 102 suites | `2b23a157d30e` | 55.7 s | start 4.2 / med 8.9 / max 11.5 |
+| `harness:ios` | **PASS** | 621 tests / 30 suites + isolated 6 tests / 3 suites | `2b23a157d30e` (harness:ios digest) | 18 m 05 s | start 20.2 / med 5.3 / max 22.5 |
+| `harness:android` | **PASS** | 679 tests / 31 suites + isolated 6 tests / 3 suites | `2b23a157d30e` (harness:android digest) | 18 m 37 s | start 20.2 / med 5.2 / max 22.5 |
+| `real-input:ios` | **PASS** (from `merge/X62-X63`) | — | `3c9fa9b83cf7` (real-input:ios digest) | 44 m 53 s | start 4.8 / med 4.8 / max 15.0 |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:ios:SearchField` | stale | 18 tests / 1 suites | 410f5f0eb405 (not this tree) | 30.0 s | start 12.2 / med 19.8 / max 27.5 |
+| `real-input:android:--control:form` | **PASS** | 7 tests / 1 suites | `07fc219e17a9` (real-input:android digest) | 16 m 07 s | start 4.7 / med 4.1 / max 6.3 |
+
+`need --for review`: `need: review is satisfied on this code tree.` - `check`, `harness:ios` and
+`harness:android` green on this tree; the filtered `real-input:android:--control:form` stays green on
+its own digest, which `form.e2e.ts` did not change in this round.
