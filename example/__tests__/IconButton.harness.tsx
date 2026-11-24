@@ -1191,37 +1191,51 @@ describe('IconButton · G23', () => {
     // The mid-grey the native sampler paints behind the control it draws, which is what
     // a translucent border blends with.
     const BACKDROP = '#808080';
-    const ids = [
+    // Without a `tintColor` the control keeps Material's own ring, in the content colour the
+    // host leaves it with, so these four are read against each other and not against a colour.
+    const INK = '#000000';
+    const ink = processColor(INK) as number;
+    const tintedIds = [
       'outline-enabled',
       'outline-disabled',
       'outline-toggle-off',
       'outline-toggle-on',
     ];
+    const plainIds = [
+      'plain-enabled',
+      'plain-disabled',
+      'plain-toggle-off',
+      'plain-toggle-on',
+    ];
+    const ids = [...tintedIds, ...plainIds];
     const outlineProps = {
       androidIcon: NOT_SHIPPED,
       size: 'large' as const,
       systemImage: DEFAULT_GLYPH.systemImage,
-      tintColor: TINT,
       variant: 'outlined' as const,
+    };
+    const tintedProps = {
+      ...outlineProps,
+      tintColor: TINT,
     };
     function OutlinedRow() {
       return (
         <View style={rowStyle}>
           <IconButton
-            {...outlineProps}
+            {...tintedProps}
             accessibilityLabel="Enabled outline"
             hybridRef={captureHybrid('outline-enabled')}
             testID="outline-enabled"
           />
           <IconButton
-            {...outlineProps}
+            {...tintedProps}
             accessibilityLabel="Disabled outline"
             disabled
             hybridRef={captureHybrid('outline-disabled')}
             testID="outline-disabled"
           />
           <IconButton
-            {...outlineProps}
+            {...tintedProps}
             accessibilityLabel="Toggle that is off"
             checked={false}
             hybridRef={captureHybrid('outline-toggle-off')}
@@ -1229,12 +1243,41 @@ describe('IconButton · G23', () => {
             testID="outline-toggle-off"
           />
           <IconButton
-            {...outlineProps}
+            {...tintedProps}
             accessibilityLabel="Toggle that is on"
             checked
             hybridRef={captureHybrid('outline-toggle-on')}
             onCheckedChange={recordChecked('outline-toggle-on')}
             testID="outline-toggle-on"
+          />
+          <IconButton
+            {...outlineProps}
+            accessibilityLabel="Enabled outline, no tint"
+            hybridRef={captureHybrid('plain-enabled')}
+            testID="plain-enabled"
+          />
+          <IconButton
+            {...outlineProps}
+            accessibilityLabel="Disabled outline, no tint"
+            disabled
+            hybridRef={captureHybrid('plain-disabled')}
+            testID="plain-disabled"
+          />
+          <IconButton
+            {...outlineProps}
+            accessibilityLabel="Toggle that is off, no tint"
+            checked={false}
+            hybridRef={captureHybrid('plain-toggle-off')}
+            onCheckedChange={recordChecked('plain-toggle-off')}
+            testID="plain-toggle-off"
+          />
+          <IconButton
+            {...outlineProps}
+            accessibilityLabel="Toggle that is on, no tint"
+            checked
+            hybridRef={captureHybrid('plain-toggle-on')}
+            onCheckedChange={recordChecked('plain-toggle-on')}
+            testID="plain-toggle-on"
           />
         </View>
       );
@@ -1244,8 +1287,11 @@ describe('IconButton · G23', () => {
     await waitForDisplayed('outline-toggle-off', '0');
     await waitForDisplayed('outline-toggle-on', '1');
     const reports = new Map<string, string>();
-    for (const id of ids) {
+    for (const id of tintedIds) {
       reports.set(id, await pixelProbe(id, tint, id));
+    }
+    for (const id of plainIds) {
+      reports.set(id, await pixelProbe(id, ink, id));
     }
     console.log(`outlined border probes: ${JSON.stringify([...reports])}`);
     const lineOf = (id: string): string => {
@@ -1339,6 +1385,48 @@ describe('IconButton · G23', () => {
           boxes.get('outline-toggle-off') ?? null
         )}), so the two reads are not the same control in two states`
       ).toBe(true);
+
+      // Without a tint the control keeps Material's own ring, so the states are read against
+      // each other: whichever colour the enabled ring is drawn in is absent from the disabled
+      // one, and the ring's ink sits further from the sampler's grey while enabled.
+      const plainEnabled = lineOf('plain-enabled');
+      const plainDisabled = lineOf('plain-disabled');
+      expect(
+        probeHits(plainEnabled),
+        `an enabled outlined button with no tint has no ring in its content colour ` +
+          `(${INK}), so the ring Material owns never reached the screen: ${plainEnabled}`
+      ).toBeGreaterThan(0);
+      expect(
+        probeHits(plainDisabled),
+        `a disabled outlined button with no tint is still drawn in the full ${INK}, so its ` +
+          `ring reads as enabled: ${plainDisabled}`
+      ).toBe(0);
+      const plainRing = closestOf(plainEnabled);
+      const plainDim = closestOf(plainDisabled);
+      expect(
+        colourDistance(plainRing, BACKDROP) >
+          colourDistance(plainDim, BACKDROP),
+        `the enabled ring (${plainRing}) is no further from the sampler's grey than the ` +
+          `disabled one (${plainDim}), so disabling the control did not weaken it: ` +
+          `${plainEnabled} / ${plainDisabled}`
+      ).toBe(true);
+      expect(
+        colourDistance(plainDim, BACKDROP),
+        `the disabled control drew nothing but the sampler's own backdrop (${plainDim}), so ` +
+          `its ring was dropped rather than dimmed: ${plainDisabled}`
+      ).toBeGreaterThan(30);
+
+      // The same two answers for the toggle form, which is where Material draws no ring at all.
+      expect(
+        probeHits(lineOf('plain-toggle-off')),
+        `an unchecked outlined toggle with no tint has no ring in its content colour ` +
+          `(${INK}): ${lineOf('plain-toggle-off')}`
+      ).toBeGreaterThan(0);
+      expect(
+        probeHits(lineOf('plain-toggle-on')),
+        `an outlined toggle that is on with no tint is still drawn in the full ${INK}, so it ` +
+          `wears a ring Material's own toggle does not draw: ${lineOf('plain-toggle-on')}`
+      ).toBe(0);
     } else {
       // iOS has no Android glyph to sample, so the probe refuses.
       for (const id of ids) {
