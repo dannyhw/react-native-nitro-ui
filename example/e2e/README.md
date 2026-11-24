@@ -28,6 +28,12 @@ gate. `retries` is 0 — a flaky check is fixed or reported, never retried green
 only a delivered touch can make, including what the accessibility tree says on the
 node a finger lands on. Almost every control is asserted here in full.
 
+Every test is registered through `test` from `real-input/fixture.ts`, not from
+`@e2e-dev/mobile`; lint refuses the other import. Before each test it stops the app
+with `am force-stop` and waits, up to 30 s, until no process of the app is left and
+the window manager's focus is on another window, so the test's own `app.open()`
+launches fresh even on an emulator slower than the driver's 2 s allowance for that.
+
 **Phase 2** runs after the last test has reported, with the daemon stopped:
 `uiautomator dump` dies while the driver's session holds the device's one
 accessibility connection. Two passes, in this order:
