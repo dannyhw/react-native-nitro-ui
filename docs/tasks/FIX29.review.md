@@ -76,3 +76,44 @@
   composition (`DisposableEffect(LocalView)` inside the window), so their `live` also lasts
   through the exit fade.
 - Why a Picker popup composed again on CI after closing is still open; `opens`/`windows` answer it.
+
+## Re-review (fix round 1, `c47966c0..9c173ec4`; read-only, no device runs)
+
+**Verdict: fix round needed** (two small test-side findings; the library change is right).
+
+- Finding 2, resolved. Against `origin/main` the model's `noteMenuView`/`noteMenuFrame`/
+  `noteMenuRows`/`dropOpenMenu`/`refreshMenuFrame` are byte-identical; `MenuWindowWitness` is
+  main's `MenuWitness` with the counter renamed, so it alone owns `menuView` and still clears
+  `expanded` on dispose. A reopen mid-fade keeps the popup, the effect and `menuView`, as on
+  main. The only additions are `MenuOpenWitness` (a `DisposableEffect`, no node, no semantics)
+  and report fields. Users and TalkBack see main's behaviour. The source reasoning holds.
+- Finding 1, resolved in the library. `windows` counts once per popup view, process-wide and
+  Picker-only; `opens` only rises and rises on any composed `expanded = true`, so a ghost that
+  closes and fades inside the dwell is still caught. `awaitCloseOver` waits on the popup's
+  dispose, a real signal. The baseline is taken at the moment the old `live` read 0 on CI.
+- Finding 3, resolved: a 150 ms ghost behind `expanded = 0` is the CI shape, and it goes red
+  on `windows`. The quoted line is the first case's label; the second case's reads "after the
+  disable and re-enable". Fix the quote. `opens` itself is never shown red; a ghost short
+  enough to fade before the read would prove it (suggested, not blocking).
+- Comments follow the rules. The cause section is honest in substance ("not what CI read",
+  "neither reopen is reproduced"); add one plain sentence that the CI cause is unknown.
+- CodeRabbit (3 inline, on round-1 code): the decrement-before-clear one is moot, since
+  `readMenuReport` now answers `menu`/`rows` from `expanded`; the reopen one is finding 2,
+  fixed; the fixed-delay one is valid and is finding 2 below.
+
+### Blocking
+
+1. **`owns its window when the menu reopens before the closing one fades` never reaches its
+   premise.** By the report's own evidence, re-adding the null write left it green, because the
+   window had faded before `userEvent.pressAt` landed. It is a new test never shown red, and its
+   comment and the report summary claim a mid-fade reopen. Delete it (finding 2 rests on the
+   source, which is main's code), or make it prove its premise and show it red. Drop the claim
+   from the summary either way.
+2. **`keeps a closed menu closed through the batches that follow it` can pass without its
+   steps.** `settle(200)` between disable and re-enable, and `settle(300)` after `setSpacer`,
+   are fixed sleeps, which the brief rules out. On a slow CI emulator, both disabled writes can
+   land in one batch, or the read can come before the move. Wait for `picker.disabled` to be
+   true, then false, and wait for the reported anchor to move. A short dwell before each
+   absence read can stay, as main's re-enable case has one.
+Not blocking: the round-1 red-proof bullets 2-3 describe model gates this round removed.
+Mark them superseded.
