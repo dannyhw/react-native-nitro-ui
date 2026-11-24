@@ -453,7 +453,7 @@ describe('SearchField', () => {
     await waitForTestId('typed');
     await focusField('typed');
     await typeText('abc');
-    const state = await stateWhen(
+    const state = await reportedWhen(
       'typed',
       (current) => current.text === 'abc',
       'the three keystrokes'
