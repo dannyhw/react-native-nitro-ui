@@ -187,18 +187,20 @@ async function reportedWhen(
 }
 
 /**
- * Wait until the app's log for `id` holds as many entries as `expected`, then return it.
- * A field's native report settles as the event is sent, so a log read as soon as native
- * looks done can still be short of the events that are on their way to JS.
+ * Wait until the app's log for `id` holds as many entries after the first `before` of
+ * them as `expected` has, then return that slice. A field's native report settles as the
+ * event is sent, so a log read as soon as native looks done can still be short of the
+ * events that are on their way to JS.
  */
 async function logReached(
   id: string,
   expected: readonly string[],
+  before = 0,
   timeoutMs = 5000
 ): Promise<string[]> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const logged = eventsOf(id);
+    const logged = eventsOf(id).slice(before);
     if (logged.length >= expected.length) return logged;
     if (Date.now() > deadline) {
       const missing = expected.filter((entry) => !logged.includes(entry));
@@ -561,7 +563,9 @@ describe('SearchField', () => {
       (current) => current.text === '',
       'the clear'
     );
-    const reported = eventsOf('cleared').slice(before);
+    // The native report settles as the event is sent, so the log can still be a moment
+    // short of the clear's own event here.
+    const reported = await logReached('cleared', ['change:'], before);
     expect(reported).toEqual(['change:']);
     expect(cleared.nativeEvents).toBe(typed.nativeEvents + 1);
     // Focus stays: clearing a query is not leaving the field.
