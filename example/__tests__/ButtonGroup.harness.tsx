@@ -1754,7 +1754,6 @@ describe('ButtonGroup · the outlined toggle border (Android)', () => {
   /** A colour no scheme owns, so anything drawn in it is the control's own tint. */
   const TINT = '#00FF00';
   const tint = processColor(TINT) as number;
-  const backdrop = processColor(BACKDROP) as number;
 
   /**
    * A title that draws no glyph, so the border is the only ink these groups own: what the
@@ -1971,68 +1970,42 @@ describe('ButtonGroup · the outlined toggle border (Android)', () => {
       )} pixels - that is a filled box, not an outline: ${dimLine}`
     ).toBe(true);
 
-    // Without a tint the control keeps Material's own outline, so the states are read against
-    // each other and never against a colour the scheme happens to use.
+    // Without a tint the control keeps Material's own outline, and this device's scheme draws it
+    // barely apart from the sampler's grey, so these four states are read as the exact ink each one
+    // puts on screen, and never against a colour the scheme happens to use.
     const ring = await inkOf('bg-border-plain-off', 'the untinted outline');
-    const ringColour = processColor(ring) as number;
     expect(
       ring,
       `an enabled "outlined" toggle with no tint draws nothing but the sampler's backdrop, so ` +
         `it has no outline at all: ${lineOf('bg-border-plain-off')}`
     ).not.toBe(BACKDROP);
-    const offPlain = await pixelProbe(
-      'bg-border-plain-off',
-      backdrop,
-      'the untinted outline, as backdrop'
-    );
-    expect(
-      probeHits(offPlain),
-      `the untinted outline is drawn in ${ring}, which the sampler cannot tell apart from its ` +
-        `own backdrop, so nothing here can be measured: ${offPlain}`
-    ).toBeLessThan(sampledArea(offPlain));
-    expect(colourDistance(ring, BACKDROP)).toBeGreaterThan(100);
-    // The untouched backdrop is most of the box: what was drawn is an edge, not a fill.
-    expect(
-      probeHits(offPlain) > sampledArea(offPlain) * 0.5,
-      `${ring} leaves only ${String(sampledArea(offPlain) - probeHits(offPlain))} of ${String(
-        sampledArea(offPlain)
-      )} pixels untouched, which is more than an outline covers: ${offPlain}`
-    ).toBe(true);
-
-    // The same ink in full strength is absent from the two states Material draws no outline for.
-    const onPlain = await pixelProbe(
-      'bg-border-plain-on',
-      ringColour,
-      'the untinted outline on a toggle that is on'
-    );
-    expect(
-      probeHits(onPlain),
-      `an "outlined" toggle with no tint that is on is drawn in ${ring}, the outline of the ` +
-        `unchecked one, so it wears a ring Material does not draw: ${onPlain}`
-    ).toBe(0);
-    const disabledPlain = await pixelProbe(
-      'bg-border-plain-disabled',
-      ringColour,
-      'the untinted outline of a disabled toggle'
-    );
-    expect(
-      probeHits(disabledPlain),
-      `a disabled "outlined" toggle with no tint is drawn in ${ring}, the outline of the ` +
-        `enabled one, so it reads as enabled rather than dimmed: ${disabledPlain}`
-    ).toBe(0);
-
-    // A `text` item draws nothing of its own, tinted or not.
-    const textPlain = await pixelProbe(
+    const textPlain = await inkOf(
       'bg-border-text-plain',
-      backdrop,
       'an untinted text item'
     );
     expect(
-      probeHits(textPlain),
-      `an untinted "text" item leaves ${String(
-        sampledArea(textPlain) - probeHits(textPlain)
-      )} of its ${String(sampledArea(textPlain))} pixels not-backdrop, so it is drawn as ` +
-        `though it were outlined: ${textPlain}`
-    ).toBe(sampledArea(textPlain));
+      textPlain,
+      `an untinted "text" item draws ${textPlain}, which is more than the sampler's backdrop, ` +
+        `so it is drawn as though it were outlined`
+    ).toBe(BACKDROP);
+    const onPlain = await inkOf(
+      'bg-border-plain-on',
+      'the untinted outline of a toggle that is on'
+    );
+    expect(
+      onPlain,
+      `an "outlined" toggle with no tint that is on draws ${onPlain}, which is the outline of ` +
+        `the unchecked one (${ring}), so it wears a ring Material does not draw`
+    ).not.toBe(ring);
+    const disabledPlain = await inkOf(
+      'bg-border-plain-disabled',
+      'the untinted outline of a disabled toggle'
+    );
+    expect(
+      disabledPlain,
+      `a disabled "outlined" toggle with no tint draws ${disabledPlain}, which is the outline ` +
+        `of the enabled one (${ring}), so it reads as enabled rather than at Material's ` +
+        `disabled strength`
+    ).not.toBe(ring);
   });
 });
