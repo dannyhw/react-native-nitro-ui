@@ -8,6 +8,9 @@
  */
 import { expect, type Locator, type Screen } from 'e2e';
 
+import { ACTION_TIMEOUT_MS } from '../timeouts';
+import { fieldLocator } from './field-locator';
+
 /** The sideways strip the example app navigates with (`example/src/App.tsx`). */
 const TAB_STRIP = 'example-tabs';
 
@@ -536,14 +539,17 @@ export async function isInBand(
  *
  * The library publishes a field’s accessibility label on a node inside its `EditText`,
  * and a driver types only into an editable node: `getByLabel(label).tap()` lands while
- * `pressSequentially` refuses the group. The editable node containing the labelled one
- * names the caret owner and the announcement at once.
+ * `pressSequentially` refuses the group. The driver can report that named node beside
+ * the `EditText` instead of inside it, so the field is the editable node that nests it
+ * or, failing that, whose box holds its box.
  */
 export function editableField(screen: Screen, label: string): Locator {
-  return screen
-    .getByRole('textbox')
-    .or(screen.getByRole('searchbox'))
-    .filter({ has: screen.getByLabel(label) });
+  return fieldLocator(
+    screen.getByRole('textbox').or(screen.getByRole('searchbox')),
+    screen.getByLabel(label),
+    `the editable field named "${label}"`,
+    ACTION_TIMEOUT_MS
+  );
 }
 
 /** Read the text a node draws, or fail with a message that names the node. */
