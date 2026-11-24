@@ -160,6 +160,9 @@ const USAGE =
   '        a harness/real-input gate needs app.stamp from scripts/build-app.mjs)\n' +
   '\n' +
   '       (NITRO_UI_GATE_DEVICE_FORCE=1 claims a device another live run holds)\n' +
+  '       (real-input:ios never runs beside another device gate from this clone:\n' +
+  '        whichever starts second waits for the other to end, and gives up after\n' +
+  '        NITRO_UI_GATE_ALONE_WAIT_MINUTES, 180 by default)\n' +
   '       (--rerun-failed completes the newest full run of the gate that is red on\n' +
   '        this digest: it re-runs only the units that did not pass and records the\n' +
   '        outcome under the full gate, shown as completed, never as a clean pass)\n' +
