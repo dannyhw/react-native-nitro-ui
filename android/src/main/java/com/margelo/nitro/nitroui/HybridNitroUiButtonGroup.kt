@@ -542,13 +542,9 @@ internal fun toggleButtonColors(
 }
 
 /**
- * The border of an `outlined` or `text` toggle item, which both compose as Material's
- * `OutlinedToggleButton` and take it explicitly.
- *
- * A `text` item draws none. An `outlined` one draws Material's own for its state: an
- * untinted item keeps it, and a tinted one keeps its width and its colour's alpha -- the
- * state's strength -- and only swaps the hue. Where Material draws no border, none is
- * drawn, and passing `null` for an untinted item would drop the default.
+ * The explicit border both the `outlined` and the `text` item take, as Material draws it for the
+ * state: a tint replaces only the hue, and where Material draws none -- `text`, or a toggle that is
+ * on -- none is drawn.
  */
 @Composable
 private fun toggleOutlinedBorder(

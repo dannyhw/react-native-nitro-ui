@@ -1062,8 +1062,7 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
 
   private var pixelProbes = 0
 
-  /// iOS has no Android icon glyph to sample, so the report says `no pixels`, which the
-  /// tests treat as a failure.
+  /// iOS has nothing to sample here, so the report says `no pixels`.
   func nuiTestPixelProbe(color: Double) throws {
     pixelProbesLock.lock()
     pixelProbes += 1
