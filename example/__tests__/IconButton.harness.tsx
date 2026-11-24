@@ -1240,7 +1240,7 @@ describe('IconButton · G23', () => {
       );
     }
     await render(<OutlinedRow />, { timeout: 20000 });
-    await settleEach(ids);
+    const boxes = await settleEach(ids);
     await waitForDisplayed('outline-toggle-off', '0');
     await waitForDisplayed('outline-toggle-on', '1');
     const reports = new Map<string, string>();
@@ -1324,11 +1324,21 @@ describe('IconButton · G23', () => {
         `a tinted outlined toggle that is on is still drawn in the full ${TINT}, so it ` +
           `wears an outline Material's own toggle does not draw: ${checked}`
       ).toBe(0);
+      // A checked outlined toggle owns no ink of its own beyond its container, so the
+      // answer above says "no border" rather than "nothing drawn" only because the two
+      // toggles differ in `checked` alone: the same control, in the same box, drew the
+      // ring one step earlier, and this one reports the value it was told.
       expect(
-        colourDistance(closestOf(checked), BACKDROP),
-        `the checked toggle drew nothing but the sampler's own backdrop, so the answer ` +
-          `above is an empty control rather than a borderless one: ${checked}`
-      ).toBeGreaterThan(30);
+        sameSize(
+          boxes.get('outline-toggle-on') ?? null,
+          boxes.get('outline-toggle-off') ?? null
+        ),
+        `the toggle that is on (${describeSize(
+          boxes.get('outline-toggle-on') ?? null
+        )}) is not the box the unchecked one has (${describeSize(
+          boxes.get('outline-toggle-off') ?? null
+        )}), so the two reads are not the same control in two states`
+      ).toBe(true);
     } else {
       // iOS has no Android glyph to sample, so the probe refuses.
       for (const id of ids) {
