@@ -21,8 +21,9 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
 - `Form.harness.tsx` "Form section drawing (E2, Android) › reserves a band with its padding and
   draws into a layer as tall as its section", 2026-11-20, `harness:android` started 00:05 UTC on a
   task branch, failed in the full run and passed alone on the one rerun; again 2026-11-24 on
-  GitHub-hosted CI (the layer 288.4 dp against a 296.4 dp section, 8.0 dp short). Seen twice, so
-  by the flake rules it is a bug with a low hit rate, not a flake.
+  GitHub-hosted CI (the layer 288.4 dp against a 296.4 dp section, 8.0 dp short), and on the next
+  CI round with the same numbers. Seen three times, so by the flake rules it is a bug; the same
+  numbers every time point at the CI device's configuration rather than a race.
 - `SearchField.harness.tsx` "takes no submit from a Return pressed on a query it has just cleared"
   (Android), a stray `change:` event, 2026-11-19, `harness:android` on a merge run started 10:35
   UTC, green on `--rerun-failed`, seen once.
@@ -47,19 +48,16 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   job": "the split trigger tap" 0 of 1 events in 8000 ms, GitHub-hosted CI only, four trial
   rounds 2026-11-24. Likely the synthesised `pressAt` held past SwiftUI `Menu(primaryAction:)`'s
   long-press threshold on a slow runner (driver timing). Blocks nothing: manual CI harness only.
-- `SearchField.harness.tsx` (Android) "round-trips typed text to JS, one event per keystroke", 2
-  of 3, and `ListItem.harness.tsx` (Android, G30) "draws no insets… inside a Form.Row", two events
-  where only `form-item:press` was expected: each once, GitHub-hosted CI 2026-11-24.
-- `TextField.harness.tsx` (Android) "round-trips typed text to JS, one event per keystroke", 2 of 3,
-  GitHub-hosted CI 2026-11-24: the same shape as SearchField's on a second control, so likely a
-  read of the log before the last keystroke lands.
+- `ListItem.harness.tsx` (Android, G30) "draws no insets… inside a Form.Row", two events where only
+  `form-item:press` was expected, GitHub-hosted CI 2026-11-24, seen once.
 - `ButtonGroup.harness.tsx` (iOS, G20) "moves the items a 220-point well cannot hold…": "bg-narrow"
   never handed back a `hybridRef` handle, GitHub-hosted CI 2026-11-24, seen once.
-- `form.e2e.ts` (Android) "a field the keyboard would cover is moved clear of it": three CI
+- `form.e2e.ts` (Android) "a field the keyboard would cover is moved clear of it": four CI
   sightings 2026-11-24, `LOCATOR_NOT_FOUND` on "Note" with the keyboard up and the app's focus and
-  avoidance echoes both yes; the one wordless `EditText` at [105,346][975,421] is probably the Note
-  field already moved clear, so the driver's lookup by name is the likely fault. The failure now
-  lists every node carrying "Note" (FIX28); read that on the next sighting.
+  avoidance echoes both yes. The fourth carried FIX28's evidence: "Note" sits on a plain,
+  unfocusable `android.view.View` at [105,346][975,409] and the only editable is a wordless
+  `EditText` at [105,346][975,421], so the field's name and its editable role are on two nodes. A
+  library accessibility bug, not the driver: FIX32 puts the name on the editable node.
 
 ## Quarantined tests
 
@@ -317,6 +315,15 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G24 review: `headerPx`/`footerPx` on the Android section are plain fields used as `LaunchedEffect` keys — Compose cannot see the change, so the effect restarts only when something else recomposes the layer. G24 fix round 1 worked around the visible half (each band now publishes all four numbers from inside its own `onSizeChanged`, in the pass that can still act on them), but the fields still want to be `mutableStateOf` (as `gapPx` and `headerTextPx` already are) so the effect and the layout cannot disagree at all.
 - G24 review: Android row discovery depends on the band `View` being flattened out of the hierarchy by React Native — the section finds its rows by walking its own children, which works only while that `View` has no host view of its own. If RN stops flattening it, rows silently stop being found; a shape test for that would be worth having.
 - G24 review: iOS VoiceOver activation on a row relies on UIKit synthesising a tap at the element's centre (`UITapGestureRecognizer` on the cell), not on `accessibilityActivate()`. Override `accessibilityActivate()` on the cell so an activation that is not a point-to-point tap (VoiceOver cursor, Switch Control, an accessibility shortcut) presses the row too.
+- Controlled TextField and SearchField: an app that sets `value` outside the change callback
+  (`startTransition`, a timer, after an `await`) commits the echo (`mostRecentEventCount`) before
+  its new `value`, so `reconcile()` sees equal counts and applies the older value over newer
+  keystrokes; FIX31 saw the field end on "c" with `setValue` delayed. `docs/DESIGN.md` 3.5 does not
+  say so. React Native's `TextInput` echoes its count from its own state in the same callback and
+  probably has the same limit; measure it before deciding to document or handle it.
+- TextField harness: no case forces keystrokes to outrun their echoes on a fast machine (the
+  round-trip case now waits per key). Three `imeInput('commit', …)` calls without awaiting, a spin
+  on `nuiTestState()` until `nativeEvents === 3`, then a wait for `abc` with equal counts would.
 - Upstream React Native: `BaseViewManager.prepareToRecycleView` clears the `accessibility_label` view tag but leaves `contentDescription` and `importantForAccessibility` set, so any recycled native view keeps answering for a mount that ended (`react-native/ReactAndroid/.../views/view/BaseViewManager.java`). Found by G24's Form row a11y sweep; the reproducer is the plain labelled `<View>` on `example/src/FormScreen.tsx`, which goes back to the pool still named and is then announced by the container that pops it — `example/__tests__/Form.harness.tsx` ("names it for its own mount") asserts the promise for `Form.Row` but was never shown red, and the row's own reset is defence in depth.
 - G24: mint the Form bench. `nitro-ui-bench` has no Form arm yet, so the mount cost E1/E6 measured with the harness's `FORM COST` line is not a tracked number; the bench needs a list arm (rows-per-mount, cell reuse on iOS, Compose layer count on Android) before a regression here is visible.
 - G24 fix round 1: `gate.mjs wait` takes the *newest* background record for a gate name, including one already marked done — so a run that was refused before it started (Metro port busy) shadows the run still going, and `wait` returns that refusal's exit code at once. The records named "running" by `ownRunningGates` should exclude `done`.

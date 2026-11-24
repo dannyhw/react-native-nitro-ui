@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-24 Nothing user-visible: the Android TextField and SearchField typing round-trip cases hold
+  when JS answers late (FIX31, #129).
 - 11-24 Android `ButtonGroup`: an `outlined` toggle item draws Material's outline for its state
   (it drew none untinted), a `tintColor` only sets its colour (it stayed full strength while
   disabled and wore a ring while on), and a `text` item draws none (FIX30, #128).

@@ -358,18 +358,28 @@ describe('TextField', () => {
     render(<Controlled id="typing" initial="" />);
     await waitForTestId('typing');
     await focusField('typing');
-    await typeText('abc');
-    await waitFor(() => expect(jsValues.get('typing')).toBe('abc'), {
-      timeout: 5000,
-    });
+    // One key at a time, each answer waited for: the echo and the app's `value` reach
+    // native in one commit, so typing on before JS answers makes that answer a write
+    // behind native's count, which the handshake drops and reports as a stale write.
+    let shown = '';
+    for (const key of ['a', 'b', 'c']) {
+      await typeText(key);
+      shown += key;
+      await stateWhen(
+        'typing',
+        (s) => s.text === shown && s.jsEvents === shown.length,
+        `the echo of "${shown}"`
+      );
+    }
     expect(eventsOf('typing').filter((e) => e.startsWith('change:'))).toEqual([
       'change:a',
       'change:ab',
       'change:abc',
     ]);
+    expect(jsValues.get('typing')).toBe('abc');
     const state = await stateWhen(
       'typing',
-      (s) => s.jsEvents === 3,
+      (s) => s.jsEvents === 3 && s.text === 'abc',
       'the third echo'
     );
     expect(state.text).toBe('abc');
