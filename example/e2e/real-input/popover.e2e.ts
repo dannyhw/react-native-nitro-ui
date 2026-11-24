@@ -1,10 +1,10 @@
-import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import {
   judgePopupPlacement,
   PLACEMENT_SLOP_PX,
 } from '../../../scripts/real-input/popover-placement.mjs';
+import { test } from './fixture';
 import { displayDensity } from './device-read';
 import { openScreen, reveal } from './support';
 import {

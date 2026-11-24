@@ -1,6 +1,6 @@
-import { test } from '@e2e-dev/mobile';
 import { expect, type Locator } from 'e2e';
 
+import { test } from './fixture';
 import { boxOf, editableField, openScreen, reveal } from './support';
 import {
   fieldAboveKeyboard,

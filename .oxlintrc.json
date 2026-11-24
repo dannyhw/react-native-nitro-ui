@@ -327,6 +327,28 @@
       }
     },
     {
+      "files": ["example/e2e/**/*.e2e.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@e2e-dev/mobile",
+                "importNames": ["test", "describe", "default"],
+                "message": "Register real-input tests through `test` from './fixture', which stops the app and waits until it is out of the window manager's focus before each test's fresh launch."
+              },
+              {
+                "name": "e2e",
+                "importNames": ["test", "describe"],
+                "message": "Register real-input tests through `test` from './fixture', which stops the app and waits until it is out of the window manager's focus before each test's fresh launch."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["src/**/*.nitro.ts", "bench/**/*.nitro.ts"],
       "jsPlugins": [
         {

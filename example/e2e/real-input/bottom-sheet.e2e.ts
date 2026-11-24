@@ -1,6 +1,6 @@
-import { test } from '@e2e-dev/mobile';
 import { expect, type Locator, type Screen } from 'e2e';
 
+import { test } from './fixture';
 import { displayDensity } from './device-read';
 import { boxOf, openScreen, reveal, type Box, type Point } from './support';
 

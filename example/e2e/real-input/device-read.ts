@@ -2,7 +2,8 @@
  * The reads of the device that `agent-device` will not make: the window manager’s
  * keyboard inset and popup windows, a frame taken while a finger is down, and the
  * density. They exist only beside it, because it is serialised and installs a headless
- * IME. Nothing here drives a device.
+ * IME. Nothing here taps or types: the one change made to the device is stopping the
+ * app before a test's fresh launch.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -12,6 +13,7 @@ import {
   type DecodedPng,
 } from '../../../scripts/real-input/png-pixel.mjs';
 import { countAppPopupWindows } from '../../../scripts/real-input/popup-windows.mjs';
+import { stopAndAwaitLeavingFront } from '../../../scripts/real-input/app-leaves-front.mjs';
 
 /** The example app's package: a popup it owns is one a control of it put up. */
 const APP_ID = 'nitroui.example';
@@ -66,6 +68,28 @@ export function adbShell(args: readonly string[]): string {
 export function popupWindowCount(): number {
   return countAppPopupWindows(
     adbShell(['dumpsys', 'window', 'windows']),
+    APP_ID
+  );
+}
+
+/**
+ * Stop the app and wait until the window manager has moved the focus off it, so the
+ * driver's fresh launch finds nothing to close: the driver gives a closing app 2 s to
+ * leave the front, which a slow emulator overruns.
+ */
+export async function stopAppUntilOutOfFront(): Promise<void> {
+  await stopAndAwaitLeavingFront(
+    {
+      forceStop: () => {
+        adbShell(['am', 'force-stop', APP_ID]);
+      },
+      // `pidof` exits 1 when there is no process, which is the answer waited for.
+      processIds: () => adbShell([`pidof ${APP_ID} || true`]),
+      windowDump: () =>
+        adbShell(['dumpsys', 'window', 'displays']) +
+        '\n' +
+        adbShell(['dumpsys', 'window', 'windows']),
+    },
     APP_ID
   );
 }

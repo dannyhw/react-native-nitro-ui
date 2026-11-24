@@ -1,6 +1,6 @@
-import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
+import { test } from './fixture';
 import { centreOf, openScreen, reveal } from './support';
 import { actsOnOneNamedNode, treeAnnounces } from './reader';
 import { pressPaintsFeedback } from './press-feedback';

@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-24 Nothing user-visible: each Android real-input test stops the app and waits until it has
+  left the front before the driver's fresh launch, so a slow machine no longer fails a test before
+  its first step on the driver's fixed 2 s close (X64, #127).
 - 11-24 Android `IconButton`/`IconToggleButton`, `outlined`: the border follows Material for each
   state. A disabled button draws it dimmed, a toggle that is on draws none, and a `tintColor`
   only sets its colour; before, untinted borders were the wrong way round and tinted ones were
