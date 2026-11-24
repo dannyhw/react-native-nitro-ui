@@ -3076,3 +3076,226 @@ export function runningBackgroundGates(records, isAlive = pidMayBeRunning) {
       logPath: record.logPath ?? null,
     }));
 }
+
+/* ------------------------- the gate that runs alone ------------------------- */
+
+/**
+ * The gate no other device gate from this clone runs beside. It delivers
+ * synthesised touches through the simulator, and a second device run loading the
+ * machine makes it drop them.
+ */
+export const ALONE_GATE = 'real-input:ios';
+
+/** Where each device gate run from this clone leaves its live-run marker. */
+export const LIVE_STORE_BASENAME = 'nitro-ui-gate-live';
+
+/** Overrides the ceiling on waiting for the machine, in minutes. */
+export const ALONE_WAIT_ENV = 'NITRO_UI_GATE_ALONE_WAIT_MINUTES';
+
+/** How long a device gate waits for the machine before it gives up. */
+export const DEFAULT_ALONE_WAIT_MINUTES = 180;
+
+/** How often a waiting gate looks at the live runs again. */
+export const ALONE_POLL_MS = 2_000;
+
+/**
+ * The live-run markers' directory, beside the log store, so every worktree of the
+ * clone sees every other worktree's runs.
+ *
+ * @param {string} commonDir the output of `git rev-parse --git-common-dir`
+ * @returns {string}
+ */
+export function gateLiveStoreDir(commonDir) {
+  return `${String(commonDir).replace(/\/+$/, '')}/${LIVE_STORE_BASENAME}`;
+}
+
+/** Is this gate, filtered or not, the one that runs alone? */
+export function runsAlone(gate) {
+  return deviceGateOf(String(gate ?? '')) === ALONE_GATE;
+}
+
+/** May two device gates run at the same time on this machine? */
+export function gatesMayShareMachine(a, b) {
+  return !runsAlone(a) && !runsAlone(b);
+}
+
+/**
+ * The ceiling on waiting for the machine, in milliseconds.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {number}
+ */
+export function aloneWaitCeilingMs(env = {}) {
+  const raw = env?.[ALONE_WAIT_ENV];
+  const minutes =
+    raw == null || String(raw).trim() === '' ? Number.NaN : Number(raw);
+  return (
+    (Number.isFinite(minutes) && minutes >= 0
+      ? minutes
+      : DEFAULT_ALONE_WAIT_MINUTES) * 60_000
+  );
+}
+
+/**
+ * The ticket a run takes once it has said it is choosing: one past every live
+ * run's. Taking a ticket is the bakery algorithm's, so two runs that start at the
+ * same instant still agree on which goes first.
+ *
+ * @param {Array<{ticket?: number}>} others
+ * @returns {number}
+ */
+export function nextTicket(others) {
+  let highest = 0;
+  for (const other of others ?? []) {
+    const ticket = Number(other?.ticket);
+    if (Number.isFinite(ticket) && ticket > highest) highest = ticket;
+  }
+  return highest + 1;
+}
+
+/** Does run `a` go before run `b`: lower ticket, then lower pid. */
+function goesFirst(a, b) {
+  const ta = Number(a.ticket);
+  const tb = Number(b.ticket);
+  if (ta !== tb) return ta < tb;
+  return Number(a.pid) < Number(b.pid);
+}
+
+/**
+ * The live runs that must end before `me` starts: every run that may not share
+ * the machine with it and is still choosing its ticket or holds a lower one. A run
+ * that holds a lower ticket is either running or itself waiting, and either way
+ * goes first.
+ *
+ * @param {object} options
+ * @param {{pid: number, gate: string, ticket: number}} options.me
+ * @param {Array<{pid: number, gate: string, ticket?: number, choosing?: boolean}>} options.others
+ *   the other runs' markers whose process is alive
+ * @returns {object[]}
+ */
+export function runsBlocking({ me, others }) {
+  return (others ?? []).filter((other) => {
+    if (other == null || Number(other.pid) === Number(me.pid)) return false;
+    if (gatesMayShareMachine(me.gate, other.gate)) return false;
+    if (other.choosing === true) return true;
+    if (!Number.isFinite(Number(other.ticket))) return false;
+    return goesFirst(other, me);
+  });
+}
+
+/** One live run, the way a waiting gate names it. */
+export function describeLiveRun(run) {
+  const started = Number.isFinite(Number(run?.queuedAt))
+    ? new Date(Number(run.queuedAt)).toISOString()
+    : 'unknown time';
+  const where = [
+    `pid ${String(run?.pid ?? '?')}`,
+    run?.branch == null ? null : String(run.branch),
+    run?.worktree == null ? null : String(run.worktree),
+    `since ${started}`,
+  ].filter((part) => part != null);
+  return `${String(run?.gate ?? '?')} (${where.join(', ')})`;
+}
+
+/**
+ * Waits until no live run that may not share the machine with `gate` goes before
+ * it, and returns whether it may start.
+ *
+ * Every device gate leaves a marker for the length of its run, waits or not, so a
+ * `real-input:ios` that starts later sees it. A marker whose process is gone is a
+ * run that ended. On `{ok: true}` the caller's marker stays in place until the
+ * caller removes it at the end of its run; on `{ok: false}` it is already gone.
+ *
+ * @param {object} options
+ * @param {string} options.gate
+ * @param {number} options.pid
+ * @param {object} [options.meta] extra fields for the marker (branch, worktree)
+ * @param {{list: () => object[], write: (marker: object) => void, remove: (marker: object) => void}} options.io
+ * @param {(pid: number) => boolean} options.isAlive
+ * @param {() => number} options.now
+ * @param {(ms: number) => Promise<void>} options.sleep
+ * @param {number} options.ceilingMs
+ * @param {(line: string) => void} options.say
+ * @param {number} [options.pollMs]
+ * @param {number} [options.repeatMs] how often an unchanged wait is said again
+ * @returns {Promise<{ok: true, waitedMs: number} | {ok: false, message: string}>}
+ */
+export async function waitForMachine({
+  gate,
+  pid,
+  meta = {},
+  io,
+  isAlive,
+  now,
+  sleep,
+  ceilingMs,
+  say,
+  pollMs = ALONE_POLL_MS,
+  repeatMs = WAIT_PROGRESS_INTERVAL_MS,
+}) {
+  const startedAt = now();
+  const liveOthers = () => {
+    const live = [];
+    for (const marker of io.list()) {
+      if (marker == null || Number(marker.pid) === Number(pid)) continue;
+      if (isAlive(Number(marker.pid))) {
+        live.push(marker);
+        continue;
+      }
+      try {
+        io.remove(marker);
+      } catch {
+        /* another run cleared it first */
+      }
+    }
+    return live;
+  };
+  const me = { ...meta, pid, gate, queuedAt: startedAt, choosing: true };
+  io.write(me);
+  me.ticket = nextTicket(liveOthers());
+  me.choosing = false;
+  io.write(me);
+
+  let saidKey = null;
+  let saidAt = 0;
+  for (;;) {
+    const blockers = runsBlocking({ me, others: liveOthers() });
+    const elapsed = now() - startedAt;
+    if (blockers.length === 0) {
+      if (saidKey != null) {
+        say(
+          `gate: the machine is free after ${String(Math.round(elapsed / 1000))}s - starting ${gate}`
+        );
+      }
+      return { ok: true, waitedMs: elapsed };
+    }
+    const named = blockers.map(describeLiveRun).join('; ');
+    const why = runsAlone(gate)
+      ? `${gate} runs with no other device gate beside it`
+      : `${ALONE_GATE} runs with no other device gate beside it`;
+    if (elapsed >= ceilingMs) {
+      try {
+        io.remove(me);
+      } catch {
+        /* already gone */
+      }
+      return {
+        ok: false,
+        message:
+          `waited ${String(Math.round(elapsed / 60_000))} min, the ceiling, and ` +
+          `${blockers.length === 1 ? 'this run is' : 'these runs are'} still live: ${named}. ` +
+          `${why}. Start ${gate} again once ${blockers.length === 1 ? 'it has' : 'they have'} ended.`,
+      };
+    }
+    const key = blockers.map((run) => String(run.pid)).join(',');
+    if (key !== saidKey || now() - saidAt >= repeatMs) {
+      say(
+        `gate: ${gate} is waiting for ${named} to end - ${why} ` +
+          `(${String(Math.round(elapsed / 60_000))} of ${String(Math.round(ceilingMs / 60_000))} min)`
+      );
+      saidKey = key;
+      saidAt = now();
+    }
+    await sleep(pollMs);
+  }
+}

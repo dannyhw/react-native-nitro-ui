@@ -80,9 +80,17 @@ What the two runs still share, and so must not do:
 
 - **Build both apps first.** A `build-app.mjs` run or a pod install during the other gate's run
   can move the code tree, and a run during which the tree moved never reads green.
-- **`real-input:ios` runs alone.** It delivers synthesised touches through the simulator, and
-  they are dropped when a second device run loads the machine: most controls go red on a tree
-  that is green when the gate runs by itself.
+- **`real-input:ios` runs alone, and the runner makes it.** It delivers synthesised touches
+  through the simulator, and they are dropped when a second device run loads the machine: most
+  controls go red on a tree that is green when the gate runs by itself. Every device gate
+  (`harness:*`, `real-input:*`, `bench`, `smoke:expo`, `smoke:rn-cli`) leaves a marker in
+  `<git-common-dir>/nitro-ui-gate-live/` for the length of its run, so every worktree of the
+  clone sees it. A device gate asked to start while a `real-input:ios` run is live, or
+  `real-input:ios` asked to start while any other device gate is live, waits in turn and prints
+  which runs it is waiting for. A marker whose process is gone is a run that ended. The wait gives
+  up after 180 minutes (`NITRO_UI_GATE_ALONE_WAIT_MINUTES` changes it), refuses the run without a
+  ledger line and names the run still live. A backgrounded gate waits in its own log, and `wait`
+  prints those lines as progress. Gates from another clone or machine are not counted.
 - The ledger takes one appended line per run, and each platform has its own
   `.real-input/<platform>/`, build directory and build stamp, so these are safe to share.
 
