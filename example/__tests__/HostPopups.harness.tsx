@@ -370,6 +370,19 @@ async function pressWitnessedAndOpen(
   return await waitForMenu(handle, (r) => r.expanded && r.live === 1);
 }
 
+/**
+ * One read, asserted as one line: what a control reports when it has no menu open. The
+ * three fields come from the same read because two reads are two moments.
+ */
+function expectNoOpenMenu(handle: PickerHandle, after: string) {
+  const report = parseMenuReport(handle.nuiTestMenuReport());
+  expect(
+    `${after}: expanded=${String(report.expanded)} live=${String(
+      report.live
+    )} menu=${report.menu.join(',')}`
+  ).toBe(`${after}: expanded=false live=0 menu=-1,-1,-1,-1`);
+}
+
 // MARK: - Fixtures
 
 type Log = {
@@ -839,8 +852,44 @@ if (Platform.OS === 'android') {
       // Re-enabling must not resurrect a window nobody asked for.
       log.setPickerDisabled?.(false);
       await settle(300);
-      expect(parseMenuReport(picker.nuiTestMenuReport()).expanded).toBe(false);
-      expect(parseMenuReport(picker.nuiTestMenuReport()).live).toBe(0);
+      expectNoOpenMenu(picker, 'after re-enabling');
+    });
+
+    it('keeps a closed menu closed through the batches that follow it', async () => {
+      await mount(<PopupHost log={log} />);
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
+      const date = await handleOf(() => log.dates.date, 'hosted date picker');
+      await pressWitnessed(picker);
+      await waitForMenu(picker, (r) => r.expanded && r.live === 1);
+      picker.nuiTestSelect(2);
+      await waitForMenu(picker, (r) => !r.expanded && r.live === 0);
+      expect(await indexReached(picker, 2)).toBe(2);
+
+      // Three things that reach the Host after the close, none of which asks for a menu:
+      // the control going back to enabled, the Host moving, and a second popup owner
+      // presenting. Each is read after the previous one has landed.
+      log.setPickerDisabled?.(true);
+      await settle(200);
+      log.setPickerDisabled?.(false);
+      await settle(200);
+      expectNoOpenMenu(picker, 'after the disable and re-enable');
+
+      log.setSpacer?.(80);
+      await settle(300);
+      expectNoOpenMenu(picker, 'after the Host moved');
+
+      date.nuiTestPresent();
+      await waitForDate(date, (r) => r.presented && r.livePresentations === 1);
+      expectNoOpenMenu(picker, 'while the date picker’s dialog is up');
+      log.setDateDisabled?.(true);
+      await waitForDialogGone(date, 'the second popup owner’s dialog');
+
+      // The count counts: the menu opens again, and the rows are the ones it draws.
+      const reopened = await pressWitnessedAndOpen(picker);
+      expect(reopened.rows).toBe(OPTIONS.length);
+      picker.nuiTestSelect(0);
+      await waitForMenu(picker, (r) => !r.expanded && r.live === 0);
+      expectNoOpenMenu(picker, 'after the second close');
     });
 
     it('leaves no window behind when the composition that opened one goes away', async () => {

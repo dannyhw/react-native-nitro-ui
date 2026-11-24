@@ -850,6 +850,12 @@ private class PickerHost(
     val selectedText = options.getOrNull(selectedIndex) ?: ""
     // The label goes on the anchor; an explicit `accessibilityLabel` wins over `label`.
     val spokenLabel = accessibilityLabel ?: labelText
+    // The open count follows `expanded`, not the popup: the window Material opens stays
+    // composed for the length of its fade-out, so a menu that closed a moment ago would
+    // still count as open.
+    if (expanded) {
+      MenuOpenWitness(model)
+    }
     // The view that owns this composition: the control's own, or the `<Host>`'s when it
     // is hosted. A popup positions itself against the composition it was opened from.
     val compositionView = LocalView.current
@@ -943,7 +949,7 @@ private class PickerHost(
         containerColor = MenuDefaults.groupStandardContainerColor,
       ) {
         // Must be first: it reads `LocalView`, which inside this lambda is the popup's view.
-        MenuWitness(model)
+        MenuWindowWitness(model)
         var listedRows = 0
         val count = options.size
         options.forEachIndexed { index, text ->
@@ -965,30 +971,52 @@ private class PickerHost(
   }
 
   /**
-   * Composed only while the menu is open. Counts live menus, reports the popup window's
-   * frame, and clears `expanded` when the popup leaves the composition, so a child that
-   * re-enters a Host's child list does not reopen it.
+   * One open menu, counted for as long as the control says the menu is open. Composed
+   * beside the anchor rather than inside the popup: `ExposedDropdownMenu` keeps its window
+   * composed through the fade that closes it, so the popup's composition is not when a menu
+   * is open.
    */
   @Composable
-  private fun MenuWitness(model: PickerModel) {
-    val menuView = LocalView.current
-    DisposableEffect(menuView) {
+  private fun MenuOpenWitness(model: PickerModel) {
+    DisposableEffect(model) {
       val live = PickerModel.liveMenus
       live.incrementAndGet()
+      onDispose {
+        live.decrementAndGet()
+        // A menu nobody can see has no window to report, whatever is still fading out.
+        model.noteMenuView(null)
+        model.clearMenuFrame()
+      }
+    }
+  }
+
+  /**
+   * Composed only while the popup's window is. Reports the window's frame, and clears
+   * `expanded` when the popup leaves the composition, so a child that re-enters a Host's
+   * child list does not reopen it.
+   */
+  @Composable
+  private fun MenuWindowWitness(model: PickerModel) {
+    val menuView = LocalView.current
+    DisposableEffect(menuView) {
       val where = IntArray(2)
       model.noteMenuView(menuView)
       val listener =
         View.OnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-          view.getLocationOnScreen(where)
-          model.noteMenuFrame(
-            where[0],
-            where[1],
-            where[0] + view.width,
-            where[1] + view.height,
-          )
-          // Only once a test has asked for it.
-          if (MenuDrawnWitness.wanted) {
-            describeMenuSemantics(view)?.let(model::noteMenuDrawn)
+          // The window outlives the open state by its fade; a frame it lays out then
+          // belongs to a menu that is already closed.
+          if (model.expanded) {
+            view.getLocationOnScreen(where)
+            model.noteMenuFrame(
+              where[0],
+              where[1],
+              where[0] + view.width,
+              where[1] + view.height,
+            )
+            // Only once a test has asked for it.
+            if (MenuDrawnWitness.wanted) {
+              describeMenuSemantics(view)?.let(model::noteMenuDrawn)
+            }
           }
         }
       menuView.addOnLayoutChangeListener(listener)
@@ -996,7 +1024,6 @@ private class PickerHost(
         menuView.removeOnLayoutChangeListener(listener)
         model.noteMenuView(null)
         model.clearMenuFrame()
-        live.decrementAndGet()
         model.expanded = false
       }
     }
