@@ -7,57 +7,61 @@
 
 ## Summary
 
-**The Android section's layer.** It took its size from state read during composition, and then
-clamped that size to the incoming measure spec: `withPixelSize(model.boxW, model.boxH)` with
-`coerceAtMost(constraints.maxHeight)`. Either half can make the layer shorter than the section, and
-a short layer is visible: the footer is bottom-aligned inside it and the row shapes are clipped to
-it. `intoSectionBox(model)` reads the box inside the `layout` block, where it is the box the section
-was just measured and laid out at, and measures the child to exactly that. The box is no longer
-read by the composition at all, so a section that resizes re-measures one node instead of
-recomposing the layer; still one measure pass, no prop changes, nothing per update.
+**The Android section's layer.** It took its size as values passed into its modifier, so it measured
+against the box the previous composition captured: a layer one pass behind a section that had just
+grown drew into its old height, and a short layer is visible — the footer bottom-aligns inside it
+and the row shapes clip to it. `intoSectionBox(model)` reads `boxW`/`boxH` inside the `layout` block,
+where they are the box the section was just measured and laid out at, and measures the child to
+exactly that; width keeps the clamp to the incoming constraint. The box is no longer read by the
+composition, so a resize re-measures one node instead of recomposing the layer — still one measure
+pass, no prop changes, nothing per update.
 
-**Reproduction.** The leased emulator already is CI's configuration — `pixel_9`, API 35, 1080x2424,
-density 420, `font_scale` 1.0 — so nothing under `wm` or `settings` was changed and there was
-nothing to restore. Sampling the section's report every tick from mount: the section goes
-224.0 dp → 296.4 dp and the layer reads 296.4 dp with it. Locally the layer never lags, and CI's
-288.4 dp is a height the section never has; a short read of a still-settling pair would have to be
-a height the section held a moment earlier. So the CI number is a clamp, not a lag: there the host's
-measure spec arrives 8 dp shorter than the section, and `coerceAtMost` applied it. The red proof
-below reproduces CI's exact numbers — 288.4 dp against a 296.4 dp section, out by 8.0 dp — by
-shortening the box on purpose. The other possible cause, a measure taken with the previous
-composition's box, was not reproduced on this machine; the fix removes it too, by reading the box
-where it is used.
+**Why CI read 8 dp.** The shared host measures the layer's content with an unbounded height
+(`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt`), so main's
+`coerceAtMost(constraints.maxHeight)` had nothing to clamp against; the host view itself is measured
+`EXACTLY` at the section's height. CI's own report says a lag: `hostBox` 296.4 while the layer was
+288.4, and its drawn row shapes sat at tops 37.3/93.3/149.3/205.3 (56 dp apart) against row boxes at
+38.3/96.2/154.1/212.0 (58 dp apart). A clamp leaves shapes on their rows; instead the whole
+composition — `rects` and `boxH` — was older than the section, and a software-rendered CI
+emulator makes that pass slow enough for a one-shot read to land inside it.
+`intoSectionBox` removes the height half of the lag; the shapes still come from the last
+composition, so the case now waits for a pass that read the section as it is now (Fix round 1). The
+leased emulator is already CI's configuration (`pixel_9`, API 35, 1080x2424, 420 dpi, `font_scale`
+1.0), so no `wm` or `settings` change was made or needed. Sampled every tick from mount, the section
+went 224.0 dp -> 296.4 dp with the layer beside it: the lag here is under a tick, so the case needs
+a wait, not a longer timeout or a looser tolerance.
 
-**The SearchField clear case.** It read its report as soon as the text was empty. The text and the
-count of the event that emptied it settle in separate writes, so that count can be the one from
-before the clear — CI read 2 where 3 was expected. The wait now asks the report for both halves of
-the clear; every assertion in the case is unchanged.
+**The SearchField clear case.** It read its report as soon as the text was empty, but the text and
+the count of the event that emptied it settle in separate writes, so that count can be the one from
+before the clear — CI read 2 where 3 was expected. The wait now asks for both halves; every
+assertion is unchanged.
 
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2231 tests / 103 suites | `c8f6f044c683` | 59.6 s | start 5.4 / med 9.2 / max 10.5 |
-| `harness:ios` | **PASS** | 622 tests / 30 suites + isolated 6 tests / 3 suites | `c8f6f044c683` (harness:ios digest) | 14 m 34 s | start 8.2 / med 5.4 / max 17.5 |
-| `harness:android` | **FAIL** (completed: 2 of 31 units re-run, attempt 1) | 3 failed of 39 tests / 2 suites | `c8f6f044c683` (harness:android digest) | 51.3 s + full run 18 m 35 s | start 3.5 / med 3.7 / max 3.8 |
+| `check` | **PASS** | 2231 tests / 103 suites | `36dc403e56c9` | 57.4 s | start 5.2 / med 13.9 / max 16.3 |
+| `harness:ios` | **PASS** | 622 tests / 30 suites + isolated 6 tests / 3 suites | `36dc403e56c9` (harness:ios digest) | 14 m 38 s | start 8.5 / med 5.4 / max 8.5 |
+| `harness:android` | **PASS** | 681 tests / 31 suites + isolated 6 tests / 3 suites | `36dc403e56c9` (harness:android digest) | 18 m 22 s | start 4.0 / med 5.6 / max 10.8 |
 | `real-input:ios` | **PASS** (completed: 1 of 53 units re-run, attempt 1; from `merge/button-group-border`) | — | `6bb466dc8146` (real-input:ios digest) | 6 m 51 s + full run 41 m 40 s | start 3.0 / med 6.5 / max 13.7 |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:android:Form.harness` | **PASS** | 27 tests / 1 suites | `c8f6f044c683` (harness:android digest) | 29.0 s | start 17.4 / med 15.0 / max 17.4 |
+| `harness:android:Form.harness` | stale | 4 failed of 27 tests / 1 suites | 0cc56469bff0 (not this tree) | 1 m 11 s | start 4.0 / med 4.3 / max 4.9 |
 | `harness:android:reserves%20a%20band` | stale | — | 1ab6fb8e4346 (not this tree) | 1.3 s | start 4.0 / med 4.0 / max 4.0 |
-| `harness:android:SearchField.harness` | **FAIL** | 2 failed of 18 tests / 1 suites | `c8f6f044c683` (harness:android digest) | 30.2 s | start 15.2 / med 12.1 / max 15.2 |
-| `harness:android:TextField.harness` | **FAIL** | 1 failed of 21 tests / 1 suites | `c8f6f044c683` (harness:android digest) | 29.4 s | start 3.2 / med 3.0 / max 3.2 |
-| `harness:ios:SearchField.harness` | **PASS** | 18 tests / 1 suites | `c8f6f044c683` (harness:ios digest) | 36.3 s | start 9.8 / med 9.9 / max 10.4 |
+| `harness:android:SearchField.harness` | stale | 2 failed of 18 tests / 1 suites | e9e59be9c5d5 (not this tree) | 30.0 s | start 3.0 / med 3.0 / max 3.0 |
+| `harness:android:TextField.harness` | stale | 1 failed of 21 tests / 1 suites | c8f6f044c683 (not this tree) | 29.4 s | start 3.2 / med 3.0 / max 3.2 |
+| `harness:ios:SearchField.harness` | stale | 18 tests / 1 suites | c8f6f044c683 (not this tree) | 36.3 s | start 9.8 / med 9.9 / max 10.4 |
 
-`need --for review`: `check`, `harness:ios`, `harness:android`. No `real-input` gate was run here.
-`bun run task-ready` is clean on every check except the red `harness:android` row, which is the
-question below.
+`need --for review` at round 1 asked for `check`, `harness:ios` and `harness:android`; the table above
+is the current one, and Fix round 1 closes it. No `real-input` gate was run here.
 
 ## Red proofs
 
 - `example/__tests__/Form.harness.tsx` "reserves a band with its padding and draws into a layer as
-  tall as its section (E2)" -> `val height = (model.boxH - 21f)` in `intoSectionBox`, a layer 8 dp
-  shorter than its section -> `question 2: the section draws into a layer 288.4 dp tall while the
-  section itself is 296.4 dp ... (out by 8.0 dp)` — CI's numbers.
+  tall as its section (E2)" -> the layer frozen after its first non-zero composition (`layoutHost`
+  writes `boxW`/`boxH` once, and the layer keeps the first non-empty `rects`) -> `question 2: the
+  section never settled into a layer as tall as itself: the layer is 224 dp tall against a 296.4 dp
+  section, and row 0 draws 0.0,0.0,411.4,56.0 against its box 12.2,38.3,387.4,54.0 (out by 38.3 dp)`
+  — the wait times out on the stale pair, and `hostBox` still read 296.4 as it did in CI.
 - `example/__tests__/SearchField.harness.tsx` "reports the clear button as one empty edit and keeps
   the focus" -> the new wait made unsatisfiable, `current.nativeEvents > typed.nativeEvents + 1`, so
   the clear never counts its event -> `SearchField cleared: the clear, counted as a native event,
@@ -72,8 +76,8 @@ question below.
 
 ## Follow-ups
 
-- Harness: three submit-then-blur units are red on `emulator-5570` — the question below. The Form
-  and clear cases pass in the same runs.
+- Harness: three submit-then-blur units were red in round 1 on `emulator-5570` — the question
+  below. The Form and clear cases pass in the same runs.
 
 ## Questions for orchestrator
 
@@ -90,3 +94,24 @@ question below.
   out of FIX32's `real-input:android` run. Options: re-run `harness:android` on a freshly booted
   device, or open it as an Android bug in the submit-to-blur route. Recommendation: the fresh-device
   re-run first — it costs one gate and separates device state from a real bug.
+
+## Fix round 1
+
+The cause is a lag, not a clamp: the shared host measures the layer's content with an unbounded
+height, so main's `coerceAtMost(constraints.maxHeight)` never bit; CI has `hostBox` 296.4 beside a
+288.4 layer whose row shapes sat 1-6.7 dp off their rows — `rects` and `boxH` both read a pass ago.
+The Summary and the comments on `boxW`/`boxH` and `intoSectionBox` say that; width keeps its clamp.
+
+`example/__tests__/Form.harness.tsx` now waits, inside the case's own 12 s deadline, until `layerH` is
+within 1 dp of `boxH` and every `drawnCards` box matches its `cardBoxes` box, then asserts exactly as
+before. Red proof — freeze the layer after its first non-zero composition (`layoutHost` writes the box
+once, the layer keeps the first non-empty `rects`):
+
+> question 2: the section never settled into a layer as tall as itself: the layer is 224 dp tall
+> against a 296.4 dp section, and row 0 draws 0.0,0.0,411.4,56.0 against its box 12.2,38.3,387.4,54.0
+> (out by 38.3 dp)
+
+Unmutated, green. `emulator-5570` came booted and was not rebooted; the keyboard was up, the three
+submit-then-blur units did not return, and `harness:android` is green.
+
+`need --for review`: `need: review is satisfied on this code tree.`
