@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-24 Nothing user-visible: the SearchField submit-then-blur and hosted Picker two-owner tests
+  wait for the value they read, so slower machines no longer race them (FIX26, #123).
 - 11-20 Nothing user-visible: the Android a11y sweep grades a control only once it is wholly on
   screen, scrolling until then or until the page ends (X63, #122), and a red case keeps its
   final dump and a screenshot and names the nearest drawn ancestor of a name with no box
