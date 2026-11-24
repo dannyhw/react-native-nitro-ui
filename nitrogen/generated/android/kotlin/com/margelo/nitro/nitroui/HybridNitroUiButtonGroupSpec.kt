@@ -181,6 +181,14 @@ abstract class HybridNitroUiButtonGroupSpec: HybridView() {
   
   @DoNotStrip
   @Keep
+  abstract fun nuiTestPixelProbe(color: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPixelReport(): String
+  
+  @DoNotStrip
+  @Keep
   abstract fun nuiTestStateReport(): String
 
   // Default implementation of `HybridObject.toString()`

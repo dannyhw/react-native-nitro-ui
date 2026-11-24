@@ -96,6 +96,8 @@ namespace margelo::nitro::nitroui {
     void nuiTestOpenOverflow() override;
     void nuiTestProbeRow() override;
     void nuiTestProbeAccessibility() override;
+    void nuiTestPixelProbe(double color) override;
+    std::string nuiTestPixelReport() override;
     std::string nuiTestStateReport() override;
 
   private:

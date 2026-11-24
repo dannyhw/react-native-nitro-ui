@@ -20,8 +20,9 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   machine, green on `--rerun-failed`, seen once.
 - `Form.harness.tsx` "Form section drawing (E2, Android) › reserves a band with its padding and
   draws into a layer as tall as its section", 2026-11-20, `harness:android` started 00:05 UTC on a
-  task branch, failed in the full run and passed alone on the one rerun, seen once. Passing alone
-  and failing after other files is the shape the flake rules call a bug if it is seen again.
+  task branch, failed in the full run and passed alone on the one rerun; again 2026-11-24 on
+  GitHub-hosted CI (the layer 288.4 dp against a 296.4 dp section, 8.0 dp short). Seen twice, so
+  by the flake rules it is a bug with a low hit rate, not a flake.
 - `SearchField.harness.tsx` "takes no submit from a Return pressed on a query it has just cleared"
   (Android), a stray `change:` event, 2026-11-19, `harness:android` on a merge run started 10:35
   UTC, green on `--rerun-failed`, seen once.
@@ -43,13 +44,18 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   when it is disabled while the menu is open" read the same shape once through `MenuRows.kt`'s
   `MenuWitness`, which also counts through the fade.
 - `Menu.harness.tsx` (iOS) "Split trigger (E3) › is two halves, and each one does only its own
-  job": "the split trigger tap" 0 of 1 events in 8000 ms, GitHub-hosted CI only, three trial
+  job": "the split trigger tap" 0 of 1 events in 8000 ms, GitHub-hosted CI only, four trial
   rounds 2026-11-24. Likely the synthesised `pressAt` held past SwiftUI `Menu(primaryAction:)`'s
   long-press threshold on a slow runner (driver timing). Blocks nothing: manual CI harness only.
 - `SearchField.harness.tsx` (Android) "round-trips typed text to JS, one event per keystroke", 2
   of 3, and `ListItem.harness.tsx` (Android, G30) "draws no insets… inside a Form.Row", two events
   where only `form-item:press` was expected: each once, GitHub-hosted CI 2026-11-24.
-- `form.e2e.ts` (Android) "a field the keyboard would cover is moved clear of it": two CI
+- `TextField.harness.tsx` (Android) "round-trips typed text to JS, one event per keystroke", 2 of 3,
+  GitHub-hosted CI 2026-11-24: the same shape as SearchField's on a second control, so likely a
+  read of the log before the last keystroke lands.
+- `ButtonGroup.harness.tsx` (iOS, G20) "moves the items a 220-point well cannot hold…": "bg-narrow"
+  never handed back a `hybridRef` handle, GitHub-hosted CI 2026-11-24, seen once.
+- `form.e2e.ts` (Android) "a field the keyboard would cover is moved clear of it": three CI
   sightings 2026-11-24, `LOCATOR_NOT_FOUND` on "Note" with the keyboard up and the app's focus and
   avoidance echoes both yes; the one wordless `EditText` at [105,346][975,421] is probably the Note
   field already moved clear, so the driver's lookup by name is the likely fault. The failure now
@@ -284,7 +290,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G23 a11y: the iOS IconButton's accessibility element is the drawn control, inset inside its 44 pt touch target — measured by real input's XCUITest pass (iOS 27, `iPhone 17`, pair-a): the name is on the right element (`button`, `enabled`, `hittable`) at `(18.67, 269.67, 38.67, 38.67)` while React Native draws the host at `(16, 267, 44, 44)`, because the target is a clear layer *behind* the control and the SwiftUI style keeps its own geometry inside that box. The host is an integral 44 pt here, so this is not fractional-layout arithmetic — which is what G23 round 0 claimed about the same row when the host was 39.67 pt wide: the 44 pt target disproved it, since the inset is the style's own padding and the target's own margin. VoiceOver stops on the control, so this is recorded in `A11Y_EXEMPTIONS` — anchored on those numbers, so any other box mismatch and any change to these stays red — rather than papered over by widening `IOS_FRAME_TOLERANCE_PT` for every control. Two fixes were built and neither shipped: `.accessibilityElement(children: .combine)` on the target box, and hiding the control while naming the box, both leave the name on two elements in the sweep, which is a worse finding than the inset. **The measurement that retires it:** a construction whose control element *is* the 44 pt box without doubling the name (one accessibility element vended by the SwiftUI side, or a UIKit hit target outside it), after which the sweep must show one element at the host's box.
 - G23 a11y: the sweep reads IconButton's `filled` case only, so the `.borderless` form's element box — where the floor is on the label itself — is unmeasured; its 44 pt layout is asserted in the harness and its element is not.
 - G23: `HybridNitroUiIconButton.swift`'s `pixelProbes` counter is not cleared by `prepareForRecycle` (`:691`), so a recycled iOS control reports `n=` counting its previous owner's probes. Nothing reads the count there (the probe refuses with `no pixels`), which is why it is a line and not a bug.
-- ButtonGroup (Android) outlined toggles: with a `tintColor` the ring stays in the full tint while disabled and a toggle that is on keeps a 1 dp tinted ring where Material draws none (`toggleOutlinedBorder` in `HybridNitroUiButtonGroup.kt`, the gap IconButton just closed); an untinted outlined toggle draws no outline at all, and a tinted `text` item gets a ring.
 - IconButton (Android): the untinted `outlined` ring is `LocalContentColor`'s default black in both themes, because the host provides no content colour, so in dark mode it is close to invisible.
 - IconButton (iOS): the `outlined` ring is `UIColor.separator` at 1 pt with no state branch, so it neither dims while disabled nor disappears on a toggle that is on (`HybridNitroUiIconButton.swift` about line 276).
 - G23: the iOS glyph ignores Dynamic Type — `symbolPointSize` is Material's token in points and nothing scales it with the text-size class. Consider `accessibilityShowsLargeContentViewer()` as well, which is what iOS offers for a control whose artwork stays small at a large content size.
@@ -347,7 +352,7 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - X32 review: the press-travel rule cancels the moment the finger leaves the row's box by one point, stricter than UIKit's own slop (true of ListItem since G30 too). Leave unless someone reports a dropped tap.
 - X32 merge (2026-11-13), all green on the same tree's re-run: iOS `FormFidelity` E2 question 4 read `the Form lays rows out at 0 pt and draws them at 340 pt` (8 cell reports) at load 17–28, as S6b saw at 0 reports. Passed twice filtered and in the full re-run. Android `HostPopups` "opens two popup owners in one Host" (menu `live` 1, not 0) and isolated `BottomSheetModalHazard` (render timeout 1000 ms) failed at load peaks ~35, the same run. All load-sensitive.
 - `real-input:android` `search-field`: "timed out waiting for the prop to change (search-switching-echo="switching: number-pad")" right after the switching field opens with its text keyboard. Seen in X31 (2026-11-12 17:29) and the X32 merge (2026-11-14), unrelated to either diff; G27 hit the same step while building it. The prop change after a focused keyboard restart is slow to echo under load.
-- `real-input:ios` `testRealInputForm`: "tap 1 of 10 on the Switch inside a form row should make "form-switch-changes" read 1; it reads "0" after 8s" in the X33+X34 merge run (2026-11-15), green on the re-run of the same tree; the same Form code passed twice in X32's runs. The HID first-tap drop of FOLLOWUPS:50, now seen on a Switch inside a Form row.
+- `real-input:ios` `testRealInputForm`: "tap 1 of 10 on the Switch inside a form row should make "form-switch-changes" read 1; it reads "0" after 8s" in the X33+X34 merge run (2026-11-15), green on the re-run of the same tree; the same Form code passed twice in X32's runs. The HID first-tap drop of FOLLOWUPS:50, now seen on a Switch inside a Form row. Again 2026-11-24 on the ButtonGroup merge run (#128) started 20:35 UTC, load 3.4 with another worker's Metro running beside it, green on `--rerun-failed`. Seen twice; the driver's HID tap, not the Form, is the suspect.
 - `scripts/__tests__/lease-queue.test.js` "hands a freed pair to the older ticket and shows the queue in `list`" still flakes after X34's fix: the Release run on the 0.9.1 commit (2026-11-15) read leases `["X24","X25"]` where `["X24"]` was expected (line 538), green on the re-run. CI on 8e5155c4 and 6d1ceac7 passed it.
 - `scripts/__tests__/gate-runner.test.js` killed-gate sweep: the test read the log before the supervisor's last line on the Linux CI runner (2026-11-15, twice in a row on 6d1ceac7). Done in 123ba438: it now waits for the sweep's outcome line.
 - Android real-input gate, open after the move to the e2e suite:

@@ -36,6 +36,8 @@ public protocol HybridNitroUiButtonGroupSpec_protocol: HybridObject, HybridView 
   func nuiTestOpenOverflow() throws -> Void
   func nuiTestProbeRow() throws -> Void
   func nuiTestProbeAccessibility() throws -> Void
+  func nuiTestPixelProbe(color: Double) throws -> Void
+  func nuiTestPixelReport() throws -> String
   func nuiTestStateReport() throws -> String
 }
 

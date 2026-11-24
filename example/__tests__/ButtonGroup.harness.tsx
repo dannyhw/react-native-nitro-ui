@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, View, processColor } from 'react-native';
 import {
   afterEach,
   cleanup,
@@ -39,6 +39,8 @@ type ButtonGroupHandle = {
   nuiTestProbeRow(): void;
   nuiTestProbeAccessibility(): void;
   nuiTestStateReport(): string;
+  nuiTestPixelProbe(color: number): void;
+  nuiTestPixelReport(): string;
 };
 
 const handles = new Map<string, ButtonGroupHandle>();
@@ -232,6 +234,82 @@ async function probeAccessibility(testId: string): Promise<string> {
 }
 
 const EVENT_QUIET_MS = 400;
+
+/** The mid-grey the Android sampler paints behind the control it draws. */
+const BACKDROP = '#808080';
+
+async function pixelProbe(
+  testId: string,
+  color: number,
+  what: string
+): Promise<string> {
+  const handle = handleOf(testId);
+  const before = handle.nuiTestPixelReport();
+  handle.nuiTestPixelProbe(color);
+  const report = await pollUntil(
+    () => {
+      const next = handle.nuiTestPixelReport();
+      return next === '' || next === before ? null : next;
+    },
+    () =>
+      new Error(
+        `the pixel probe for "${testId}" (${what}) never reported. Last report: ` +
+          `"${handle.nuiTestPixelReport()}".`
+      ),
+    8000
+  );
+  if (!/ hits=\d+/.test(report) && !/no pixels/.test(report)) {
+    throw new Error(
+      `the pixel probe for "${testId}" (${what}) reported a line that is neither a ` +
+        `sample nor a refusal: ${report}`
+    );
+  }
+  return report;
+}
+
+function probeHits(report: string): number {
+  const hits = / hits=(\d+)/.exec(report);
+  return hits == null ? 0 : Number(hits[1]);
+}
+
+/** How many pixels the sampled box covers, from the same report line. */
+function sampledArea(report: string): number {
+  const size = / size=(\d+)x(\d+)/.exec(report);
+  return size == null ? 0 : Number(size[1]) * Number(size[2]);
+}
+
+/** The colour on screen that sits nearest the one the probe asked for. */
+function closestOf(report: string): string {
+  return / closest=(#[0-9A-Fa-f]{6})/.exec(report)?.[1]?.toUpperCase() ?? '';
+}
+
+/** The sampler's own scale: the summed per-channel difference. */
+function colourDistance(a: string, b: string): number {
+  const channels = (value: string): number[] => {
+    const digits = value.replace('#', '');
+    return [
+      parseInt(digits.slice(0, 2), 16),
+      parseInt(digits.slice(2, 4), 16),
+      parseInt(digits.slice(4, 6), 16),
+    ];
+  };
+  const left = channels(a);
+  const right = channels(b);
+  return left.reduce(
+    (sum, value, index) => sum + Math.abs(value - (right[index] ?? 0)),
+    0
+  );
+}
+
+/** Within what Yoga rounds to. */
+function sameSize(a: Size | null, b: Size | null): boolean {
+  return (
+    a != null &&
+    b != null &&
+    Math.abs(a.width - b.width) < 0.6 &&
+    Math.abs(a.height - b.height) < 0.6
+  );
+}
 
 async function waitForEvents(from: number, wanted: readonly string[]) {
   await pollUntil(
@@ -1669,5 +1747,266 @@ describe('ButtonGroup · the toggle variant drawing (G20, iOS)', () => {
         }
       }
     }
+  });
+});
+
+describe('ButtonGroup · the outlined toggle border (Android)', () => {
+  /** A colour no scheme owns, so anything drawn in it is the control's own tint. */
+  const TINT = '#00FF00';
+  const tint = processColor(TINT) as number;
+
+  /**
+   * A title that draws no glyph, so the border is the only ink these groups own: what the
+   * sampler counts is the border and nothing else. The box keeps a real size, because the
+   * title is measured even though it draws nothing.
+   */
+  const BLANK = ' ';
+  const TOGGLE: ButtonGroupItem[] = [{ id: 'one', title: BLANK, toggle: true }];
+  const ON: ButtonGroupItem[] = [
+    { id: 'one', title: BLANK, toggle: true, defaultChecked: true },
+  ];
+
+  /**
+   * The colour a control draws that is not the sampler's backdrop, or the backdrop itself when
+   * it draws nothing: the darkest and the lightest pixels on screen are the two ends of what is
+   * drawn, and the backdrop is only one of them when something else was drawn beside it. This
+   * reads an untinted outline without naming the colour the scheme draws it in.
+   */
+  async function inkOf(testId: string, what: string): Promise<string> {
+    const darkest = closestOf(
+      await pixelProbe(
+        testId,
+        processColor('#000000') as number,
+        `${what}: darkest`
+      )
+    );
+    const lightest = closestOf(
+      await pixelProbe(
+        testId,
+        processColor('#FFFFFF') as number,
+        `${what}: lightest`
+      )
+    );
+    if (darkest === BACKDROP) return lightest;
+    if (lightest === BACKDROP) return darkest;
+    return colourDistance(darkest, BACKDROP) >=
+      colourDistance(lightest, BACKDROP)
+      ? darkest
+      : lightest;
+  }
+
+  const IDS = [
+    'bg-border-tint-off',
+    'bg-border-tint-on',
+    'bg-border-tint-disabled',
+    'bg-border-text-tint',
+    'bg-border-plain-off',
+    'bg-border-plain-on',
+    'bg-border-plain-disabled',
+    'bg-border-text-plain',
+  ] as const;
+
+  it("draws Material's own outline for each state, in the tint when one is given", async () => {
+    function BorderGroups() {
+      return (
+        <View>
+          <ButtonGroup
+            items={TOGGLE}
+            variant="outlined"
+            tintColor={TINT}
+            testID="bg-border-tint-off"
+            hybridRef={captureHybrid('bg-border-tint-off')}
+          />
+          <ButtonGroup
+            items={ON}
+            variant="outlined"
+            tintColor={TINT}
+            testID="bg-border-tint-on"
+            hybridRef={captureHybrid('bg-border-tint-on')}
+          />
+          <ButtonGroup
+            items={TOGGLE}
+            variant="outlined"
+            tintColor={TINT}
+            disabled
+            testID="bg-border-tint-disabled"
+            hybridRef={captureHybrid('bg-border-tint-disabled')}
+          />
+          <ButtonGroup
+            items={TOGGLE}
+            variant="text"
+            tintColor={TINT}
+            testID="bg-border-text-tint"
+            hybridRef={captureHybrid('bg-border-text-tint')}
+          />
+          <ButtonGroup
+            items={TOGGLE}
+            variant="outlined"
+            testID="bg-border-plain-off"
+            hybridRef={captureHybrid('bg-border-plain-off')}
+          />
+          <ButtonGroup
+            items={ON}
+            variant="outlined"
+            testID="bg-border-plain-on"
+            hybridRef={captureHybrid('bg-border-plain-on')}
+          />
+          <ButtonGroup
+            items={TOGGLE}
+            variant="outlined"
+            disabled
+            testID="bg-border-plain-disabled"
+            hybridRef={captureHybrid('bg-border-plain-disabled')}
+          />
+          <ButtonGroup
+            items={TOGGLE}
+            variant="text"
+            testID="bg-border-text-plain"
+            hybridRef={captureHybrid('bg-border-text-plain')}
+          />
+        </View>
+      );
+    }
+    await render(<BorderGroups />, { timeout: 20000 });
+    const boxes = new Map<string, Size>();
+    for (const id of IDS) {
+      await waitForTestId(id);
+      boxes.set(id, await waitForMeasured(id, id));
+    }
+
+    const reports = new Map<string, string>();
+    for (const id of IDS) {
+      reports.set(id, await pixelProbe(id, tint, `the tint in "${id}"`));
+    }
+    const lineOf = (id: string): string => {
+      const report = reports.get(id);
+      if (report == null) {
+        throw new Error(`"${id}" never produced a probe report.`);
+      }
+      return report;
+    };
+    console.log(`outlined border probes: ${JSON.stringify([...reports])}`);
+
+    if (Platform.OS !== 'android') {
+      // iOS has no pixels to sample, so the probe refuses.
+      for (const id of IDS) {
+        expect(lineOf(id)).toContain('no pixels');
+      }
+      return;
+    }
+
+    // A `text` item owns no ink at all here, so the two answers below differ only because one
+    // variant draws a ring and the other does not.
+    const textTint = lineOf('bg-border-text-tint');
+    expect(
+      probeHits(textTint),
+      `a tinted "text" item is drawn in the tint ${TINT}, so it wears a ring the "text" ` +
+        `variant must not draw: ${textTint}`
+    ).toBe(0);
+
+    const off = lineOf('bg-border-tint-off');
+    expect(
+      probeHits(off),
+      `an enabled tinted "outlined" toggle has no ink in ${TINT}, so its border never reached ` +
+        `the screen: ${off}`
+    ).toBeGreaterThan(0);
+
+    // Material draws no outline on a toggle that is on, so a tinted one draws none either.
+    const on = lineOf('bg-border-tint-on');
+    expect(
+      probeHits(on),
+      `a tinted "outlined" toggle that is on is drawn in the full ${TINT}, so it wears a ring ` +
+        `Material's own toggle does not draw: ${on}`
+    ).toBe(0);
+    expect(
+      sameSize(
+        boxes.get('bg-border-tint-on') ?? null,
+        boxes.get('bg-border-tint-off') ?? null
+      ),
+      `the toggle that is on (${describeSize(
+        boxes.get('bg-border-tint-on') ?? null
+      )}) is not the box the unchecked one has (${describeSize(
+        boxes.get('bg-border-tint-off') ?? null
+      )}), so the two reads are not one control in two states`
+    ).toBe(true);
+
+    // Material weakens a disabled outline rather than dropping it. A disabled toggle is also
+    // filled, in the very colour its disabled border is drawn in, so the strength left in the
+    // border is measured against the same state with no tint: that box holds the fill and nothing
+    // else, and any scheme's distance from it to the tint is the border's contribution.
+    const disabled = lineOf('bg-border-tint-disabled');
+    expect(
+      probeHits(disabled),
+      `a disabled tinted "outlined" toggle is drawn in the full ${TINT}, so its border reads ` +
+        `as enabled rather than at Material's disabled strength: ${disabled}`
+    ).toBe(0);
+    const dim = closestOf(disabled);
+    expect(
+      dim.length,
+      `no colour could be read from a disabled outlined toggle: ${disabled}`
+    ).toBe(7);
+    expect(
+      colourDistance(dim, BACKDROP) < colourDistance(dim, TINT),
+      `the disabled border (${dim}) is nearer the tint than the backdrop, so it is not drawn ` +
+        `at Material's disabled strength: ${disabled}`
+    ).toBe(true);
+    const plainDimLine = await pixelProbe(
+      'bg-border-plain-disabled',
+      tint,
+      'the same disabled state with no tint'
+    );
+    const plainDim = closestOf(plainDimLine);
+    expect(
+      colourDistance(plainDim, TINT) - colourDistance(dim, TINT),
+      `the disabled border (${dim}) is no closer to ${TINT} than the same state with no tint ` +
+        `(${plainDim}), so the border contributes nothing: ${disabled} / ${plainDimLine}`
+    ).toBeGreaterThan(10);
+    const dimLine = await pixelProbe(
+      'bg-border-tint-disabled',
+      processColor(dim) as number,
+      'the dimmed border'
+    );
+    expect(
+      probeHits(dimLine),
+      `the colour this disabled border is drawn in (${dim}) is not on screen at all: ` +
+        `${dimLine}`
+    ).toBeGreaterThan(0);
+    expect(
+      probeHits(dimLine) < sampledArea(dimLine) * 0.5,
+      `${dim} covers ${String(probeHits(dimLine))} of ${String(
+        sampledArea(dimLine)
+      )} pixels - that is a filled box, not an outline: ${dimLine}`
+    ).toBe(true);
+
+    // Without a tint the control keeps Material's own outline, and this device's scheme draws it
+    // barely apart from the sampler's grey, so it is read as the exact ink a state puts on screen
+    // rather than as a colour share. Whether a toggle that is on wears a ring is the tinted pair's
+    // job: both paths ask the same state for its border, and an untinted toggle that is on is
+    // filled either way, so it answers nothing. Its probe line is logged above all the same.
+    const ring = await inkOf('bg-border-plain-off', 'the untinted outline');
+    expect(
+      ring,
+      `an enabled "outlined" toggle with no tint draws nothing but the sampler's backdrop, so ` +
+        `it has no outline at all: ${lineOf('bg-border-plain-off')}`
+    ).not.toBe(BACKDROP);
+    const textPlain = await inkOf(
+      'bg-border-text-plain',
+      'an untinted text item'
+    );
+    expect(
+      textPlain,
+      `an untinted "text" item draws ${textPlain}, which is more than the sampler's backdrop, ` +
+        `so it is drawn as though it were outlined`
+    ).toBe(BACKDROP);
+    const disabledPlain = await inkOf(
+      'bg-border-plain-disabled',
+      'the untinted outline of a disabled toggle'
+    );
+    expect(
+      disabledPlain,
+      `a disabled "outlined" toggle with no tint draws ${disabledPlain}, which is the outline ` +
+        `of the enabled one (${ring}), so it reads as enabled rather than at Material's ` +
+        `disabled strength`
+    ).not.toBe(ring);
   });
 });

@@ -237,6 +237,20 @@ namespace margelo::nitro::nitroui {
         std::rethrow_exception(__result.error());
       }
     }
+    inline void nuiTestPixelProbe(double color) override {
+      auto __result = _swiftPart.nuiTestPixelProbe(std::forward<decltype(color)>(color));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline std::string nuiTestPixelReport() override {
+      auto __result = _swiftPart.nuiTestPixelReport();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
     inline std::string nuiTestStateReport() override {
       auto __result = _swiftPart.nuiTestStateReport();
       if (__result.hasError()) [[unlikely]] {

@@ -1058,6 +1058,24 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     model.publishAccessibilityReport("unavailable")
   }
 
+  private let pixelProbesLock = NSLock()
+
+  private var pixelProbes = 0
+
+  /// iOS has nothing to sample here, so the report says `no pixels`.
+  func nuiTestPixelProbe(color: Double) throws {
+    pixelProbesLock.lock()
+    pixelProbes += 1
+    pixelProbesLock.unlock()
+  }
+
+  func nuiTestPixelReport() throws -> String {
+    pixelProbesLock.lock()
+    let probes = pixelProbes
+    pixelProbesLock.unlock()
+    return "n=\(probes) no pixels platform=ios"
+  }
+
   func nuiTestStateReport() throws -> String {
     return model.stateReport()
   }
