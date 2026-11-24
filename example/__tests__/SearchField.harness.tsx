@@ -555,7 +555,11 @@ describe('SearchField', () => {
       'the text to clear'
     );
     expect(typed.canClear).toBe(true);
-    const before = eventsOf('cleared').length;
+    // The count is taken from a log that has caught up with the typing, so the wait for the
+    // clear cannot be met by a typed entry that lands late.
+    const before = (
+      await logReached('cleared', ['focus', 'change:h', 'change:hi'])
+    ).length;
     // The control's own clear handler, not a write into its state.
     (await handleOf('cleared')).nuiTestClear();
     const cleared = await reportedWhen(
@@ -629,7 +633,11 @@ describe('SearchField', () => {
     await waitForTestId('recleared');
     await focusField('recleared');
     await typeText('ru');
-    const typed = eventsOf('recleared').length;
+    // The count is taken from a log that has caught up with the typing, so the wait for the
+    // clear cannot be met by a typed entry that lands late.
+    const typed = (
+      await logReached('recleared', ['focus', 'change:r', 'change:ru'])
+    ).length;
     (await handleOf('recleared')).nuiTestClear();
     // The clear's own event has to be in the log before the count is taken, or a later
     // event is mistaken for it.
