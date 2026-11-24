@@ -1806,7 +1806,7 @@ describe('ButtonGroup · the outlined toggle border (Android)', () => {
     'bg-border-text-plain',
   ] as const;
 
-  it('draws Material own outline for each state, in the tint when one is given', async () => {
+  it("draws Material's own outline for each state, in the tint when one is given", async () => {
     function BorderGroups() {
       return (
         <View>
@@ -1930,8 +1930,10 @@ describe('ButtonGroup · the outlined toggle border (Android)', () => {
       )}), so the two reads are not one control in two states`
     ).toBe(true);
 
-    // Material weakens a disabled outline rather than dropping it: the full tint is gone, and
-    // what is left sits nearer the sampler's grey than the tint itself.
+    // Material weakens a disabled outline rather than dropping it. A disabled toggle is also
+    // filled, in the very colour its disabled border is drawn in, so the strength left in the
+    // border is measured against the same state with no tint: that box holds the fill and nothing
+    // else, and any scheme's distance from it to the tint is the border's contribution.
     const disabled = lineOf('bg-border-tint-disabled');
     expect(
       probeHits(disabled),
@@ -1944,15 +1946,21 @@ describe('ButtonGroup · the outlined toggle border (Android)', () => {
       `no colour could be read from a disabled outlined toggle: ${disabled}`
     ).toBe(7);
     expect(
-      colourDistance(dim, BACKDROP),
-      `the disabled control drew nothing but the sampler's own backdrop (${dim}), so its ` +
-        `border was dropped rather than dimmed: ${disabled}`
-    ).toBeGreaterThan(30);
-    expect(
       colourDistance(dim, BACKDROP) < colourDistance(dim, TINT),
       `the disabled border (${dim}) is nearer the tint than the backdrop, so it is not drawn ` +
         `at Material's disabled strength: ${disabled}`
     ).toBe(true);
+    const plainDimLine = await pixelProbe(
+      'bg-border-plain-disabled',
+      tint,
+      'the same disabled state with no tint'
+    );
+    const plainDim = closestOf(plainDimLine);
+    expect(
+      colourDistance(plainDim, TINT) - colourDistance(dim, TINT),
+      `the disabled border (${dim}) is no closer to ${TINT} than the same state with no tint ` +
+        `(${plainDim}), so the border contributes nothing: ${disabled} / ${plainDimLine}`
+    ).toBeGreaterThan(10);
     const dimLine = await pixelProbe(
       'bg-border-tint-disabled',
       processColor(dim) as number,
@@ -1971,8 +1979,10 @@ describe('ButtonGroup · the outlined toggle border (Android)', () => {
     ).toBe(true);
 
     // Without a tint the control keeps Material's own outline, and this device's scheme draws it
-    // barely apart from the sampler's grey, so these four states are read as the exact ink each one
-    // puts on screen, and never against a colour the scheme happens to use.
+    // barely apart from the sampler's grey, so it is read as the exact ink a state puts on screen
+    // rather than as a colour share. Whether a toggle that is on wears a ring is the tinted pair's
+    // job: both paths ask the same state for its border, and an untinted toggle that is on is
+    // filled either way, so it answers nothing. Its probe line is logged above all the same.
     const ring = await inkOf('bg-border-plain-off', 'the untinted outline');
     expect(
       ring,
@@ -1988,15 +1998,6 @@ describe('ButtonGroup · the outlined toggle border (Android)', () => {
       `an untinted "text" item draws ${textPlain}, which is more than the sampler's backdrop, ` +
         `so it is drawn as though it were outlined`
     ).toBe(BACKDROP);
-    const onPlain = await inkOf(
-      'bg-border-plain-on',
-      'the untinted outline of a toggle that is on'
-    );
-    expect(
-      onPlain,
-      `an "outlined" toggle with no tint that is on draws ${onPlain}, which is the outline of ` +
-        `the unchecked one (${ring}), so it wears a ring Material does not draw`
-    ).not.toBe(ring);
     const disabledPlain = await inkOf(
       'bg-border-plain-disabled',
       'the untinted outline of a disabled toggle'
