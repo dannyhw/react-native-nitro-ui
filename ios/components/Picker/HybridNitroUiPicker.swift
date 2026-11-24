@@ -420,7 +420,8 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
   /// Test-only. A SwiftUI `Picker` hands its menu to the system's presentation, so there is
   /// no popup to measure: every field answers `-1` ("not measurable here").
   func nuiTestMenuReport() throws -> String {
-    return "expanded=-1;live=-1;anchor=-1,-1,-1,-1;menu=-1,-1,-1,-1;rows=-1;drawn=-1"
+    return
+      "expanded=-1;live=-1;anchor=-1,-1,-1,-1;windows=-1;opens=-1;menu=-1,-1,-1,-1;rows=-1;drawn=-1"
   }
 
   private var model: PickerModel {

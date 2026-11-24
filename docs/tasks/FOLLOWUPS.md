@@ -35,6 +35,26 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   2026-11-17, `real-input:android` started 16:41 UTC at a load peak of 43 beside another merge
   run's app builds, seen twice (first on 2026-11-13 in a filtered `--control hosted-picker` run). A third sighting on GitHub-hosted CI on 2026-11-20. Cause found: the a11y sweep scrolls a fixed 8 swipes and grades a control that is still off screen (a saved dump showed the Picker's Spinner at `[0,0][0,0]` below the window on a page scrolled partway); the sweep's scroll is being fixed in the tooling, not the DatePicker.
 
+- `HostPopups.harness.tsx` (Android) "closes when the control is disabled while the menu is open"
+  and "opens two popup owners in one Host": the picker's process-wide menu count read 1 after
+  reading 0, on GitHub-hosted CI 2026-11-24 in four trial rounds (twice in one job), never on this
+  machine. Cause unknown (FIX29): Material's close fade explains a lagging count, not one that comes
+  back. The report now has `windows` and `opens`; the next CI red says which. Menu (G7a) "closes
+  when it is disabled while the menu is open" read the same shape once through `MenuRows.kt`'s
+  `MenuWitness`, which also counts through the fade.
+- `Menu.harness.tsx` (iOS) "Split trigger (E3) › is two halves, and each one does only its own
+  job": "the split trigger tap" 0 of 1 events in 8000 ms, GitHub-hosted CI only, three trial
+  rounds 2026-11-24. Likely the synthesised `pressAt` held past SwiftUI `Menu(primaryAction:)`'s
+  long-press threshold on a slow runner (driver timing). Blocks nothing: manual CI harness only.
+- `SearchField.harness.tsx` (Android) "round-trips typed text to JS, one event per keystroke", 2
+  of 3, and `ListItem.harness.tsx` (Android, G30) "draws no insets… inside a Form.Row", two events
+  where only `form-item:press` was expected: each once, GitHub-hosted CI 2026-11-24.
+- `form.e2e.ts` (Android) "a field the keyboard would cover is moved clear of it": two CI
+  sightings 2026-11-24, `LOCATOR_NOT_FOUND` on "Note" with the keyboard up and the app's focus and
+  avoidance echoes both yes; the one wordless `EditText` at [105,346][975,421] is probably the Note
+  field already moved clear, so the driver's lookup by name is the likely fault. The failure now
+  lists every node carrying "Note" (FIX28); read that on the next sighting.
+
 ## Quarantined tests
 
 Tests skipped with a `QUARANTINED <date>` comment after a second sighting, each with its fix task.
