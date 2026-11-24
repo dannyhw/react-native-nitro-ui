@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.semantics.SemanticsActions
@@ -37,7 +38,6 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
@@ -516,12 +516,16 @@ private fun iconToggleShapes(
   return built
 }
 
-/** The outlined variant's border in the control's tint. The width stays Material's own. */
+/**
+ * The outlined variant's border in the control's tint. Material's own border answers the
+ * state — the width, how dim a disabled control draws, and no border at all on a toggle
+ * that is on — and only its colour is replaced.
+ */
 @Composable
 private fun outlinedBorder(
   variant: IconButtonVariant,
   tint: Int?,
-  disabled: Boolean,
+  enabled: Boolean,
   checked: Boolean?,
 ): BorderStroke? {
   if (variant != IconButtonVariant.Outlined) {
@@ -530,11 +534,16 @@ private fun outlinedBorder(
   val color = tint?.let { ComposeColor(it) } ?: return null
   val base =
     if (checked == null) {
-      IconButtonDefaults.outlinedIconButtonBorder(disabled)
+      IconButtonDefaults.outlinedIconButtonBorder(enabled)
     } else {
-      IconButtonDefaults.outlinedIconToggleButtonBorder(checked, disabled)
+      IconButtonDefaults.outlinedIconToggleButtonBorder(enabled, checked)
     }
-  return BorderStroke(base?.width ?: NITRO_UI_OUTLINED_BORDER_WIDTH, color)
+  // Material draws no outline for a toggle that is on, so neither does a tinted one.
+  base ?: return null
+  // The state's strength is in the stroke's own colour: whole while enabled, dimmed while
+  // disabled. Only the hue is the control's.
+  val strength = (base.brush as? SolidColor)?.value?.alpha ?: 1f
+  return BorderStroke(base.width, color.copy(alpha = color.alpha * strength))
 }
 
 /**
@@ -548,9 +557,6 @@ internal fun nitroUiIconButtonContainer(
   width: IconButtonWidth,
   leading: Modifier = Modifier,
 ): Modifier = leading.minimumInteractiveComponentSize().size(scale.containerSize(width))
-
-/** Used only if Material's own default border cannot be read. */
-private val NITRO_UI_OUTLINED_BORDER_WIDTH = 1.dp
 
 private class IconButtonHost(
   context: ThemedReactContext,
@@ -625,7 +631,7 @@ private class IconButtonHost(
     if (toggle) {
       val colors = iconToggleColors(variant, tint)
       val shapes = iconToggleShapes(scale, corner)
-      val border = outlinedBorder(variant, tint, !enabled, selected)
+      val border = outlinedBorder(variant, tint, enabled, selected)
       val onCheckedChange: (Boolean) -> Unit = { requested -> toggleTo(requested) }
       when (variant) {
         IconButtonVariant.Standard ->
@@ -666,7 +672,7 @@ private class IconButtonHost(
             enabled = enabled,
             colors = colors,
             shapes = shapes,
-            border = border ?: IconButtonDefaults.outlinedIconToggleButtonBorder(selected, !enabled),
+            border = border ?: IconButtonDefaults.outlinedIconToggleButtonBorder(enabled, selected),
             content = content,
           )
       }
@@ -710,8 +716,8 @@ private class IconButtonHost(
           enabled = enabled,
           colors = colors,
           shapes = shapes,
-          border = outlinedBorder(variant, tint, !enabled, null)
-            ?: IconButtonDefaults.outlinedIconButtonBorder(!enabled),
+          border = outlinedBorder(variant, tint, enabled, null)
+            ?: IconButtonDefaults.outlinedIconButtonBorder(enabled),
           content = content,
         )
     }

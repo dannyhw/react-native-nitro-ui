@@ -15,6 +15,10 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-24 Android `IconButton`/`IconToggleButton`, `outlined`: the border follows Material for each
+  state. A disabled button draws it dimmed, a toggle that is on draws none, and a `tintColor`
+  only sets its colour; before, untinted borders were the wrong way round and tinted ones were
+  always full strength (FIX27, #124).
 - 11-24 Nothing user-visible: the SearchField submit-then-blur and hosted Picker two-owner tests
   wait for the value they read, so slower machines no longer race them (FIX26, #123).
 - 11-20 Nothing user-visible: the Android a11y sweep grades a control only once it is wholly on
