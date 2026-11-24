@@ -284,9 +284,9 @@ internal class FormSectionModel : NitroUiModel() {
   /**
    * The section's own box, in px. The layer is told its size as state because a host's content
    * is measured with an unbounded height, so `fillMaxSize` would make it only as tall as its
-   * content. The layer reads it while it is measured, never through a composition: the section
-   * is measured and laid out again the moment its box changes, and a value carried in from the
-   * previous composition is the old box.
+   * content, and the constraints it is measured with cannot say how tall the section is. The
+   * layer reads it while it is measured, so a section that grows is drawn into at its new height
+   * as soon as the layer is next measured, and not only once a composition has caught up.
    */
   var boxW by mutableStateOf(0f)
   var boxH by mutableStateOf(0f)
@@ -829,15 +829,17 @@ private fun accessoryIcon(accessory: Int): ImageVector? =
 /**
  * Size the section's layer to the section's own box, at the origin of its host.
  *
- * The box is read where it is used. Passed in, it would be the value this composition was built
- * with, and the layout pass measures the host right after writing a new one, so a section that
- * just grew would be drawn into at its previous height. The host's own measure spec is not the
- * size to draw into either: the layer is the section's box, not content inside a padded one.
+ * The box cannot come from [constraints]: the shared host measures its content with an unbounded
+ * height, which is why the section hands it over at all. Read it here rather than pass it in:
+ * passed in, the value is the one this composition was built with, and the section measures the
+ * host in the same pass that writes a new box, so a section that has just grown keeps drawing
+ * into its old height until a composition catches up. A layer one pass behind also draws its row
+ * shapes at the rows' old places, so a stale height is never the only symptom.
  */
 private fun Modifier.intoSectionBox(model: FormSectionModel): Modifier =
   this.then(
-    layout { measurable, _ ->
-      val width = model.boxW.roundToInt().coerceAtLeast(0)
+    layout { measurable, constraints ->
+      val width = model.boxW.roundToInt().coerceAtLeast(0).coerceAtMost(constraints.maxWidth)
       val height = model.boxH.roundToInt().coerceAtLeast(0)
       val placeable = measurable.measure(Constraints.fixed(width, height))
       layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
