@@ -629,6 +629,7 @@ describe('SearchField', () => {
     await waitForTestId('recleared');
     await focusField('recleared');
     await typeText('ru');
+    const typed = eventsOf('recleared').length;
     (await handleOf('recleared')).nuiTestClear();
     // The clear's own event has to be in the log before the count is taken, or a later
     // event is mistaken for it.
@@ -637,6 +638,7 @@ describe('SearchField', () => {
       (current) => current.text === '',
       'the clear'
     );
+    await logReached('recleared', ['change:'], typed);
     const before = eventsOf('recleared').length;
     (await handleOf('recleared')).nuiTestSubmit();
     await sleep(150);
