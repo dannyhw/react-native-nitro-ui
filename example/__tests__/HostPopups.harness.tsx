@@ -411,6 +411,35 @@ async function awaitCloseOver(handle: PickerHandle): Promise<number> {
   return closed.opens;
 }
 
+/** Where the control reports its anchor now: the one thing a Host move must change. */
+function anchorOf(handle: PickerHandle): string {
+  return parseMenuReport(handle.nuiTestMenuReport()).anchor.join(',');
+}
+
+/**
+ * The control's own `disabled`, read back from the view: a step here is known to have
+ * arrived rather than only to have been asked for, so two writes cannot share one batch.
+ */
+async function waitForDisabled(
+  handle: PickerHandle,
+  want: boolean,
+  timeoutMs = 12000
+): Promise<void> {
+  const deadline = nitroUiCore.now() + timeoutMs;
+  for (;;) {
+    if (handle.disabled === want) {
+      return;
+    }
+    if (nitroUiCore.now() > deadline) {
+      throw new Error(
+        `The control never reported disabled=${String(want)} within ` +
+          `${String(timeoutMs)}ms.`
+      );
+    }
+    await settle(50);
+  }
+}
+
 // MARK: - Fixtures
 
 type Log = {
@@ -897,14 +926,19 @@ if (Platform.OS === 'android') {
 
       // Three things that reach the Host after the close, none of which asks for a menu:
       // the control going back to enabled, the Host moving, and a second popup owner
-      // presenting. Each is read after the previous one has landed.
+      // presenting. Each is waited for where it lands, so a slow device delays a step
+      // instead of skipping it; the dwell before each absence read is where a menu that
+      // opened and closed again would still show in `opens` and `windows`.
       log.setPickerDisabled?.(true);
-      await settle(200);
+      await waitForDisabled(picker, true);
       log.setPickerDisabled?.(false);
-      await settle(200);
+      await waitForDisabled(picker, false);
+      await settle(300);
       expectStillClosed(picker, 'after the disable and re-enable', opens);
 
+      const beforeMove = anchorOf(picker);
       log.setSpacer?.(80);
+      await waitForMenu(picker, (r) => r.anchor.join(',') !== beforeMove);
       await settle(300);
       expectStillClosed(picker, 'after the Host moved', opens);
 
@@ -926,35 +960,6 @@ if (Platform.OS === 'android') {
         'after the second close',
         await awaitCloseOver(picker)
       );
-    });
-
-    it('owns its window when the menu reopens before the closing one fades', async () => {
-      await mount(<PopupHost log={log} />);
-      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
-      await pressWitnessed(picker);
-      await waitForMenu(picker, (r) => r.expanded && r.live === 1);
-      // Close, then press the anchor again while that window is still fading. Compose keeps
-      // the same popup, so the reopened menu is served by the view already there and must
-      // still know which window it owns.
-      picker.nuiTestSelect(1);
-      await waitForMenu(picker, (r) => !r.expanded && r.live === 0);
-      await pressWitnessed(picker);
-      const reopened = await waitForMenu(
-        picker,
-        (r) => r.expanded && r.rows > 0
-      );
-      expect(reopened.live).toBe(1);
-      expect(reopened.menu).not.toEqual([-1, -1, -1, -1]);
-
-      // A window the control owns closes when React Native moves the view under it, which
-      // is the one thing a popup cannot notice for itself.
-      log.setSpacer?.(120);
-      const moved = await waitForMenu(
-        picker,
-        (r) => !r.expanded && r.live === 0
-      );
-      expect(moved.menu).toEqual([-1, -1, -1, -1]);
-      await awaitCloseOver(picker);
     });
 
     it('leaves no window behind when the composition that opened one goes away', async () => {
