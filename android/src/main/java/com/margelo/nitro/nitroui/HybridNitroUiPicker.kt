@@ -239,6 +239,10 @@ internal class PickerModel : NitroUiModel() {
     right: Int,
     bottom: Int,
   ) {
+    // The window outlives the open state by its fade-out and lays out while it does.
+    if (!expanded) {
+      return
+    }
     menuLeft = left
     menuTop = top
     menuRight = right
@@ -254,11 +258,15 @@ internal class PickerModel : NitroUiModel() {
   }
 
   fun noteMenuRows(rows: Int) {
-    menuRowCount = rows
+    if (expanded) {
+      menuRowCount = rows
+    }
   }
 
   fun noteMenuView(view: View?) {
-    menuView = view
+    if (view == null || expanded) {
+      menuView = view
+    }
   }
 
   /**
@@ -1003,20 +1011,16 @@ private class PickerHost(
       model.noteMenuView(menuView)
       val listener =
         View.OnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-          // The window outlives the open state by its fade; a frame it lays out then
-          // belongs to a menu that is already closed.
-          if (model.expanded) {
-            view.getLocationOnScreen(where)
-            model.noteMenuFrame(
-              where[0],
-              where[1],
-              where[0] + view.width,
-              where[1] + view.height,
-            )
-            // Only once a test has asked for it.
-            if (MenuDrawnWitness.wanted) {
-              describeMenuSemantics(view)?.let(model::noteMenuDrawn)
-            }
+          view.getLocationOnScreen(where)
+          model.noteMenuFrame(
+            where[0],
+            where[1],
+            where[0] + view.width,
+            where[1] + view.height,
+          )
+          // Only once a test has asked for it.
+          if (MenuDrawnWitness.wanted) {
+            describeMenuSemantics(view)?.let(model::noteMenuDrawn)
           }
         }
       menuView.addOnLayoutChangeListener(listener)
