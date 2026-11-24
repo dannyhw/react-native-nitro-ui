@@ -187,18 +187,20 @@ async function reportedWhen(
 }
 
 /**
- * Wait until the app's log for `id` holds as many entries as `expected`, then return it.
- * A field's native report settles as the event is sent, so a log read as soon as native
- * looks done can still be short of the events that are on their way to JS.
+ * Wait until the app's log for `id` holds as many entries after the first `before` of
+ * them as `expected` has, then return that slice. A field's native report settles as the
+ * event is sent, so a log read as soon as native looks done can still be short of the
+ * events that are on their way to JS.
  */
 async function logReached(
   id: string,
   expected: readonly string[],
+  before = 0,
   timeoutMs = 5000
 ): Promise<string[]> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const logged = eventsOf(id);
+    const logged = eventsOf(id).slice(before);
     if (logged.length >= expected.length) return logged;
     if (Date.now() > deadline) {
       const missing = expected.filter((entry) => !logged.includes(entry));
@@ -553,7 +555,11 @@ describe('SearchField', () => {
       'the text to clear'
     );
     expect(typed.canClear).toBe(true);
-    const before = eventsOf('cleared').length;
+    // The count is taken from a log that has caught up with the typing, so the wait for the
+    // clear cannot be met by a typed entry that lands late.
+    const before = (
+      await logReached('cleared', ['focus', 'change:h', 'change:hi'])
+    ).length;
     // The control's own clear handler, not a write into its state.
     (await handleOf('cleared')).nuiTestClear();
     const cleared = await reportedWhen(
@@ -561,7 +567,9 @@ describe('SearchField', () => {
       (current) => current.text === '',
       'the clear'
     );
-    const reported = eventsOf('cleared').slice(before);
+    // The native report settles as the event is sent, so the log can still be a moment
+    // short of the clear's own event here.
+    const reported = await logReached('cleared', ['change:'], before);
     expect(reported).toEqual(['change:']);
     expect(cleared.nativeEvents).toBe(typed.nativeEvents + 1);
     // Focus stays: clearing a query is not leaving the field.
@@ -625,6 +633,11 @@ describe('SearchField', () => {
     await waitForTestId('recleared');
     await focusField('recleared');
     await typeText('ru');
+    // The count is taken from a log that has caught up with the typing, so the wait for the
+    // clear cannot be met by a typed entry that lands late.
+    const typed = (
+      await logReached('recleared', ['focus', 'change:r', 'change:ru'])
+    ).length;
     (await handleOf('recleared')).nuiTestClear();
     // The clear's own event has to be in the log before the count is taken, or a later
     // event is mistaken for it.
@@ -633,6 +646,7 @@ describe('SearchField', () => {
       (current) => current.text === '',
       'the clear'
     );
+    await logReached('recleared', ['change:'], typed);
     const before = eventsOf('recleared').length;
     (await handleOf('recleared')).nuiTestSubmit();
     await sleep(150);

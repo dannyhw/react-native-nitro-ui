@@ -14,7 +14,7 @@ import {
 } from './support';
 import { actsOnOneNamedNode } from './reader';
 import { adbShell } from './device-read';
-import { tree } from './os-tree';
+import { tree, type TreeNode } from './os-tree';
 import {
   expectKeyboard,
   fieldAboveKeyboard,
@@ -378,18 +378,20 @@ async function revealLowInPage(
  * same claim as "the field sits under the keyboard". The two come apart exactly as this
  * case cannot tell them apart on its own: a keyboard can go away while the app still
  * echoes a focused field, and a focused field can be there in the accessibility tree and
- * still be one the driver will not name. The device's own dumps and the raw dump answer
- * that, so they are read here — and only once a read has already failed.
+ * still be one the driver will not name. The device's own keyboard reads and the driver's
+ * own tree answer that, so they are read here — and only once a read has already failed.
+ * A `uiautomator dump` is not among them: while this run holds the device's
+ * accessibility connection, that read cannot answer.
  */
 
 /** The class that holds a caret, in the tree's own words. */
 const EDITABLE_CLASS = /EditText/;
 
-/** How many nodes below the field one failure prints. */
+/** How many nodes the failure prints below the field, or naming it. */
 const EVIDENCE_NODES = 10;
 
-/** The example app's package: a dump node from another one is another window's. */
-const APP_PACKAGE = 'nitroui.example';
+/** The title of the field this case cannot read, as the app announces it. */
+const FIELD_TITLE = 'Note';
 
 /** One failure-path read, or the reason it has no answer. */
 async function evidenceLine(
@@ -446,137 +448,50 @@ function inputMethodServiceSays(): string {
   return lines.slice(0, 4).join(' / ').slice(0, 400);
 }
 
-/** One element of a `uiautomator dump`, with every attribute the platform wrote. */
-interface DumpNode {
-  attributes: Record<string, string>;
-  children: DumpNode[];
-}
-
-/** A dump node and how deep in the dump it sits. */
-interface DumpEntry {
-  node: DumpNode;
-  depth: number;
-}
-
 /**
- * The dump as a tree, attributes and all.
+ * Every node of the driver's own snapshot whose words carry the missing field's title,
+ * whatever class or role it has - the read that answers whether the field is in the tree
+ * the driver resolves at all.
  *
- * The harness's `parseHierarchy` keeps the handful of flags the green path reads; a
- * failure has to be read out of what the dump actually wrote, `visible-to-user` included
- * on the images that write it.
+ * A hint is one of those words: the driver prints an empty field's hint as the label it
+ * is announced with, which lands on `text` or on `contentDesc` depending on whether the
+ * node also carries a value.
  */
-function dumpTree(xml: string): DumpNode[] {
-  const roots: DumpNode[] = [];
-  const open: DumpNode[] = [];
-  for (const element of xml.matchAll(/<node\b([^>]*)>|<\/node>/g)) {
-    if (element[0] === '</node>') {
-      open.pop();
-      continue;
-    }
-    const written = element[1] ?? '';
-    const attributes: Record<string, string> = {};
-    for (const attribute of written.matchAll(/([\w:-]+)="([^"]*)"/g)) {
-      const name = attribute[1];
-      if (name != null) attributes[name] = attribute[2] ?? '';
-    }
-    const node: DumpNode = { attributes, children: [] };
-    const parent = open[open.length - 1];
-    if (parent == null) roots.push(node);
-    else parent.children.push(node);
-    if (!written.trimEnd().endsWith('/')) open.push(node);
-  }
-  return roots;
-}
-
-function dumpEntries(nodes: DumpNode[], depth = 0): DumpEntry[] {
-  return nodes.flatMap((node) => [
-    { node, depth },
-    ...dumpEntries(node.children, depth + 1),
-  ]);
-}
-
-/** The dump of the screen as it is, without the trailer `uiautomator` prints. */
-function accessibilityDump(): string {
-  const dump = adbShell(['uiautomator', 'dump', '/dev/tty']);
-  const start = dump.indexOf('<?xml');
-  if (start < 0) {
-    throw new Error(`uiautomator answered "${dump.slice(0, 200)}"`);
-  }
-  const xml = dump.slice(start);
-  const end = xml.lastIndexOf('</hierarchy>');
-  return end < 0 ? xml : xml.slice(0, end);
-}
-
-/** One dump node, as much of it as a failure line can carry. */
-function dumpLine(node: DumpNode): string {
-  const words =
-    (node.attributes['content-desc'] ?? '') ||
-    (node.attributes.text ?? '') ||
-    '(nothing announced)';
+function notedNodes(): string {
+  const nodes = tree({ unmerged: true });
+  const named = nodes.filter((node) => carriesTheTitle(node));
+  const head =
+    `its snapshot holds ${String(nodes.length)} node(s), ` +
+    `${String(named.length)} of them carrying "${FIELD_TITLE}" in its words`;
+  if (named.length === 0) return `${head}: none`;
   return (
-    `${node.attributes.class ?? 'no class'} ` +
-    `bounds=${node.attributes.bounds ?? '?'} ` +
-    `visible-to-user=${node.attributes['visible-to-user'] ?? 'not written by this dump'} ` +
-    `focused=${node.attributes.focused ?? '?'} words="${words}"`
+    `${head}: ${named
+      .slice(0, EVIDENCE_NODES)
+      .map((node) => `\n    ${noteLine(node)}`)
+      .join('')}` +
+    (named.length > EVIDENCE_NODES
+      ? `\n    … and ${String(named.length - EVIDENCE_NODES)} more`
+      : '')
   );
 }
 
-/**
- * The focused field as the accessibility service serves it: its own node, then the
- * nodes inside it, then which windows the dump carries at all.
- */
-function dumpedField(): string {
-  const entries = dumpEntries(dumpTree(accessibilityDump()));
-  const others = new Set<string>();
-  let owned = 0;
-  for (const entry of entries) {
-    const owner = entry.node.attributes.package ?? 'no package';
-    if (owner === APP_PACKAGE) owned += 1;
-    else others.add(owner);
-  }
-  const focused = entries.find(
-    (entry) => entry.node.attributes.focused === 'true'
-  );
-  const target =
-    focused ??
-    entries.find((entry) =>
-      EDITABLE_CLASS.test(entry.node.attributes.class ?? '')
-    );
-  const windows = `the dump carries ${String(entries.length)} nodes, ${String(
-    owned
-  )} of them the app's own and the rest ${
-    others.size === 0 ? "nobody else's" : `from ${[...others].join(', ')}`
-  }`;
-  if (target == null) {
-    return (
-      `nothing in the dump is focused or editable - no node a caret is in; ` +
-      `${windows}`
-    );
-  }
-  const lines = [
-    `the node a caret is in is ${dumpLine(target.node)}`,
-    ...linesInside(entries, target),
-    windows,
-  ];
-  return lines.join('\n    ');
+/** Whether this node's own words - text, content description or hint - name the field. */
+function carriesTheTitle(node: TreeNode): boolean {
+  const words = `${node.text} ${node.contentDesc}`.toLowerCase();
+  return words.includes(FIELD_TITLE.toLowerCase());
 }
 
-/** The nodes under the field's own node, which is where its label lives. */
-function linesInside(entries: DumpEntry[], target: DumpEntry): string[] {
-  const start = entries.indexOf(target) + 1;
-  const lines: string[] = [];
-  for (let index = start; index < entries.length; index += 1) {
-    const entry = entries[index];
-    if (entry == null || entry.depth <= target.depth) break;
-    if (lines.length >= EVIDENCE_NODES) {
-      lines.push('  … the node has more children than this prints');
-      break;
-    }
-    lines.push(
-      `${'  '.repeat(entry.depth - target.depth)}${dumpLine(entry.node)}`
-    );
-  }
-  return lines;
+/** One node the driver can see, with the flags and the box it would answer with. */
+function noteLine(node: TreeNode): string {
+  return (
+    `${node.className || 'no class'} ` +
+    `focusable=${node.focusable || 'not written'} ` +
+    `hittable=${node.hittable || 'not written'} ` +
+    `enabled=${node.enabled} ` +
+    `text="${node.text}" announced="${node.contentDesc}" ` +
+    `bounds=[${String(node.bounds.x1)},${String(node.bounds.y1)}]` +
+    `[${String(node.bounds.x2)},${String(node.bounds.y2)}]`
+  );
 }
 
 /** The editable nodes the driver itself can see, with the boxes it would answer with. */
@@ -621,7 +536,10 @@ async function keyboardEvidence(
       return `the field this case reads: ${named} node(s); every textbox on the screen: ${any} node(s)`;
     }),
     await evidenceLine("the driver's own tree", () => driverTree()),
-    await evidenceLine('the raw accessibility dump', () => dumpedField()),
+    await evidenceLine(
+      `the driver's nodes whose words carry "${FIELD_TITLE}"`,
+      () => notedNodes()
+    ),
   ].join('\n');
 }
 
