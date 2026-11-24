@@ -69,6 +69,10 @@ type DatePickerHandle = {
 type MenuReport = {
   expanded: boolean;
   live: number;
+  /** Menu windows composed in the process, including one still fading out. */
+  windows: number;
+  /** How many times a menu has opened in the process. Only ever goes up. */
+  opens: number;
   anchor: number[];
   menu: number[];
   rows: number;
@@ -109,6 +113,8 @@ function parseMenuReport(line: string): MenuReport {
   return {
     expanded: field('expanded') === '1',
     live: Number(field('live')),
+    windows: Number(field('windows')),
+    opens: Number(field('opens')),
     anchor: rect('anchor'),
     menu: rect('menu'),
     rows: Number(field('rows')),
@@ -371,16 +377,29 @@ async function pressWitnessedAndOpen(
 }
 
 /**
- * One read, asserted as one line: what a control reports when it has no menu open. The
- * three fields come from the same read because two reads are two moments.
+ * One read, asserted as one line: what a control reports when its menu has closed and its
+ * window has gone. `opens` is the count the caller already saw — a menu that opened again
+ * between the two reads is a different answer from one that never came back.
  */
-function expectNoOpenMenu(handle: PickerHandle, after: string) {
+function expectStillClosed(handle: PickerHandle, after: string, opens: number) {
   const report = parseMenuReport(handle.nuiTestMenuReport());
   expect(
-    `${after}: expanded=${String(report.expanded)} live=${String(
-      report.live
-    )} menu=${report.menu.join(',')}`
-  ).toBe(`${after}: expanded=false live=0 menu=-1,-1,-1,-1`);
+    `${after}: expanded=${String(report.expanded)} live=${String(report.live)} ` +
+      `windows=${String(report.windows)} opens=${String(report.opens)} ` +
+      `menu=${report.menu.join(',')}`
+  ).toBe(
+    `${after}: expanded=false live=0 windows=0 opens=${String(opens)} ` +
+      `menu=-1,-1,-1,-1`
+  );
+}
+
+/**
+ * A close is over when the popup's window has left, which is when its fade ends. Returns the
+ * opens count as of then.
+ */
+async function awaitCloseOver(handle: PickerHandle): Promise<number> {
+  const closed = await waitForMenu(handle, (r) => r.windows === 0);
+  return closed.opens;
 }
 
 // MARK: - Fixtures
@@ -849,10 +868,11 @@ if (Platform.OS === 'android') {
       );
       expect(closed.live).toBe(0);
       expect(picker.disabled).toBe(true);
+      const opens = await awaitCloseOver(picker);
       // Re-enabling must not resurrect a window nobody asked for.
       log.setPickerDisabled?.(false);
       await settle(300);
-      expectNoOpenMenu(picker, 'after re-enabling');
+      expectStillClosed(picker, 'after re-enabling', opens);
     });
 
     it('keeps a closed menu closed through the batches that follow it', async () => {
@@ -864,6 +884,7 @@ if (Platform.OS === 'android') {
       picker.nuiTestSelect(2);
       await waitForMenu(picker, (r) => !r.expanded && r.live === 0);
       expect(await indexReached(picker, 2)).toBe(2);
+      const opens = await awaitCloseOver(picker);
 
       // Three things that reach the Host after the close, none of which asks for a menu:
       // the control going back to enabled, the Host moving, and a second popup owner
@@ -872,24 +893,59 @@ if (Platform.OS === 'android') {
       await settle(200);
       log.setPickerDisabled?.(false);
       await settle(200);
-      expectNoOpenMenu(picker, 'after the disable and re-enable');
+      expectStillClosed(picker, 'after the disable and re-enable', opens);
 
       log.setSpacer?.(80);
       await settle(300);
-      expectNoOpenMenu(picker, 'after the Host moved');
+      expectStillClosed(picker, 'after the Host moved', opens);
 
       date.nuiTestPresent();
       await waitForDate(date, (r) => r.presented && r.livePresentations === 1);
-      expectNoOpenMenu(picker, 'while the date picker’s dialog is up');
+      expectStillClosed(picker, 'while the date picker’s dialog is up', opens);
       log.setDateDisabled?.(true);
       await waitForDialogGone(date, 'the second popup owner’s dialog');
 
       // The count counts: the menu opens again, and the rows are the ones it draws.
+      expect(parseMenuReport(picker.nuiTestMenuReport()).opens).toBe(opens);
       const reopened = await pressWitnessedAndOpen(picker);
       expect(reopened.rows).toBe(OPTIONS.length);
+      expect(reopened.opens).toBe(opens + 1);
       picker.nuiTestSelect(0);
       await waitForMenu(picker, (r) => !r.expanded && r.live === 0);
-      expectNoOpenMenu(picker, 'after the second close');
+      expectStillClosed(
+        picker,
+        'after the second close',
+        await awaitCloseOver(picker)
+      );
+    });
+
+    it('owns its window when the menu reopens before the closing one fades', async () => {
+      await mount(<PopupHost log={log} />);
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
+      await pressWitnessed(picker);
+      await waitForMenu(picker, (r) => r.expanded && r.live === 1);
+      // Close, then press the anchor again while that window is still fading. Compose keeps
+      // the same popup, so the reopened menu is served by the view already there and must
+      // still know which window it owns.
+      picker.nuiTestSelect(1);
+      await waitForMenu(picker, (r) => !r.expanded && r.live === 0);
+      await pressWitnessed(picker);
+      const reopened = await waitForMenu(
+        picker,
+        (r) => r.expanded && r.rows > 0
+      );
+      expect(reopened.live).toBe(1);
+      expect(reopened.menu).not.toEqual([-1, -1, -1, -1]);
+
+      // A window the control owns closes when React Native moves the view under it, which
+      // is the one thing a popup cannot notice for itself.
+      log.setSpacer?.(120);
+      const moved = await waitForMenu(
+        picker,
+        (r) => !r.expanded && r.live === 0
+      );
+      expect(moved.menu).toEqual([-1, -1, -1, -1]);
+      await awaitCloseOver(picker);
     });
 
     it('leaves no window behind when the composition that opened one goes away', async () => {

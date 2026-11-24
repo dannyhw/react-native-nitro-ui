@@ -239,10 +239,6 @@ internal class PickerModel : NitroUiModel() {
     right: Int,
     bottom: Int,
   ) {
-    // The window outlives the open state by its fade-out and lays out while it does.
-    if (!expanded) {
-      return
-    }
     menuLeft = left
     menuTop = top
     menuRight = right
@@ -258,15 +254,11 @@ internal class PickerModel : NitroUiModel() {
   }
 
   fun noteMenuRows(rows: Int) {
-    if (expanded) {
-      menuRowCount = rows
-    }
+    menuRowCount = rows
   }
 
   fun noteMenuView(view: View?) {
-    if (view == null || expanded) {
-      menuView = view
-    }
+    menuView = view
   }
 
   /**
@@ -282,11 +274,16 @@ internal class PickerModel : NitroUiModel() {
   /**
    * The anchor is the composition-relative box plus the composition's place on screen; `-1`
    * means one of them was never read. Formatted under a lock because it may be read on the
-   * JS thread while the UI thread writes. `live` is process-wide.
+   * JS thread while the UI thread writes. `live`, `windows` and `opens` are process-wide.
+   * The window fields answer closed while the menu is: the popup that is fading out still
+   * lays out and still reports, and a window composed under a closed menu is what `windows`
+   * is for.
    */
   fun readMenuReport(): String {
     val open = expanded
     val live = liveMenus.get()
+    val windows = liveWindows.get()
+    val opens = openMenus.get()
     val boxLeft = anchorLeft
     val boxTop = anchorTop
     val boxRight = anchorRight
@@ -303,7 +300,19 @@ internal class PickerModel : NitroUiModel() {
         } else {
           "-1,-1,-1,-1"
         } +
-        ";menu=$menuLeft,$menuTop,$menuRight,$menuBottom;rows=$menuRowCount" +
+        ";windows=$windows;opens=$opens" +
+        ";menu=" +
+        if (open) {
+          "$menuLeft,$menuTop,$menuRight,$menuBottom"
+        } else {
+          "-1,-1,-1,-1"
+        } +
+        ";rows=" +
+        if (open) {
+          menuRowCount.toString()
+        } else {
+          "0"
+        } +
         ";drawn=${drawn ?: "-1"}"
     }
   }
@@ -347,10 +356,20 @@ internal class PickerModel : NitroUiModel() {
     fun isWheel(variant: String): Boolean = variant == "wheel"
 
     /**
-     * Menus open in this process right now. Process-wide, because a mount dropped mid-menu
-     * cannot report its own leak.
+     * Menus open in this process right now. Process-wide so that one control can read what
+     * another still holds open.
      */
     val liveMenus = AtomicInteger(0)
+
+    /**
+     * Menu windows composed in this process right now. Longer-lived than [liveMenus]: the
+     * window outlives the open state by its fade-out, so a window can belong to a menu that
+     * has already closed.
+     */
+    val liveWindows = AtomicInteger(0)
+
+    /** How many times a menu has opened here. Only ever goes up. */
+    val openMenus = AtomicInteger(0)
   }
 
   /**
@@ -979,34 +998,33 @@ private class PickerHost(
   }
 
   /**
-   * One open menu, counted for as long as the control says the menu is open. Composed
-   * beside the anchor rather than inside the popup: `ExposedDropdownMenu` keeps its window
-   * composed through the fade that closes it, so the popup's composition is not when a menu
-   * is open.
+   * One open menu, counted for as long as the control says the menu is open. Composed beside
+   * the anchor rather than inside the popup: `ExposedDropdownMenu` keeps its window composed
+   * through the fade that closes it, so the popup being composed does not mean the menu is
+   * open.
    */
   @Composable
   private fun MenuOpenWitness(model: PickerModel) {
     DisposableEffect(model) {
       val live = PickerModel.liveMenus
       live.incrementAndGet()
-      onDispose {
-        live.decrementAndGet()
-        // A menu nobody can see has no window to report, whatever is still fading out.
-        model.noteMenuView(null)
-        model.clearMenuFrame()
-      }
+      PickerModel.openMenus.incrementAndGet()
+      onDispose { live.decrementAndGet() }
     }
   }
 
   /**
-   * Composed only while the popup's window is. Reports the window's frame, and clears
-   * `expanded` when the popup leaves the composition, so a child that re-enters a Host's
-   * child list does not reopen it.
+   * Composed only while the popup's window is, and the only writer of the model's window
+   * state: a window that survives a close and a reopen keeps its own view through both.
+   * Clears `expanded` when the popup leaves the composition, so a child that re-enters a
+   * Host's child list does not reopen it.
    */
   @Composable
   private fun MenuWindowWitness(model: PickerModel) {
     val menuView = LocalView.current
     DisposableEffect(menuView) {
+      val windows = PickerModel.liveWindows
+      windows.incrementAndGet()
       val where = IntArray(2)
       model.noteMenuView(menuView)
       val listener =
@@ -1028,6 +1046,7 @@ private class PickerHost(
         menuView.removeOnLayoutChangeListener(listener)
         model.noteMenuView(null)
         model.clearMenuFrame()
+        windows.decrementAndGet()
         model.expanded = false
       }
     }
