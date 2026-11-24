@@ -1218,13 +1218,6 @@ function changedCodePaths({ base }) {
   return { paths: [...paths], base: mergeBase, unknown: false };
 }
 
-/**
- * Runs one gate while holding a claim on its lease's devices, so a reap cannot
- * power them off mid-run and a second gate on the same device is refused. The
- * claim is a pid: it ends with this process even when the run is killed. The
- * Metro port is checked separately, because a server can outlive the lease
- * that started it and then no claim exists to conflict with.
- */
 /** The live-run markers' directory: beside the log store, or the worktree fallback. */
 function liveStoreDir() {
   const { commonDir } = store();
@@ -1321,6 +1314,13 @@ async function runGate(name, resolved, options = {}) {
   }
 }
 
+/**
+ * Runs one gate while holding a claim on its lease's devices, so a reap cannot
+ * power them off mid-run and a second gate on the same device is refused. The
+ * claim is a pid: it ends with this process even when the run is killed. The
+ * Metro port is checked separately, because a server can outlive the lease
+ * that started it and then no claim exists to conflict with.
+ */
 async function runGateOnMachine(name, resolved, options = {}) {
   let claim = null;
   if (resolved.platform != null) {
