@@ -1,6 +1,6 @@
-import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
+import { test } from './fixture';
 import { tree, type TreeNode } from './os-tree';
 import { isInBand, openScreen, reveal } from './support';
 import { actsOnOneNamedNode } from './reader';

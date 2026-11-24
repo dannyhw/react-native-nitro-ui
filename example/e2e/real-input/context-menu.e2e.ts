@@ -1,6 +1,6 @@
-import { test } from '@e2e-dev/mobile';
 import { expect, type Screen } from 'e2e';
 
+import { test } from './fixture';
 import { adbShell, displayDensity, popupWindowCount } from './device-read';
 import { actionFlags } from './os-tree';
 import { boxOf, openScreen, reveal, type Box, type Point } from './support';

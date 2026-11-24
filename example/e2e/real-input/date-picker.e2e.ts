@@ -1,4 +1,3 @@
-import { test } from '@e2e-dev/mobile';
 import { expect, type Screen } from 'e2e';
 
 import {
@@ -7,6 +6,7 @@ import {
   expectedColumnDp,
   measureCalendarGrid,
 } from '../../../scripts/real-input/android-calendar.mjs';
+import { test } from './fixture';
 import { displayDensity } from './device-read';
 import { tree, type TreeNode } from './os-tree';
 import { centreOf, openScreen, reveal, tapBand } from './support';

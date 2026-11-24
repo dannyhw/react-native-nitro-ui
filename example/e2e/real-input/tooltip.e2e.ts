@@ -1,6 +1,6 @@
-import { test } from '@e2e-dev/mobile';
 import { expect, type Locator, type Screen } from 'e2e';
 
+import { test } from './fixture';
 import { popupWindowCount } from './device-read';
 import { centreOf, openScreen, reveal } from './support';
 

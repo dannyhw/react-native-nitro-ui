@@ -1,7 +1,7 @@
-import { test } from '@e2e-dev/mobile';
 import { expect } from 'e2e';
 
 import { nativeChecked } from '../../../scripts/real-input/android-tree.mjs';
+import { test } from './fixture';
 import { tree } from './os-tree';
 import { openScreen, reveal } from './support';
 import { actsOnOneNamedNode } from './reader';
