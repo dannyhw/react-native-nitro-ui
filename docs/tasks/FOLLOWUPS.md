@@ -433,6 +433,7 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
   - `need` counts `example/e2e/real-input/*.e2e.ts` as both platforms, so an Android-only change to them still owes a `real-input:ios` run at merge.
   - `need` with no `--base` compares against the local `main`, which lags `origin/main` until someone fast-forwards it.
   - A device gate killed hard whose pid is then reused by an unrelated process holds `real-input:ios` waiters until the 180-minute ceiling; the refusal names the pid.
+  - agent-device sometimes reports a field's named child beside its `EditText` instead of inside it; `editableField` copes, but why is not understood.
   - agent-device once returned a tree with two identical popup subtrees and no page nodes 51 ms after a hold opened one ContextMenu popup.
   - The `check` scan of tooling tests' `nitrogen/` reads sees only literal paths; `test:library` has no such scan of its own reads.
   - `pressableItem` rejecting a clickable node outside the group's box is never shown red; a unit test with a stand-in driver would cover it.

@@ -6,6 +6,8 @@
 import type { E2EConfig } from 'e2e';
 import { mobile } from '@e2e-dev/mobile';
 
+import { ACTION_TIMEOUT_MS } from './timeouts';
+
 const serial = process.env.ANDROID_SERIAL;
 if (serial == null || serial === '') {
   throw new Error(
@@ -33,7 +35,7 @@ export default {
   output: '.e2e',
   timeout: 240_000,
   launchTimeout: 180_000,
-  actionTimeout: 30_000,
+  actionTimeout: ACTION_TIMEOUT_MS,
   assertionTimeout: 10_000,
   cache: 'off',
   agents: { default: {} },
