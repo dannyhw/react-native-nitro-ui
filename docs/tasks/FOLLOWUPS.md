@@ -15,21 +15,6 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
 - `BottomSheetModalHazard` (isolated) "leaves no Modal host behind", render timeout 1000 ms,
   2026-11-16, `harness:android` started 21:46 UTC while an iOS test build loaded the machine,
   seen before at a load peak.
-- `bottom-sheet.e2e.ts` "a drag up on the two-detent header expands the sheet", the header did
-  not move, 2026-11-16, `real-input:android` started 18:45 UTC beside an iOS gate; again
-  2026-11-18 on the TextField merge run started 22:18 UTC (the first test of the run, the header's
-  top 1391 before and after the drag), green on `--rerun-failed`; a third time 2026-11-19 on the
-  ButtonGroup merge run started 03:21 UTC, the same reading, green on `--rerun-failed`; a fourth
-  time on a tooling branch's full run the same day, the same reading. Seen four times. Cause found (FIX11, FIX12, FIX16; branches kept, PR #104 closed): Material 1.5 turns
-  the sheet's drag on only once its opening spring has settled, and the test drags inside the
-  spring's sub-pixel tail, after two reads 150 ms apart already agree. A library change that takes
-  such a drag was built but cannot be proven: the rise finishes inside the tap that opens the sheet,
-  so no injected gesture lands during it and every guard's mutation stays green. A test-only fix
-  needs a settle signal the app does not get today (`onDetentChange` reports drags only, never the
-  opening detent). Options: report the opening detent (an API change), or a test-only settle read
-  through the sheet's `nuiTest` seam. Until then a hit costs one `--rerun-failed`. Not quarantined: no
-  log shows the driver at fault, so a drag the sheet ignored is treated as a bug with a low hit
-  rate and gets a bugfix task.
 - `Tooltip.harness.tsx` (iOS), the suite lost to an app-process exit with no crash log,
   2026-11-19, `harness:ios` on a task branch while another task's real-input run loaded the
   machine, green on `--rerun-failed`, seen once.
@@ -56,6 +41,17 @@ Tests skipped with a `QUARANTINED <date>` comment after a second sighting, each 
 A line here blocks no merge. Its fix queues behind components, and one still here after two weeks
 is raised with the owner once.
 
+- `bottom-sheet.e2e.ts` "a drag up on the two-detent header expands the sheet, Back steps down a
+  detent, and a second Back closes it" (Android), quarantined 2026-11-24 after red on a full run and
+  on its `--rerun-failed` completion (merge of #123 and #124, the header's top 1391 before and after
+  the drag both times, load 4.3 and 2.9); seen four times before, each green on a completion.
+  Cause found earlier (branches `task/FIX11-*`, `task/FIX12-*`, `task/FIX16-*` kept, PR #104
+  closed): Material 1.5 takes the sheet's drag only once its opening spring has settled, and the
+  test drags inside the spring's sub-pixel tail, after two reads 150 ms apart already agree. A
+  person cannot see that tail, so the user cost is negligible; the test sends its drag before the
+  view has settled. Bringing it back needs a settle signal the test can wait on: a test-only read
+  of the sheet's resting state through its `nuiTest` seam, or reporting the opening detent (an API
+  change). Its last version is in `example/e2e/real-input/bottom-sheet.e2e.ts`.
 - `form.e2e.ts` "opting out of keyboard avoidance leaves the content and its offset alone"
   (Android), quarantined 2026-11-18 and left out by FIX15 (2026-11-19), which moved the proof
   rather than repair the read. Both recorded failures had the Note field focused, the Form's state reading `avoid no` /

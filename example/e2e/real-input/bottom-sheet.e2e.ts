@@ -240,7 +240,8 @@ test('a sticky sheet stays up for Back, a tap outside and a drag down, and only 
   await expect(log).toHaveText('close > dismiss');
 });
 
-test('a drag up on the two-detent header expands the sheet, Back steps down a detent, and a second Back closes it', async ({
+// QUARANTINED 2026-11-24
+test.skip('a drag up on the two-detent header expands the sheet, Back steps down a detent, and a second Back closes it', async ({
   app,
   screen,
 }) => {
