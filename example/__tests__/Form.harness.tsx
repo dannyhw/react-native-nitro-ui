@@ -2366,11 +2366,13 @@ describe('Form section drawing (E2, Android)', () => {
     // - once the section has grown to include its footer, and with a timeout that names which
     // half is still stale.
     const stalePair = () => {
-      const report = parse(need(sections.first).nuiTestSectionReport());
+      const line = need(sections.first).nuiTestSectionReport();
+      const report = parse(line);
       return (
         `the layer is ${num(report, 'layerH')} dp tall against a ` +
         `${num(report, 'boxH')} dp section, and ` +
-        `${shapeLag(report) || 'every drawn row shape is on its row'}`
+        `${shapeLag(report) || 'every drawn row shape is on its row'} ` +
+        `(last report ${line})`
       );
     };
     const settled = await sectionReport('first', (r) => {
@@ -2387,10 +2389,10 @@ describe('Form section drawing (E2, Android)', () => {
         Math.abs(num(r, 'boxH') - num(r, 'layerH')) <= 1 &&
         shapeLag(r) === ''
       );
-    }).catch((error: unknown) => {
+    }).catch(() => {
       throw new Error(
         `question 2: the section never settled into a layer as tall as itself: ` +
-          `${stalePair()} - ${String(error)}`
+          `${stalePair()}`
       );
     });
     console.log(`FORM LAYER first section ${JSON.stringify(settled)}`);
