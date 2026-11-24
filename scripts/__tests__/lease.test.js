@@ -1185,7 +1185,17 @@ describe('the CLI, in a real state directory', () => {
       spawnLease(['acquire', '--task', 'G6', '--config', config]),
       spawnLease(['acquire', '--task', 'G7', '--config', config]),
     ]);
-    expect(results.map((entry) => entry.code)).toEqual([0, 0]);
+    // A failed acquire shows its exit code and why, not just a code.
+    expect(
+      results.map((entry, index) => ({
+        acquire: index,
+        code: entry.code,
+        ...(entry.code === 0 ? {} : { stderr: entry.stderr }),
+      }))
+    ).toEqual([
+      { acquire: 0, code: 0 },
+      { acquire: 1, code: 0 },
+    ]);
 
     const pairs = readState()
       .leases.map((entry) => entry.holds[0])
