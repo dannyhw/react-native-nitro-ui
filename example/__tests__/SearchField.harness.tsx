@@ -562,10 +562,14 @@ describe('SearchField', () => {
     ).length;
     // The control's own clear handler, not a write into its state.
     (await handleOf('cleared')).nuiTestClear();
+    // The field's text and the count of the event that emptied it settle in separate
+    // writes, so a report taken on the empty text alone can be the one before the clear
+    // was counted. Wait for both halves of the clear.
     const cleared = await reportedWhen(
       'cleared',
-      (current) => current.text === '',
-      'the clear'
+      (current) =>
+        current.text === '' && current.nativeEvents > typed.nativeEvents,
+      'the clear, counted as a native event'
     );
     // The native report settles as the event is sent, so the log can still be a moment
     // short of the clear's own event here.
