@@ -547,6 +547,7 @@ export function editableField(screen: Screen, label: string): Locator {
   return fieldLocator(
     screen.getByRole('textbox').or(screen.getByRole('searchbox')),
     screen.getByLabel(label),
+    screen.getByRole('group'),
     `the editable field named "${label}"`,
     ACTION_TIMEOUT_MS
   );

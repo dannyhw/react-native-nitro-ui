@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { editableField } from '../../example/e2e/real-input/support';
 import {
-  chooseField,
+  chooseByBox,
   fieldLocator,
 } from '../../example/e2e/real-input/field-locator';
 
@@ -99,8 +99,17 @@ function standInScreen(tree) {
   };
   const resolve = (expression, index) => {
     switch (expression.kind) {
-      case 'role':
-        return index.filter((entry) => entry.node.role === expression.role);
+      case 'role': {
+        const scope =
+          expression.scope == null
+            ? index
+            : index.filter((entry) =>
+                resolve(expression.scope, index).some((outer) =>
+                  within(entry, outer)
+                )
+              );
+        return scope.filter((entry) => entry.node.role === expression.role);
+      }
       case 'label': {
         const matches = index.filter((entry) =>
           (entry.node.name ?? '')
@@ -120,13 +129,19 @@ function standInScreen(tree) {
         return index.filter((entry) => both.has(entry));
       }
       case 'filter':
-        return resolve(expression.source, index).filter(
-          (entry) =>
-            resolve(
-              expression.has,
-              index.filter((other) => within(other, entry))
-            ).length > 0
-        );
+        return resolve(expression.source, index).filter((entry) => {
+          const inside = index.filter((other) => within(other, entry));
+          if (
+            expression.has != null &&
+            resolve(expression.has, inside).length === 0
+          ) {
+            return false;
+          }
+          return (
+            expression.hasNot == null ||
+            resolve(expression.hasNot, inside).length === 0
+          );
+        });
       case 'nth': {
         const picked = resolve(expression.source, index)[expression.index];
         return picked == null ? [] : [picked];
@@ -166,8 +181,14 @@ function standInScreen(tree) {
       nth: (index) => locator({ kind: 'nth', source: expression, index }),
       or: (other) =>
         locator({ kind: 'union', left: expression, right: other.expression }),
-      filter: ({ has }) =>
-        locator({ kind: 'filter', source: expression, has: has.expression }),
+      filter: ({ has, hasNot }) =>
+        locator({
+          kind: 'filter',
+          source: expression,
+          has: has?.expression,
+          hasNot: hasNot?.expression,
+        }),
+      getByRole: (role) => locator({ kind: 'role', role, scope: expression }),
       boundingBox: async () => ({ ...one('boundingBox').rect }),
       isVisible: async () => one('isVisible') != null,
       tap: act('tap'),
@@ -245,6 +266,46 @@ describe('editableField finds the field a name belongs to', () => {
   }
 });
 
+describe('editableField reads few snapshots', () => {
+  // `reveal` reads a box twice within two seconds to see it hold still, so a resolve
+  // that read every field on a seven-field screen never settled on a device.
+  const sevenFields = (shape) => {
+    const tree = node('group', undefined, '[0,0][1080,2424]', []);
+    for (let field = 0; field < 7; field += 1) {
+      const top = 300 + field * 290;
+      const box = `[73,${top}][1006,${top + 63}]`;
+      const name = node('group', `Field ${String(field)}`, box);
+      tree.children.push(
+        node(
+          'group',
+          undefined,
+          `[42,${top - 40}][1038,${top + 80}]`,
+          shape === 'nested'
+            ? [node('textbox', undefined, box, [name])]
+            : [node('textbox', undefined, box), name]
+        )
+      );
+    }
+    return tree;
+  };
+
+  for (const [shape, most] of [
+    ['nested', 2],
+    ['siblings', 5],
+  ]) {
+    it(`resolves field 5 of 7 in at most ${String(most)} snapshots (${shape})`, async () => {
+      const screen = standInScreen(sevenFields(shape));
+      const field = editableField(screen, 'Field 5');
+      expect(await field.count()).toBe(1);
+      expect(screen.reads).toBeLessThanOrEqual(most);
+      // A read straight after the count acts through the field it chose.
+      screen.reads = 0;
+      expect(await field.boundingBox()).toEqual(bounds('[73,1750][1006,1813]'));
+      expect(screen.reads).toBe(1);
+    });
+  }
+});
+
 describe('editableField does not guess', () => {
   it('matches nothing when no editable node holds a node with the name', async () => {
     // "Notes" carries the word, but sits above the field, outside its box.
@@ -255,6 +316,7 @@ describe('editableField does not guess', () => {
     const field = fieldLocator(
       screen.getByRole('textbox'),
       screen.getByLabel('Note'),
+      screen.getByRole('group'),
       'the Note field',
       0
     );
@@ -292,39 +354,25 @@ describe('editableField does not guess', () => {
   });
 });
 
-describe('chooseField', () => {
-  const box = (text) => bounds(text);
-
-  it('prefers nesting over a box another field holds', () => {
-    expect(
-      chooseField(
-        [
-          { nests: false, box: box('[0,0][1080,600]') },
-          { nests: true, box: null },
-        ],
-        [box('[105,346][975,409]')]
-      )
-    ).toEqual({ kind: 'one', index: 1, by: 'nesting' });
-  });
-
+describe('chooseByBox', () => {
   it('takes a box within a pixel of the field as inside it', () => {
     expect(
-      chooseField(
-        [{ nests: false, box: box('[105.4,346.6][974.6,420.5]') }],
-        [box('[105,346][975,409]')]
+      chooseByBox(
+        [bounds('[105.4,346.6][974.6,420.5]')],
+        [bounds('[105,346][975,409]')]
       )
-    ).toEqual({ kind: 'one', index: 0, by: 'box' });
+    ).toEqual({ kind: 'one', index: 0 });
     expect(
-      chooseField(
-        [{ nests: false, box: box('[105,346][975,421]') }],
-        [box('[105,344][975,409]')]
+      chooseByBox(
+        [bounds('[105,346][975,421]')],
+        [bounds('[105,344][975,409]')]
       )
     ).toEqual({ kind: 'none' });
   });
 
   it('ignores a named node with no box', () => {
-    expect(
-      chooseField([{ nests: false, box: box('[105,346][975,421]') }], [null])
-    ).toEqual({ kind: 'none' });
+    expect(chooseByBox([bounds('[105,346][975,421]')], [null])).toEqual({
+      kind: 'none',
+    });
   });
 });

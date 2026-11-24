@@ -19,18 +19,11 @@ export interface FieldBox {
   height: number;
 }
 
-/** One editable node as a resolve reads it. */
-export interface EditableReading {
-  /** Whether the driver reports a node with the field's name inside this one. */
-  nests: boolean;
-  box: FieldBox | null;
-}
-
-/** Which editable node is the field: its index, none, or more than one. */
-export type FieldChoice =
-  | { kind: 'one'; index: number; by: 'nesting' | 'box' }
+/** Which box holds the name: an index into the editable boxes, none, or several. */
+export type BoxChoice =
+  | { kind: 'one'; index: number }
   | { kind: 'none' }
-  | { kind: 'ambiguous'; indexes: number[]; by: 'nesting' | 'box' };
+  | { kind: 'ambiguous'; indexes: number[] };
 
 /** Box edges a pixel apart are one edge: the driver reports fractional boxes. */
 const EDGE_SLACK = 1;
@@ -47,41 +40,24 @@ function holds(outer: FieldBox, inner: FieldBox): boolean {
 }
 
 /**
- * The editable node a name belongs to. Nesting decides when any editable node nests
- * the name; otherwise the node whose box holds a named node's box. Two candidates are
- * ambiguous rather than a guess.
+ * The editable node whose box holds the box of a node carrying the name. Two such
+ * nodes are ambiguous rather than a guess.
  */
-export function chooseField(
-  editables: readonly EditableReading[],
+export function chooseByBox(
+  editables: readonly (FieldBox | null)[],
   named: readonly (FieldBox | null)[]
-): FieldChoice {
-  const nesting = editables.flatMap((reading, index) =>
-    reading.nests ? [index] : []
-  );
-  if (nesting.length > 1) {
-    return { kind: 'ambiguous', indexes: nesting, by: 'nesting' };
-  }
-  const [nested] = nesting;
-  if (nested != null) return { kind: 'one', index: nested, by: 'nesting' };
+): BoxChoice {
   const boxes = named.filter((box): box is FieldBox => box != null);
-  const holding = editables.flatMap((reading, index) => {
-    const outer = reading.box;
-    return outer != null && boxes.some((inner) => holds(outer, inner))
-      ? [index]
-      : [];
-  });
-  if (holding.length > 1) {
-    return { kind: 'ambiguous', indexes: holding, by: 'box' };
-  }
+  const holding = editables.flatMap((outer, index) =>
+    outer != null && boxes.some((inner) => holds(outer, inner)) ? [index] : []
+  );
+  if (holding.length > 1) return { kind: 'ambiguous', indexes: holding };
   const [held] = holding;
-  return held == null
-    ? { kind: 'none' }
-    : { kind: 'one', index: held, by: 'box' };
+  return held == null ? { kind: 'none' } : { kind: 'one', index: held };
 }
 
-/** A box, or `null` for a node that left the tree between two reads. */
+/** A box, or `null` for a node that left the tree since the read that listed it. */
 async function boxOrNull(locator: Locator): Promise<FieldBox | null> {
-  if ((await locator.count()) === 0) return null;
   try {
     return await locator.boundingBox();
   } catch (error) {
@@ -128,12 +104,22 @@ const CHAINING = /^(filter|or|and|first|last|nth|locator|getBy\w+)$/;
 const POLL_MS = 250;
 
 /**
+ * How long an action may act through the locator the last resolve chose, in ms. The
+ * locator still finds its node afresh; only the choice of it is reused, so a count
+ * followed by a read costs one resolve and a caller that wants two box reads within a
+ * couple of seconds gets them.
+ */
+const REUSE_MS = 1_000;
+
+/**
  * A locator for the editable node of the field named `name`: `editables` are every
- * node that takes text, `named` every node carrying the name.
+ * node that takes text, `named` every node carrying the name, `groups` the containers
+ * a field and its name can sit in side by side.
  *
- * Every call resolves the field again and then acts through `editables.nth(i)`, so a
- * field whose named node moves from inside it to beside it between two reads is still
- * the same field. A call that needs the node waits up to `waitMs` for it, as the
+ * Every call resolves the field again before it acts, by nesting first and by box
+ * second, so a field whose named node moves from inside it to beside it between two
+ * reads is still the same field. An action within a second of a resolve acts through
+ * the locator that resolve chose, which still finds its node afresh. A call that needs the node waits up to `waitMs` for it, as the
  * engine waits for any node, then fails with the engine's "matched no nodes" wording.
  * `count`, `all`, `isVisible` and `isHidden` read once, without waiting. It cannot be
  * chained (`filter`, `nth`, `getBy…`) or handed to `expect`.
@@ -141,60 +127,104 @@ const POLL_MS = 250;
 export function fieldLocator(
   editables: Locator,
   named: Locator,
+  groups: Locator,
   description: string,
   waitMs: number
 ): Locator {
-  async function resolveNow(): Promise<{
-    choice: FieldChoice;
-    editableCount: number;
-    namedCount: number;
-  }> {
-    const candidates = await editables.all();
-    // One read answers the common shapes: no field nests the name, or the only one does.
-    const nestingCount =
-      candidates.length === 0
-        ? 0
-        : await editables.filter({ has: named }).count();
-    const readings: EditableReading[] = [];
-    for (const candidate of candidates) {
-      const nests =
-        nestingCount > 0 &&
-        (candidates.length === 1 ||
-          (await candidate.filter({ has: named }).count()) > 0);
-      readings.push({ nests, box: nests ? null : await boxOrNull(candidate) });
+  const nested = editables.filter({ has: named });
+  // Beside the field, the name shares the innermost container that holds both, so the
+  // editable nodes in that container are the only ones whose boxes need reading.
+  const shared = groups.filter({ has: named }).filter({ has: editables });
+  const innermost = shared.filter({ hasNot: shared });
+  const near = innermost
+    .getByRole('textbox')
+    .or(innermost.getByRole('searchbox'));
+  let chosen: { target: Locator; at: number } | null = null;
+
+  /**
+   * The field now, as a locator for one node; `null` when nothing holds the name and a
+   * count of the candidates when more than one does. Each read is a fresh snapshot, so
+   * the common shapes cost two reads: a caller that waits for a box to hold still reads
+   * twice within a couple of seconds.
+   */
+  async function resolveNow(): Promise<
+    | { kind: 'one'; target: Locator }
+    | { kind: 'none'; editableCount: number; namedCount: number }
+    | { kind: 'ambiguous'; count: number; by: string }
+  > {
+    const found = await resolveFresh();
+    chosen =
+      found.kind === 'one' ? { target: found.target, at: Date.now() } : null;
+    return found;
+  }
+
+  async function resolveFresh(): Promise<
+    | { kind: 'one'; target: Locator }
+    | { kind: 'none'; editableCount: number; namedCount: number }
+    | { kind: 'ambiguous'; count: number; by: string }
+  > {
+    const nesting = await nested.count();
+    if (nesting > 1) {
+      return { kind: 'ambiguous', count: nesting, by: 'nest' };
     }
-    const nesting = readings.some((reading) => reading.nests);
-    const namedNodes =
-      nesting || candidates.length === 0 ? [] : await named.all();
+    if (nesting === 1) {
+      // The only editable node is the field whatever its child does next, so a name
+      // that moves beside it between this read and the action still finds it.
+      const alone = (await editables.count()) === 1;
+      return { kind: 'one', target: alone ? editables.nth(0) : nested };
+    }
+    const namedNodes = await named.all();
     const namedBoxes: (FieldBox | null)[] = [];
     for (const node of namedNodes) namedBoxes.push(await boxOrNull(node));
+    let base = near;
+    let candidates: Locator[] = [];
+    if (namedBoxes.some((box) => box != null)) {
+      candidates = await near.all();
+      if (candidates.length === 0) {
+        base = editables;
+        candidates = await editables.all();
+      }
+    }
+    const editableBoxes: (FieldBox | null)[] = [];
+    for (const node of candidates) editableBoxes.push(await boxOrNull(node));
+    const choice = chooseByBox(editableBoxes, namedBoxes);
+    if (choice.kind === 'one') {
+      return { kind: 'one', target: base.nth(choice.index) };
+    }
+    if (choice.kind === 'ambiguous') {
+      return {
+        kind: 'ambiguous',
+        count: choice.indexes.length,
+        by: 'hold the box of',
+      };
+    }
     return {
-      choice: chooseField(readings, namedBoxes),
+      kind: 'none',
       editableCount: candidates.length,
       namedCount: namedNodes.length,
     };
   }
 
-  function ambiguity(choice: FieldChoice & { kind: 'ambiguous' }): Error {
+  function ambiguity(count: number, by: string): Error {
     return new Error(
-      `real-input: ${description} is ambiguous: editable nodes ` +
-        `${choice.indexes.join(', ')} each ${choice.by === 'nesting' ? 'nest' : 'hold the box of'} ` +
-        'a node with that name.'
+      `real-input: ${description} is ambiguous: ${String(count)} editable nodes ` +
+        `each ${by} a node with that name.`
     );
   }
 
   async function resolveOne(): Promise<Locator> {
     const deadline = Date.now() + waitMs;
     for (;;) {
-      const { choice, editableCount, namedCount } = await resolveNow();
-      if (choice.kind === 'one') return editables.nth(choice.index);
-      if (choice.kind === 'ambiguous') throw ambiguity(choice);
+      const found = await resolveNow();
+      if (found.kind === 'one') return found.target;
+      if (found.kind === 'ambiguous') throw ambiguity(found.count, found.by);
+      chosen = null;
       if (Date.now() >= deadline) {
         throw new Error(
           `real-input: locator matched no nodes within ${String(waitMs)} ms for ` +
-            `${description}: ${String(editableCount)} editable node(s), and none of ` +
-            `them nests a node with that name or holds the box of one ` +
-            `(${String(namedCount)} named node(s) measured beside them).`
+            `${description}: no editable node nests a node with that name, and ` +
+            `none of ${String(found.editableCount)} holds the box of one of the ` +
+            `${String(found.namedCount)} node(s) carrying it.`
         );
       }
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
@@ -202,20 +232,18 @@ export function fieldLocator(
   }
 
   async function countNow(): Promise<number> {
-    const { choice } = await resolveNow();
-    if (choice.kind === 'one') return 1;
-    return choice.kind === 'ambiguous' ? choice.indexes.length : 0;
+    const found = await resolveNow();
+    if (found.kind === 'one') return 1;
+    return found.kind === 'ambiguous' ? found.count : 0;
   }
 
   const methods: Record<string, unknown> = {
     count: countNow,
     all: async () => ((await countNow()) > 0 ? [handle] : []),
     isVisible: async () => {
-      const { choice } = await resolveNow();
-      if (choice.kind === 'ambiguous') throw ambiguity(choice);
-      return choice.kind === 'one'
-        ? editables.nth(choice.index).isVisible()
-        : false;
+      const found = await resolveNow();
+      if (found.kind === 'ambiguous') throw ambiguity(found.count, found.by);
+      return found.kind === 'one' ? found.target.isVisible() : false;
     },
     isHidden: async () =>
       !(await (methods.isVisible as () => Promise<boolean>)()),
@@ -232,7 +260,10 @@ export function fieldLocator(
   };
   for (const name of ONE_NODE_METHODS) {
     methods[name] = async (...args: unknown[]) => {
-      const target = await resolveOne();
+      const target =
+        chosen != null && Date.now() - chosen.at < REUSE_MS
+          ? chosen.target
+          : await resolveOne();
       const method = target[name as OneNodeMethod] as (
         ...rest: unknown[]
       ) => Promise<unknown>;
