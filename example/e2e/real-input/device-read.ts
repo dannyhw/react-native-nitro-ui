@@ -8,10 +8,13 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
+import { type DecodedPng } from '../../../scripts/real-input/png-pixel.mjs';
 import {
-  decodePng,
-  type DecodedPng,
-} from '../../../scripts/real-input/png-pixel.mjs';
+  frameGeometry,
+  frameRows,
+  lastTouchUpSeconds,
+  type FrameGeometry,
+} from '../../../scripts/real-input/held-frames.mjs';
 import { countAppPopupWindows } from '../../../scripts/real-input/popup-windows.mjs';
 import { stopAndAwaitLeavingFront } from '../../../scripts/real-input/app-leaves-front.mjs';
 
@@ -94,18 +97,15 @@ export async function stopAppUntilOutOfFront(): Promise<void> {
   );
 }
 
-/**
- * One frame of the leased device’s screen, in device px.
- *
- * `exec-out` so no shell rewrites the `\n`s of a PNG, and decoded from stdout because
- * the caller compares two frames and keeps neither unless the check goes red.
- */
-export function screenCapture(): DecodedPng {
-  let png: Buffer;
+/** Where a raw frame is written on the device; one at a time, overwritten. */
+const RAW_FRAME = '/data/local/tmp/nitro-ui-held-frame.raw';
+
+/** `adb exec-out sh -c …` against the leased device, as bytes. */
+function adbExecOut(script: string): Buffer {
   try {
-    png = execFileSync(
+    return execFileSync(
       adbBinary(),
-      [...serverArgs(), '-s', leasedSerial(), 'exec-out', 'screencap', '-p'],
+      [...serverArgs(), '-s', leasedSerial(), 'exec-out', 'sh', '-c', script],
       { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 30_000 }
     );
   } catch (error) {
@@ -114,15 +114,57 @@ export function screenCapture(): DecodedPng {
         String((error as Error)?.message ?? error)
     );
   }
-  try {
-    return decodePng(png);
-  } catch (error) {
+}
+
+/** The leased device's raw frame size and header, read once before a press. */
+export function rawFrameGeometry(): FrameGeometry {
+  const out = adbExecOut(
+    `screencap ${RAW_FRAME} && stat -c %s ${RAW_FRAME} && head -c 16 ${RAW_FRAME}`
+  );
+  const newline = out.indexOf(10);
+  return frameGeometry(
+    new Uint8Array(out.subarray(newline + 1)),
+    Number(out.subarray(0, newline).toString('utf8'))
+  );
+}
+
+/**
+ * Rows `top` to `top + count - 1` of a frame, and the device's uptime once the frame had
+ * been taken. The pixels are unencoded and only those rows cross adb.
+ */
+export function capturedRows(
+  geometry: FrameGeometry,
+  top: number,
+  count: number
+): { image: DecodedPng; takenBy: number } {
+  const offset = geometry.headerBytes + top * geometry.width * 4;
+  const length = count * geometry.width * 4;
+  const out = adbExecOut(
+    `screencap ${RAW_FRAME} && cut -d' ' -f1 /proc/uptime && ` +
+      `tail -c +${String(offset + 1)} ${RAW_FRAME} | head -c ${String(length)}`
+  );
+  const newline = out.indexOf(10);
+  const takenBy = Number(out.subarray(0, newline).toString('utf8'));
+  if (!Number.isFinite(takenBy)) {
     throw new Error(
-      `real-input: the leased device answered with ${String(png.length)} bytes ` +
-        'that are not a PNG this suite can read: ' +
-        String((error as Error)?.message ?? error)
+      `real-input: the device's uptime came back as ` +
+        `${JSON.stringify(out.subarray(0, Math.min(newline, 40)).toString('utf8'))}`
     );
   }
+  return {
+    image: frameRows(
+      geometry,
+      top,
+      count,
+      new Uint8Array(out.subarray(newline + 1))
+    ),
+    takenBy,
+  };
+}
+
+/** The device uptime, in seconds, of the newest touchscreen lift, or `null`. */
+export function lastTouchUp(): number | null {
+  return lastTouchUpSeconds(adbShell(['dumpsys', 'input']));
 }
 
 /**
