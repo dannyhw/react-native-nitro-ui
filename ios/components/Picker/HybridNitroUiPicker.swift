@@ -107,11 +107,10 @@ struct PickerContent: NitroUIContent {
           .tag(index)
       }
     } label: {
-      if let label = model.label {
-        Text(label)
-      } else {
-        EmptyView()
-      }
+      // Not `Text(model.label)`: neither picker style draws a label on iOS, and SwiftUI puts a
+      // menu Picker's label content *into* its element's name, beside any `accessibilityLabel`,
+      // which makes a screen reader say the name twice. The modifier below carries the name.
+      EmptyView()
     }
   }
 
