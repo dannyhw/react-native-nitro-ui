@@ -12,12 +12,15 @@ function failureOf(check: () => void): string {
 
 describe('harness failure messages', () => {
   it('name every element of an array that failed to match', () => {
+    // Longer than the 40 characters chai keeps of a value by default.
+    const arrived = [
+      'conformance-form-item:press',
+      'conformance-form-row:press',
+    ];
     const message = failureOf(() => {
-      expect(['form-item:press', 'form-row:press']).toEqual([
-        'form-item:press',
-      ]);
+      expect(arrived).toEqual(['conformance-form-item:press']);
     });
-    expect(message).toContain('form-row:press');
+    expect(message).toContain('conformance-form-row:press');
     expect(message).not.toContain('Array(2)');
   });
 });
