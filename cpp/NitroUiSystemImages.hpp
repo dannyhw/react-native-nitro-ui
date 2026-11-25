@@ -14,9 +14,10 @@ namespace margelo::nitro::nitroui {
   /**
    * Asks UIKit which of `names` resolves to no symbol on this device, and calls
    * `onDone` once with those names. UIKit looks a symbol up on the main thread,
-   * so this never runs on the caller's thread and `onDone` runs on whichever
-   * thread UIKit finished on. `onDone` always runs - a name that cannot even be
-   * named to UIKit counts as unresolved, never as a lost answer.
+   * so this never runs on the caller's thread and `onDone` runs on the main
+   * queue, never on the caller's or on a JS thread. `onDone` always runs - a
+   * name that cannot even be named to UIKit counts as unresolved, never as a
+   * lost answer.
    */
   void NitroUiUnresolvedSystemImages(std::vector<std::string> names,
                                      std::function<void(std::vector<std::string>&&)> onDone);

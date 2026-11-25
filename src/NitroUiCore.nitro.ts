@@ -158,12 +158,15 @@ export interface NitroUiCore extends HybridObject<{
   /**
    * Of the SF Symbol names given, the ones this device cannot draw.
    *
-   * A development-time question the app cannot answer for itself: whether a name
-   * draws depends on the iOS version of the running device, so a symbol that
-   * exists on the simulator can be missing on an older phone. iOS only - other
+   * Whether a name draws belongs to the iOS version of the running device, so
+   * only the device knows: a symbol that exists on a current phone can be a name
+   * an older one has never heard. `warnIosSystemImageName` is the only caller,
+   * and it asks on a development render to warn about the name. iOS only - other
    * platforms have no SF Symbols to look up and answer with an empty list. The
    * lookup happens off the calling thread; the returned promise settles when it
    * is done. An empty input resolves without any lookup.
+   *
+   * @internal Not app API - the library's own development warning asks this.
    */
   unresolvedSystemImageNames(names: string[]): Promise<string[]>;
 }

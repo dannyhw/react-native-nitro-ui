@@ -17,7 +17,10 @@ type SymbolSite = {
   readonly propName: string;
 };
 
-/** What the device answered per name: `false` for a name it cannot draw. */
+/**
+ * What the device answered per name: `false` for a name it cannot draw. A name
+ * the device could not be asked about is kept here as one that draws.
+ */
 const answers = new Map<string, boolean>();
 /** Names already sent to the device, so one name costs one lookup. */
 const asked = new Set<string>();
@@ -41,6 +44,16 @@ function warn(site: SymbolSite, name: string): void {
   );
 }
 
+function drop(names: string[]): void {
+  // Answered as one that draws, so the warning is dropped and the name is never
+  // asked again: a core that cannot answer must not leave another site waiting
+  // on every render.
+  for (const name of names) {
+    answers.set(name, true);
+    waiting.delete(name);
+  }
+}
+
 function flush(names: string[]): void {
   let asking: Promise<string[]>;
   try {
@@ -48,6 +61,7 @@ function flush(names: string[]): void {
     // no native core, the warning simply does not come.
     asking = nitroUiNativeCore().unresolvedSystemImageNames(names);
   } catch {
+    drop(names);
     return;
   }
   asking.then(
@@ -65,7 +79,9 @@ function flush(names: string[]): void {
         }
       }
     },
-    () => undefined
+    () => {
+      drop(names);
+    }
   );
 }
 
