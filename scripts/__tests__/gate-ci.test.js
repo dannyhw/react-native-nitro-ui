@@ -9,6 +9,7 @@ import {
   CI_GATE,
   CI_JOB_NAME,
   CI_WORKFLOW_PATH,
+  ciArtifactOf,
   ciImportRefusals,
   ciLedgerLine,
   hostedRunRelaxed,
@@ -260,6 +261,58 @@ describe('which run may be imported', () => {
     expect(
       refusals({ run: RUN, entries: [newerRed], digests: NOW })[0]
     ).toContain('does not say when it started');
+  });
+});
+
+describe("which upload is the imported job's", () => {
+  // Attempt 1 ran 16:00-17:00 and uploaded; "Re-run all jobs" made attempt 2,
+  // which ran 18:00-18:10 and stopped before the suite.
+  const ATTEMPT_1 = {
+    id: 901,
+    name: 'real-input-android',
+    created_at: '2026-11-25T16:59:00Z',
+    expired: false,
+  };
+  const JOB_2 = {
+    name: CI_JOB_NAME,
+    started_at: '2026-11-25T18:00:00Z',
+    completed_at: '2026-11-25T18:10:00Z',
+  };
+
+  it('takes the one artifact of that name created while the job ran', () => {
+    const attempt2 = {
+      ...ATTEMPT_1,
+      id: 902,
+      created_at: '2026-11-25T18:09:00Z',
+    };
+    const logs = { ...attempt2, id: 903, name: 'real-input-android-logs' };
+    expect(
+      ciArtifactOf({ artifacts: [ATTEMPT_1, logs, attempt2], job: JOB_2 })
+    ).toEqual({ artifact: attempt2, refusal: null });
+  });
+
+  it("refuses an attempt that uploaded nothing, rather than taking another attempt's report", () => {
+    const { artifact, refusal } = ciArtifactOf({
+      artifacts: [ATTEMPT_1],
+      job: JOB_2,
+    });
+    expect(artifact).toBeNull();
+    expect(refusal).toContain(
+      'no real-input-android artifact(s) were created while the job ran (2026-11-25T18:00:00.000Z to 2026-11-25T18:10:00.000Z; the run has 1)'
+    );
+  });
+
+  it('refuses two uploads inside the job, and a job with no times', () => {
+    const twice = [
+      { ...ATTEMPT_1, id: 902, created_at: '2026-11-25T18:05:00Z' },
+      { ...ATTEMPT_1, id: 904, created_at: '2026-11-25T18:09:00Z' },
+    ];
+    expect(ciArtifactOf({ artifacts: twice, job: JOB_2 }).refusal).toContain(
+      '2 real-input-android artifact(s) were created while the job ran'
+    );
+    expect(
+      ciArtifactOf({ artifacts: twice, job: { name: CI_JOB_NAME } }).refusal
+    ).toContain('does not say when it ran');
   });
 });
 
@@ -574,25 +627,40 @@ function makeClone() {
   const head = git(repo, ['rev-parse', 'HEAD'], parent);
 
   const gh = path.join(parent, 'gh-data');
-  const artifact = path.join(gh, 'artifact', 'full');
-  fs.mkdirSync(path.join(artifact, 'e2e'), { recursive: true });
-  const run = ofCommit(green(), head);
-  fs.writeFileSync(path.join(artifact, 'run.json'), JSON.stringify(run.record));
-  fs.writeFileSync(
-    path.join(artifact, 'units.json'),
-    JSON.stringify(run.results)
-  );
-  fs.writeFileSync(
-    path.join(artifact, 'e2e/report.json'),
-    JSON.stringify(run.report)
-  );
+  fs.mkdirSync(gh);
+  const zipOf = (id, upload) => {
+    const dir = path.join(gh, `content-${id}`, 'full');
+    fs.mkdirSync(path.join(dir, 'e2e'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify(upload.record));
+    fs.writeFileSync(
+      path.join(dir, 'units.json'),
+      JSON.stringify(upload.results)
+    );
+    fs.writeFileSync(
+      path.join(dir, 'e2e/report.json'),
+      JSON.stringify(upload.report)
+    );
+    const zipped = spawnSync(
+      'zip',
+      ['-qr', path.join(gh, `artifact-${id}.zip`), 'full'],
+      {
+        cwd: path.dirname(dir),
+        encoding: 'utf8',
+      }
+    );
+    if (zipped.status !== 0) throw new Error(`zip: ${zipped.stderr}`);
+  };
+  // Attempt 1 uploaded a red report; attempt 2, the one imported, a green one.
+  zipOf(900, ofCommit(red(), head));
+  zipOf(901, ofCommit(green(), head));
   const runJson = {
     id: 777,
     head_sha: head,
     status: 'completed',
     conclusion: 'success',
     path: CI_WORKFLOW_PATH,
-    run_attempt: 1,
+    run_attempt: 2,
+    run_started_at: '2026-11-25T16:10:00Z',
     html_url: 'https://github.com/o/r/actions/runs/777',
   };
   fs.writeFileSync(path.join(gh, 'run.json'), JSON.stringify(runJson));
@@ -605,29 +673,45 @@ function makeClone() {
           name: CI_JOB_NAME,
           status: 'completed',
           conclusion: 'success',
+          started_at: '2026-11-25T16:10:05Z',
+          completed_at: '2026-11-25T17:20:00Z',
           html_url: 'https://github.com/o/r/actions/runs/777/job/888',
         },
       ],
     })
   );
+  const artifacts = [
+    {
+      id: 900,
+      name: 'real-input-android',
+      created_at: '2026-11-25T15:30:00Z',
+      expired: false,
+    },
+    {
+      id: 901,
+      name: 'real-input-android',
+      created_at: '2026-11-25T17:18:00Z',
+      expired: false,
+    },
+  ];
   fs.writeFileSync(
     path.join(gh, 'artifacts.json'),
-    JSON.stringify({
-      artifacts: [{ name: 'real-input-android', expired: false }],
-    })
+    JSON.stringify({ artifacts })
   );
   const bin = path.join(parent, 'bin');
   fs.mkdirSync(bin);
   const runs = 'repos/{owner}/{repo}/actions/runs/777';
+  const zips = 'repos/{owner}/{repo}/actions/artifacts';
   fs.writeFileSync(
     path.join(bin, 'gh'),
     '#!/bin/sh\n' +
       `echo "$*" >> "${gh}/calls.log"\n` +
       'case "$1 $2" in\n' +
       `  "api ${runs}") cat "${gh}/run.json" ;;\n` +
-      `  "api ${runs}/attempts/1/jobs?per_page=100") cat "${gh}/jobs.json" ;;\n` +
+      `  "api ${runs}/attempts/2/jobs?per_page=100") cat "${gh}/jobs.json" ;;\n` +
       `  "api ${runs}/artifacts?per_page=100") cat "${gh}/artifacts.json" ;;\n` +
-      `  "run download") mkdir -p "$7" && cp -R "${gh}/artifact/." "$7/" ;;\n` +
+      `  "api ${zips}/900/zip") cat "${gh}/artifact-900.zip" ;;\n` +
+      `  "api ${zips}/901/zip") cat "${gh}/artifact-901.zip" ;;\n` +
       '  *) echo "fake gh: unexpected $*" >&2; exit 1 ;;\n' +
       'esac\n'
   );
@@ -675,7 +759,7 @@ describe('gate.mjs ci-import', () => {
       source: {
         kind: 'github-actions',
         runId: 777,
-        attempt: 1,
+        attempt: 2,
         jobId: 888,
         url: 'https://github.com/o/r/actions/runs/777/job/888',
       },
@@ -691,7 +775,7 @@ describe('gate.mjs ci-import', () => {
 
     const again = cli(clone, ['ci-import', '--run', '777']);
     expect(again.status).toBe(1);
-    expect(again.stderr).toContain('attempt 1 of run 777 is already in');
+    expect(again.stderr).toContain('attempt 2 of run 777 is already in');
     expect(ledgerOf(clone)).toHaveLength(1);
 
     const calls = fs
@@ -700,7 +784,7 @@ describe('gate.mjs ci-import', () => {
       .split('\n');
     for (const call of calls) {
       expect(call).toMatch(
-        /^(api repos\/\{owner\}\/\{repo\}\/actions\/runs\/777\S* *$|run download 777 )/
+        /^api repos\/\{owner\}\/\{repo\}\/actions\/(runs\/777\S*|artifacts\/901\/zip) *$/
       );
     }
   }, 60_000);

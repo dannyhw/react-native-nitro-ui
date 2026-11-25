@@ -177,6 +177,55 @@ export function ciJobOf(jobs) {
 }
 
 /**
+ * The artifact the imported job uploaded. A run re-run on GitHub keeps every
+ * attempt's artifacts under the same name, so only one created while that job ran
+ * is its own.
+ *
+ * @param {object} options
+ * @param {any[]} options.artifacts the run's artifacts, as the API lists them
+ * @param {any} options.job the job being imported
+ * @returns {{artifact: any, refusal: null} | {artifact: null, refusal: string}}
+ */
+export function ciArtifactOf({ artifacts, job }) {
+  const started = Date.parse(String(job?.started_at ?? ''));
+  const completed = Date.parse(String(job?.completed_at ?? ''));
+  const named = (artifacts ?? []).filter(
+    (entry) => entry?.name === CI_ARTIFACT
+  );
+  if (!Number.isFinite(started) || !Number.isFinite(completed)) {
+    return {
+      artifact: null,
+      refusal:
+        `the "${CI_JOB_NAME}" job does not say when it ran, so no ${CI_ARTIFACT} ` +
+        'artifact can be tied to it',
+    };
+  }
+  const own = named.filter((entry) => {
+    const created = Date.parse(String(entry?.created_at ?? ''));
+    return created >= started && created <= completed;
+  });
+  const span = `${new Date(started).toISOString()} to ${new Date(completed).toISOString()}`;
+  if (own.length !== 1) {
+    return {
+      artifact: null,
+      refusal:
+        `${own.length === 0 ? 'no' : String(own.length)} ${CI_ARTIFACT} artifact(s) ` +
+        `were created while the job ran (${span}; the run has ${String(named.length)}), ` +
+        (own.length === 0
+          ? 'so this attempt uploaded no report: the job ended before the suite started'
+          : "so which one is this attempt's report is not known"),
+    };
+  }
+  if (own[0]?.expired === true) {
+    return {
+      artifact: null,
+      refusal: `the job's ${CI_ARTIFACT} artifact (${String(own[0].id)}) has expired`,
+    };
+  }
+  return { artifact: own[0], refusal: null };
+}
+
+/**
  * One run of the suite's verdicts, with logs that print nothing: `recordResults`
  * reports through a suite, and this one only collects.
  */

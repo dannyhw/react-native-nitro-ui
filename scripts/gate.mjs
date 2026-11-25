@@ -131,6 +131,7 @@ import {
   CI_FULL_DIR,
   CI_GATE,
   CI_RERUN_DIR,
+  ciArtifactOf,
   ciImportRefusals,
   ciJobOf,
   ciLedgerLine,
@@ -2294,6 +2295,32 @@ function ghRead(args) {
   return { text: String(result.stdout) };
 }
 
+/** One `gh` call that only reads, its output written to `file`, or the reason it failed. */
+function ghDownload(args, file) {
+  const fd = fs.openSync(file, 'w');
+  let result;
+  try {
+    result = spawnSync('gh', args, {
+      cwd: repoRoot,
+      stdio: ['ignore', fd, 'pipe'],
+      encoding: 'utf8',
+    });
+  } finally {
+    fs.closeSync(fd);
+  }
+  if (result.error != null) {
+    return { error: `gh could not start (${result.error.message})` };
+  }
+  if (result.status !== 0) {
+    return {
+      error: `gh ${args.slice(0, 2).join(' ')} exited ${String(result.status)}: ${
+        String(result.stderr).trim() || 'no output'
+      }`,
+    };
+  }
+  return {};
+}
+
 function ghJson(args) {
   const read = ghRead(args);
   if (read.error != null) return read;
@@ -2350,35 +2377,44 @@ function commandCiImport({ runId }) {
     return refuse([
       `could not list the artifacts of run ${runId}: ${listed.error}`,
     ]);
-  const artifact = (listed.value?.artifacts ?? []).find(
-    (entry) => entry?.name === CI_ARTIFACT && entry?.expired !== true
-  );
-  if (artifact == null) {
-    return refuse([
-      `run ${runId} has no ${CI_ARTIFACT} artifact: the job (${String(job.conclusion)}) ` +
-        'ended before the suite started, or the artifact expired',
-    ]);
-  }
+  const { artifact, refusal } = ciArtifactOf({
+    artifacts: listed.value?.artifacts ?? [],
+    job,
+  });
+  if (refusal != null) return refuse([`run ${runId}: ${refusal}`]);
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'nitro-ui-ci-import-'));
   try {
-    const downloaded = ghRead([
-      'run',
-      'download',
-      runId,
-      '--name',
-      CI_ARTIFACT,
-      '--dir',
-      scratch,
-    ]);
+    const zip = path.join(scratch, `${CI_ARTIFACT}.zip`);
+    const downloaded = ghDownload(
+      [
+        'api',
+        `repos/{owner}/{repo}/actions/artifacts/${String(artifact.id)}/zip`,
+      ],
+      zip
+    );
     if (downloaded.error != null)
-      return refuse([`could not download ${CI_ARTIFACT}: ${downloaded.error}`]);
-    const full = readUploadedRun(path.join(scratch, CI_FULL_DIR));
+      return refuse([
+        `could not download ${CI_ARTIFACT} artifact ${String(artifact.id)}: ${downloaded.error}`,
+      ]);
+    const unpacked = spawnSync(
+      'unzip',
+      ['-q', zip, '-d', path.join(scratch, 'artifact')],
+      { encoding: 'utf8' }
+    );
+    if (unpacked.error != null || unpacked.status !== 0)
+      return refuse([
+        `could not unpack ${CI_ARTIFACT} artifact ${String(artifact.id)}: ${
+          unpacked.error?.message ?? String(unpacked.stderr).trim()
+        }`,
+      ]);
+    const unpackedDir = path.join(scratch, 'artifact');
+    const full = readUploadedRun(path.join(unpackedDir, CI_FULL_DIR));
     if (full == null) {
       return refuse([
         `${CI_ARTIFACT} holds no run record of the full suite: the job never started it`,
       ]);
     }
-    const rerun = readUploadedRun(path.join(scratch, CI_RERUN_DIR));
+    const rerun = readUploadedRun(path.join(unpackedDir, CI_RERUN_DIR));
     const after = readTrees();
     const { line, notes, ...judged } = ciLedgerLine({
       source: {
