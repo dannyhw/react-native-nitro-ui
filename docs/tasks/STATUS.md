@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-25 Tooling: the Android press-feedback check times its frames by the device's clock and
+  counts only frames the device took before the lift, so slow captures on hosted runners no
+  longer fail the ListItem ink cases (X68, #139).
 - 11-25 Nothing user-visible: the Android in-Form ListItem press case waits for the press it
   made to reach JS before counting the row's, and names the events it saw (FIX37, #136).
 - 11-25 iOS `Picker`: VoiceOver says the control's name once when `label` is set (it read
