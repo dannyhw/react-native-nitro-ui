@@ -284,7 +284,9 @@ internal class FormSectionModel : NitroUiModel() {
   /**
    * The section's own box, in px. The layer is told its size as state because a host's content
    * is measured with an unbounded height, so `fillMaxSize` would make it only as tall as its
-   * content.
+   * content, and the constraints it is measured with cannot say how tall the section is. The
+   * layer reads it while it is measured, so a section that grows is drawn into at its new height
+   * as soon as the layer is next measured, and not only once a composition has caught up.
    */
   var boxW by mutableStateOf(0f)
   var boxH by mutableStateOf(0f)
@@ -685,9 +687,8 @@ internal fun FormSegmentedLayer(
             accessory = NitroUiFormRowView.ACCESSORY_NONE,
           )
       }
-      // Not `fillMaxSize`: a host's content is measured with an unbounded height, so the box
-      // arrives as state from the layout pass.
-      .withPixelSize(model.boxW, model.boxH)
+      // Not `fillMaxSize`: a host's content is measured with an unbounded height.
+      .intoSectionBox(model)
       .onSizeChanged { model.layerPx = it.height.toFloat() }
   ) {
     // 1. The row containers: one canvas per row, sized and placed in one layout pass, each
@@ -826,17 +827,20 @@ private fun accessoryIcon(accessory: Int): ImageVector? =
   }
 
 /**
- * Give a child a size in px, placed at the origin of its box. A child that also has to be
- * moved wants [placedPixelBox]: combined with `Modifier.offset` this would place it twice.
+ * Size the section's layer to the section's own box, at the origin of its host.
+ *
+ * The box cannot come from [constraints]: the shared host measures its content with an unbounded
+ * height, which is why the section hands it over at all. Read it here rather than pass it in:
+ * passed in, the value is the one this composition was built with, and the section measures the
+ * host in the same pass that writes a new box, so a section that has just grown keeps drawing
+ * into its old height until a composition catches up. A layer one pass behind also draws its row
+ * shapes at the rows' old places, so a stale height is never the only symptom.
  */
-private fun Modifier.withPixelSize(
-  widthPx: Float,
-  heightPx: Float,
-): Modifier =
+private fun Modifier.intoSectionBox(model: FormSectionModel): Modifier =
   this.then(
     layout { measurable, constraints ->
-      val width = widthPx.roundToInt().coerceAtMost(constraints.maxWidth)
-      val height = heightPx.roundToInt().coerceAtMost(constraints.maxHeight)
+      val width = model.boxW.roundToInt().coerceAtLeast(0).coerceAtMost(constraints.maxWidth)
+      val height = model.boxH.roundToInt().coerceAtLeast(0)
       val placeable = measurable.measure(Constraints.fixed(width, height))
       layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
     },

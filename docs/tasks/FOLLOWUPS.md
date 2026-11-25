@@ -18,12 +18,6 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
 - `Tooltip.harness.tsx` (iOS), the suite lost to an app-process exit with no crash log,
   2026-11-19, `harness:ios` on a task branch while another task's real-input run loaded the
   machine, green on `--rerun-failed`, seen once.
-- `Form.harness.tsx` "Form section drawing (E2, Android) › reserves a band with its padding and
-  draws into a layer as tall as its section", 2026-11-20, `harness:android` started 00:05 UTC on a
-  task branch, failed in the full run and passed alone on the one rerun; again 2026-11-24 on
-  GitHub-hosted CI (the layer 288.4 dp against a 296.4 dp section, 8.0 dp short), and on the next
-  CI round with the same numbers. Seen three times, so by the flake rules it is a bug; the same
-  numbers every time point at the CI device's configuration rather than a race.
 - `SearchField.harness.tsx` "takes no submit from a Return pressed on a query it has just cleared"
   (Android), a stray `change:` event, 2026-11-19, `harness:android` on a merge run started 10:35
   UTC, green on `--rerun-failed`, seen once.
@@ -45,19 +39,23 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   when it is disabled while the menu is open" read the same shape once through `MenuRows.kt`'s
   `MenuWitness`, which also counts through the fade.
 - `Menu.harness.tsx` (iOS) "Split trigger (E3) › is two halves, and each one does only its own
-  job": "the split trigger tap" 0 of 1 events in 8000 ms, GitHub-hosted CI only, four trial
+  job": "the split trigger tap" 0 of 1 events in 8000 ms, GitHub-hosted CI only, six trial
   rounds 2026-11-24. Likely the synthesised `pressAt` held past SwiftUI `Menu(primaryAction:)`'s
   long-press threshold on a slow runner (driver timing). Blocks nothing: manual CI harness only.
 - `ListItem.harness.tsx` (Android, G30) "draws no insets… inside a Form.Row", two events where only
   `form-item:press` was expected, GitHub-hosted CI 2026-11-24, seen once.
 - `ButtonGroup.harness.tsx` (iOS, G20) "moves the items a 220-point well cannot hold…": "bg-narrow"
   never handed back a `hybridRef` handle, GitHub-hosted CI 2026-11-24, seen once.
-- `form.e2e.ts` (Android) "a field the keyboard would cover is moved clear of it": four CI
-  sightings 2026-11-24, `LOCATOR_NOT_FOUND` on "Note" with the keyboard up and the app's focus and
-  avoidance echoes both yes. The fourth carried FIX28's evidence: "Note" sits on a plain,
-  unfocusable `android.view.View` at [105,346][975,409] and the only editable is a wordless
-  `EditText` at [105,346][975,421], so the field's name and its editable role are on two nodes. A
-  library accessibility bug, not the driver: FIX32 puts the name on the editable node.
+- `form.e2e.ts` (Android) "a field the keyboard would cover is moved clear of it": `LOCATOR_NOT_FOUND`
+  on "Note" on GitHub-hosted CI, five rounds 2026-11-24/25, keyboard up, app focus and avoidance
+  echoes yes. Not the library: FIX32 (closed unmerged, branch `task/FIX32-text-field-name-on-editable`
+  kept at `bbe6f1fa`) read the same nesting in every state (a focusable `EditText` with a child
+  `View desc="Note"`), and the driver sometimes reported the two as siblings while the field moved.
+  `editableField` now falls back to the name's box inside the field's box (#132); watch the next CI rounds.
+
+- `list-item.e2e.ts` (Android) "a held press on a ListItem draws its ink": luminance 0.9700 held and
+  at rest, the frame asked at +453 ms and read 1051 ms later inside an 1800 ms press, GitHub-hosted
+  CI 2026-11-24, seen once; a screenshot that missed the press window on a slow runner is the suspect.
 
 ## Quarantined tests
 

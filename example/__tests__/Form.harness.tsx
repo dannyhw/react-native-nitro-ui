@@ -2331,9 +2331,50 @@ describe('Form section drawing (E2, Android)', () => {
     expect(padding('headerBand', 'headerText')).toBeGreaterThanOrEqual(8);
     expect(padding('footerBand', 'footerText')).toBeGreaterThanOrEqual(4);
 
-    // Compose measures a hosted view's content with an unbounded height, so the layer is
-    // only as tall as the section if the section says so. Read once the section has grown
-    // to include its footer.
+    // How far the row shapes the layer drew are from the boxes it was handed. Both are read
+    // from the section, but one is what a layout pass did and the other is what it was told.
+    function shapeLag(report: Record<string, string>): string {
+      const told = (report.cardBoxes ?? '-')
+        .split('|')
+        .filter((box) => box.includes(','));
+      if (told.length === 0) return 'the layer was handed no row boxes';
+      const drawn = new Map<number, string>();
+      for (const entry of (report.drawnCards ?? '-').split('|')) {
+        const at = entry.indexOf(':');
+        if (at > 0) drawn.set(Number(entry.slice(0, at)), entry.slice(at + 1));
+      }
+      for (let row = 0; row < told.length; row++) {
+        const placed = drawn.get(row);
+        if (placed === undefined) return `row ${row} has no drawn shape`;
+        const want = (told[row] ?? '').split(',').map(Number);
+        const got = placed.split(',').map(Number);
+        const outBy = Math.max(
+          ...want.map((edge, field) => Math.abs(edge - (got[field] ?? -1)))
+        );
+        if (outBy > 1) {
+          return (
+            `row ${row} draws ${placed} against its box ${told[row]} ` +
+            `(out by ${outBy.toFixed(1)} dp)`
+          );
+        }
+      }
+      return '';
+    }
+
+    // The layer is a Compose pass behind the section until a pass has read the section as it is
+    // now: its height and its row shapes are both whatever the last pass saw. Wait for that pass
+    // - once the section has grown to include its footer, and with a timeout that names which
+    // half is still stale.
+    const stalePair = () => {
+      const line = need(sections.first).nuiTestSectionReport();
+      const report = parse(line);
+      return (
+        `the layer is ${num(report, 'layerH')} dp tall against a ` +
+        `${num(report, 'boxH')} dp section, and ` +
+        `${shapeLag(report) || 'every drawn row shape is on its row'} ` +
+        `(last report ${line})`
+      );
+    };
     const settled = await sectionReport('first', (r) => {
       const lastRowBottom = (r.rects ?? '')
         .split(',')
@@ -2344,7 +2385,14 @@ describe('Form section drawing (E2, Android)', () => {
         }, 0);
       return (
         num(r, 'layerH') > 0 &&
-        num(r, 'boxH') >= lastRowBottom + num(r, 'footerBand')
+        num(r, 'boxH') >= lastRowBottom + num(r, 'footerBand') &&
+        Math.abs(num(r, 'boxH') - num(r, 'layerH')) <= 1 &&
+        shapeLag(r) === ''
+      );
+    }).catch(() => {
+      throw new Error(
+        `question 2: the section never settled into a layer as tall as itself: ` +
+          `${stalePair()}`
       );
     });
     console.log(`FORM LAYER first section ${JSON.stringify(settled)}`);

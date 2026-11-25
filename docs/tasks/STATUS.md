@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-25 Android `Form.Section`: its header and footer layer is measured to the section box at
+  layout; the E2 case waits for the layer and its row shapes to catch up with the section, and
+  the iOS SearchField clear case waits for the clear's native count (FIX33, #131).
 - 11-24 Nothing user-visible: the real-input suite finds a text field by its name whether the
   driver reports the name inside the field or beside it, so the Form keyboard case no longer
   loses the field while it moves clear of the keyboard (X66, #132).
