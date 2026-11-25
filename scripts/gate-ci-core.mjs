@@ -210,6 +210,12 @@ export function judgeUploadedRun({
   const why = [];
   const quarantined = [];
   const failures = [];
+  if (record?.sha !== sha) {
+    evidence.push(
+      `the run record is of commit ${String(record?.sha ?? '(none named)').slice(0, 12)}, ` +
+        `not ${String(sha).slice(0, 12)}`
+    );
+  }
   const exitCode = typeof record?.exitCode === 'number' ? record.exitCode : null;
   if (exitCode !== 0) {
     why.push(

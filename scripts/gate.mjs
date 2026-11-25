@@ -9,6 +9,7 @@
  *   node scripts/gate.mjs need --for review|merge [--base <ref>]
  *   node scripts/gate.mjs table [--for review|merge] [--full]
  *   node scripts/gate.mjs logs [--branch <b>] [--failed] [--all]
+ *   node scripts/gate.mjs ci-import --run <id>
  *
  * Gates: check | harness:<ios|android>[:suite] | real-input:<ios|android> |
  * smoke:<pack|expo|rn-cli> | bench. A filtered run
@@ -22,6 +23,9 @@
  * When this branch has no line of its own that decides a gate on the current
  * digest, `status`, `need` and `table` take the newest full run on that digest
  * from the clone-wide record, green or red.
+ *
+ * `ci-import` records a GitHub Actions run of the Android real-input job as a
+ * `real-input:android` line, judged from what the run uploaded. It only reads.
  *
  * Exit codes: a gate run and `wait` exit with the gate's own code; 1 for a gate
  * refused before the run or an unmet `need`; 2 for a usage error; 13 from
@@ -51,8 +55,7 @@ import {
   DEVICE_CONTEXT_END,
   DEVICE_CONTEXT_START,
   explainNeedRow,
-  formatCompletion,
-  formatFrom,
+  formatHow,
   aloneWaitCeilingMs,
   gateEvidenceStoreDir,
   gateLiveStoreDir,
@@ -123,6 +126,16 @@ import {
 } from './harness-suite-timing.mjs';
 import { claimDevicesFromEnv } from './device-pool.mjs';
 import { REAL_INPUT_UNITS_ENV } from './real-input/report.mjs';
+import {
+  CI_ARTIFACT,
+  CI_FULL_DIR,
+  CI_GATE,
+  CI_RERUN_DIR,
+  ciImportRefusals,
+  ciJobOf,
+  ciLedgerLine,
+} from './gate-ci-core.mjs';
+import { checkoutSources, readUploadedRun } from './gate-ci.mjs';
 import { diskRefusal, freeDiskGbFrom, isCiRunner } from './doctor-core.mjs';
 import {
   emulatorSerial,
@@ -149,6 +162,7 @@ const USAGE =
   '       node scripts/gate.mjs need --for review|merge [--base <ref>]\n' +
   '       node scripts/gate.mjs table [--for review|merge] [--full]\n' +
   '       node scripts/gate.mjs logs [--branch <b>] [--failed] [--all]\n' +
+  '       node scripts/gate.mjs ci-import --run <id>\n' +
   '\n' +
   'gates: check | harness:<ios|android>[:suite] | real-input:<ios|android> |\n' +
   '       smoke:<pack|expo|rn-cli> | bench\n' +
@@ -180,7 +194,12 @@ const USAGE =
   "       (`logs` lists this clone's stored gate logs - they live in the git common\n" +
   '        directory, so removing a worktree cannot lose them; --failed limits the\n' +
   "        list to runs the store's own record says failed (a log it cannot judge is\n" +
-  '        reported as unknown, not silently skipped), --all shows every branch)\n';
+  '        reported as unknown, not silently skipped), --all shows every branch)\n' +
+  '\n' +
+  '       (`ci-import` reads a GitHub Actions run of the "Real input (Android)" job\n' +
+  '        with gh and records it as real-input:android, judged from the report it\n' +
+  '        uploaded. It refuses unless the run is finished and of HEAD, and the\n' +
+  '        worktree is clean. It never dispatches or writes to GitHub)\n';
 
 /** Sampled across the whole run, so the ledger's load is not one moment's. */
 const LOAD_SAMPLE_INTERVAL_MS = 15_000;
@@ -2076,13 +2095,7 @@ function commandStatus({ stage }) {
   });
   for (const row of rows) {
     const entry = row.entry;
-    const completion = [
-      formatCompletion(entry),
-      formatFrom(row),
-      formatRelaxed(entry),
-    ]
-      .filter((part) => part != null)
-      .join(' ');
+    const completion = formatHow(row) ?? '';
     const detail =
       entry == null
         ? ''
@@ -2230,7 +2243,10 @@ function commandTable({ stage, full }) {
     required: MERGE_GATES,
     evidence:
       full === true
-        ? (entry) => `log \`${String(entry.logPath ?? '')}\``
+        ? (entry) =>
+            entry.source?.url != null
+              ? `CI \`${String(entry.source.url)}\``
+              : `log \`${String(entry.logPath ?? '')}\``
         : null,
   });
   process.stdout.write(`${table}\n`);
@@ -2256,6 +2272,152 @@ function commandTable({ stage, full }) {
     }
   }
   return 0;
+}
+
+/** One `gh` call that only reads, as text, or the reason it failed. */
+function ghRead(args) {
+  const result = spawnSync('gh', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (result.error != null) {
+    return { error: `gh could not start (${result.error.message})` };
+  }
+  if (result.status !== 0) {
+    return {
+      error: `gh ${args.slice(0, 2).join(' ')} exited ${String(result.status)}: ${
+        String(result.stderr || result.stdout).trim() || 'no output'
+      }`,
+    };
+  }
+  return { text: String(result.stdout) };
+}
+
+function ghJson(args) {
+  const read = ghRead(args);
+  if (read.error != null) return read;
+  try {
+    return { value: JSON.parse(read.text) };
+  } catch {
+    return { error: `gh ${args.slice(0, 2).join(' ')} printed no JSON` };
+  }
+}
+
+/**
+ * `gate.mjs ci-import --run <id>`: one `real-input:android` line from a GitHub
+ * Actions run of this commit, judged from the report the run uploaded. Every
+ * refusal records nothing.
+ */
+function commandCiImport({ runId }) {
+  const refuse = (reasons) => {
+    for (const reason of reasons) {
+      process.stderr.write(`ci-import: refused - ${reason}\n`);
+    }
+    process.stderr.write('ci-import: nothing recorded\n');
+    return 1;
+  };
+  const branch = currentBranch();
+  const before = readTrees();
+  const head = git(['rev-parse', 'HEAD'], '');
+  const dirty = git(['status', '--porcelain', '--untracked-files=all'], '')
+    .split('\n')
+    .filter((line) => line.trim() !== '');
+  const api = `repos/{owner}/{repo}/actions/runs/${runId}`;
+  const run = ghJson(['api', api]);
+  if (run.error != null) return refuse([`could not read run ${runId}: ${run.error}`]);
+  const attempt = Number(run.value?.run_attempt ?? 1);
+  const jobs = ghJson([
+    'api',
+    `${api}/attempts/${String(attempt)}/jobs?per_page=100`,
+  ]);
+  if (jobs.error != null)
+    return refuse([`could not read the jobs of run ${runId}: ${jobs.error}`]);
+  const reasons = ciImportRefusals({
+    run: run.value,
+    jobs: jobs.value?.jobs ?? [],
+    head,
+    dirty,
+    entries: readLedger(branch).entries,
+  });
+  if (reasons.length > 0) return refuse(reasons);
+  const job = ciJobOf(jobs.value.jobs);
+
+  const listed = ghJson(['api', `${api}/artifacts?per_page=100`]);
+  if (listed.error != null)
+    return refuse([`could not list the artifacts of run ${runId}: ${listed.error}`]);
+  const artifact = (listed.value?.artifacts ?? []).find(
+    (entry) => entry?.name === CI_ARTIFACT && entry?.expired !== true
+  );
+  if (artifact == null) {
+    return refuse([
+      `run ${runId} has no ${CI_ARTIFACT} artifact: the job (${String(job.conclusion)}) ` +
+        'ended before the suite started, or the artifact expired',
+    ]);
+  }
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'nitro-ui-ci-import-'));
+  try {
+    const downloaded = ghRead([
+      'run',
+      'download',
+      runId,
+      '--name',
+      CI_ARTIFACT,
+      '--dir',
+      scratch,
+    ]);
+    if (downloaded.error != null)
+      return refuse([`could not download ${CI_ARTIFACT}: ${downloaded.error}`]);
+    const full = readUploadedRun(path.join(scratch, CI_FULL_DIR));
+    if (full == null) {
+      return refuse([
+        `${CI_ARTIFACT} holds no run record of the full suite: the job never started it`,
+      ]);
+    }
+    const rerun = readUploadedRun(path.join(scratch, CI_RERUN_DIR));
+    const after = readTrees();
+    const { line, notes, ...judged } = ciLedgerLine({
+      source: {
+        kind: 'github-actions',
+        runId: Number(run.value.id),
+        attempt,
+        jobId: job.id ?? null,
+        url: job.html_url ?? run.value.html_url ?? null,
+      },
+      head,
+      branch,
+      before,
+      after,
+      full,
+      rerun,
+      sources: checkoutSources(repoRoot),
+    });
+    const file = appendLedgerLine(branch, line);
+    for (const message of [
+      ...judged.full.quarantined,
+      ...(judged.rerun?.quarantined ?? []),
+    ]) {
+      process.stdout.write(`QUARANTINED ${message}\n`);
+    }
+    for (const failure of judged.full.failures) {
+      process.stdout.write(`full run: ✗ ${failure}\n`);
+    }
+    for (const failure of judged.rerun?.failures ?? []) {
+      process.stdout.write(`re-run: ✗ ${failure}\n`);
+    }
+    for (const note of notes) process.stderr.write(`ci-import: ${note}\n`);
+    const why =
+      line.completion != null ? line.completion.why : judged.full.why;
+    for (const reason of why) process.stderr.write(`ci-import: ${reason}\n`);
+    const how = formatHow({ entry: line });
+    process.stderr.write(
+      `ci-import: ${CI_GATE} ${line.result.toUpperCase()} (${how}) - ${String(line.source.url)}\n` +
+        `ci-import: recorded in ${path.relative(repoRoot, file)}\n`
+    );
+    return line.result === 'pass' ? 0 : 1;
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -2507,6 +2669,19 @@ async function main(argv) {
       }
     }
     return await commandWait({ gate, timeoutMinutes });
+  }
+  if (command === 'ci-import') {
+    const at = rest.indexOf('--run');
+    const runId = at === -1 ? null : (rest[at + 1] ?? null);
+    if (
+      runId == null ||
+      !/^\d+$/.test(runId) ||
+      rest.length !== 2
+    ) {
+      process.stderr.write(`ci-import: --run <numeric run id>\n${USAGE}`);
+      return 2;
+    }
+    return commandCiImport({ runId });
   }
   if (command === 'logs') {
     let branch = null;
