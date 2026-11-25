@@ -67,9 +67,9 @@ export interface PickerProps extends ViewProps {
    */
   variant?: PickerVariant | undefined;
   /**
-   * A label for the control, shown where the platform shows one: Android draws
-   * it as the Material 3 field's label, iOS uses it as the menu's title and for
-   * accessibility and draws nothing next to the button. Default: none.
+   * A label for the control. Android draws it as the Material 3 field's label.
+   * iOS draws nothing for it and uses it as the control's accessibility name
+   * when `accessibilityLabel` is not set. Default: none.
    */
   label?: string | undefined;
   /** Disable interaction. Default: `false`. */

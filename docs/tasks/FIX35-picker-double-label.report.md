@@ -37,20 +37,21 @@ out of this brief's scope.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2262 tests / 105 suites | `689fa8fee447` | 54.4 s | start 4.1 / med 6.6 / max 7.3 |
-| `harness:ios` | **PASS** | 622 tests / 30 suites + isolated 6 tests / 3 suites | `689fa8fee447` (harness:ios digest) | 14 m 29 s | start 4.2 / med 4.3 / max 14.8 |
-| `harness:android` | **PASS** (from `merge/form-layer`) | 681 tests / 31 suites + isolated 6 tests / 3 suites | `9b70b63ecae3` (harness:android digest) | 18 m 47 s | start 6.5 / med 7.9 / max 16.7 |
+| `check` | **PASS** | 2262 tests / 105 suites | `76e542574bae` | 54.3 s | start 2.5 / med 6.0 / max 6.8 |
+| `harness:ios` | **PASS** | 622 tests / 30 suites + isolated 6 tests / 3 suites | `76e542574bae` (harness:ios digest) | 14 m 30 s | start 11.1 / med 4.8 / max 11.6 |
+| `harness:android` | **PASS** | 681 tests / 31 suites + isolated 6 tests / 3 suites | `76e542574bae` (harness:android digest) | 18 m 40 s | start 11.1 / med 4.3 / max 11.6 |
 | `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | **PASS** (from `merge/form-layer`) | 76 tests / 28 suites | `9b70b63ecae3` (real-input:android digest) | 40 m 43 s | start 5.0 / med 2.7 / max 5.0 |
+| `real-input:android` | missing | — | — | — | — |
 | `harness:ios:A11yProbe` | stale | 1 failed of 1 tests / 1 suites | fe258652663e (not this tree) | 10.8 s | start 5.2 / med 5.3 / max 5.5 |
 | `real-input:ios:--a11y:hosted-picker` | stale | — | 9b70b63ecae3 (not this tree) | 1 m 38 s | start 6.5 / med 6.4 / max 8.9 |
 | `real-input:ios:--a11y:hosted-picker:--a11y:probe-u1:--a11y:probe-u2:--a11y:probe-u3:--a11y:probe-u4:--a11y:probe-h1:--a11y:probe-h2:--a11y:probe-h3:--a11y:probe-h4` | stale | — | 93e56f57b40e (not this tree) | 2 m 33 s | start 3.1 / med 3.5 / max 4.6 |
 | `real-input:ios:--a11y:probe-u1:--a11y:probe-u2:--a11y:probe-u3:--a11y:probe-u4:--a11y:probe-h1:--a11y:probe-h2:--a11y:probe-h3:--a11y:probe-h4` | stale | — | af0a48fc2a11 (not this tree) | 1 m 28 s | start 3.7 / med 3.9 / max 4.6 |
 | `real-input:ios:--a11y:probe-wheel` | stale | — | 862b526e1155 (not this tree) | 1 m 09 s | start 2.2 / med 3.3 / max 4.8 |
 
-`need --for review`: need: review against .gates/task/FIX35-picker-double-label.jsonl; code diff base b93d3b6 touches ios
+`need --for review`: need: review against .gates/task/FIX35-picker-double-label.jsonl; code diff base b93d3b6 touches ios + android
   ✓ check — green
   ✓ harness:ios — green on its own digest
+  ✓ harness:android — green on its own digest
 need: review is satisfied on this code tree.
 
 `real-input:ios` is deliberately not run on this branch: it is a merge gate, and its
@@ -125,3 +126,23 @@ before and after.
   branch needs the two `a11y.mjs` lines before its `real-input:ios` run can be green.
 - Other controls' announcements are untouched, as the brief says: `Picker`'s neighbouring findings
   (Slider/Stepper announced as `other`) stay where they are.
+
+## Fix round 1
+
+Three text-only changes, no behaviour change.
+
+- `src/components/Picker/Picker.tsx:70` — the `label` JSDoc told app developers iOS uses it as
+  "the menu's title and for accessibility". The menu's title is the selected option. It now says
+  Android draws it as the Material 3 field's label, iOS draws nothing for it and names the
+  control for accessibility when `accessibilityLabel` is not set.
+- `src/components/Picker/Picker.nitro.ts:31` — the same sentence in the internal prop doc, now
+  "Android's field label. iOS never draws it: there it is only the a11y name."
+- `ios/components/Picker/HybridNitroUiPicker.swift:21` and `:253` — the model comment no longer
+  says the label is drawn where the platform draws one, and the sizing comment no longer claims a
+  label can change the width; it names what does decide the box, the sizing key. `markDirty()` and
+  `noteContentSizeMayHaveChanged()` stay.
+
+No generated file or the API report carries prop doc text (Nitro specs hold signatures only), so
+nothing needed regenerating. The two Swift comments moved the iOS platform tree, so
+`need --for review` asked for both harness gates beside `check`; both ran under one lease after both
+builds. The review's optional guard and the `scripts/real-input/a11y.mjs` line were left alone, as instructed.
