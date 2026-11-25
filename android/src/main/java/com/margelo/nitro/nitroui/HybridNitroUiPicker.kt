@@ -1322,11 +1322,17 @@ class HybridNitroUiPicker(
     if (model.displayed != shownBefore) {
       host.syncWheelRow(model.displayed)
     }
-    // The batch a held size report was waiting for has landed. The report is filed only
-    // if the index, choices, variant and label are still the ones the pick painted.
+    // The batch a held size report was waiting for has landed. A batch React sent before
+    // it saw the pick names the title the pick replaced, so the hold waits for a batch
+    // whose event count has caught up with native's: only that batch can name what is on
+    // screen. The report is filed only if the index, choices, variant and label are
+    // still the ones the pick painted.
     val stamped = model.pickStamp
-    model.pickStamp = null
-    host.releaseSizingReports(model.pickIsStillShown(stamped))
+    val caughtUp = model.state.jsEvents >= model.state.nativeEvents
+    if (stamped == null || caughtUp) {
+      model.pickStamp = null
+      host.releaseSizingReports(model.pickIsStillShown(stamped))
+    }
     host.commit()
   }
 

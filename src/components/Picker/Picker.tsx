@@ -4,7 +4,10 @@ import { type ColorValue, Platform, type ViewProps } from 'react-native';
 import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
-import { useStableCallback } from '../../core/useStableCallback';
+import {
+  type NitroCallbackProp,
+  useStableCallback,
+} from '../../core/useStableCallback';
 import { useSelfSizingBaseStyle } from '../../core/useSelfSizing';
 import { NativeNitroUiPicker } from './NativeNitroUiPicker';
 
@@ -259,34 +262,46 @@ export function Picker({
   // so without a render per choice the new title's width would be cached under
   // the old title's key. Stamped with the sizing id, not the variant: a variant
   // change remounts the view and re-seeds it from `defaultSelectedIndex`, and
-  // ids are never reused.
+  // ids are never reused. It carries the event count because native holds a pick's
+  // size report until JS has echoed every pick it made.
   const [lastChoice, setLastChoice] = useState<{
     readonly sizingId: number;
     readonly index: number;
+    readonly eventCount: number;
   } | null>(null);
   const controlled = useControlled<number>(
     selectedIndex,
     clampToOptions(defaultSelectedIndex, optionCount),
     (index) => {
-      if (selectedIndex === undefined) {
-        setLastChoice({ sizingId, index });
-      }
       onChange?.({ index, value: safeOptions[index] ?? '' });
     }
   );
+  const forwardNativeChange = controlled.onNativeChange.f;
+  const onNativeValueChange = useStableCallback(
+    (index: number, eventCount: number) => {
+      if (selectedIndex === undefined) {
+        setLastChoice({ sizingId, index, eventCount });
+      }
+      forwardNativeChange(index, eventCount);
+    }
+  ) as NitroCallbackProp<(index: number, eventCount: number) => void>;
   const processedTint = useProcessedColor(tintColor);
   const hybridRefCallback = useStableCallback(hybridRef);
-  const chosenIndex =
-    lastChoice !== null && lastChoice.sizingId === sizingId
-      ? lastChoice.index
-      : null;
+  const chosen =
+    lastChoice !== null && lastChoice.sizingId === sizingId ? lastChoice : null;
   // Clamped as native clamps it, so the sizing key names the title the control
   // will actually paint.
   const shownIndex = clampToOptions(
     controlled.value === null
-      ? (chosenIndex ?? clampToOptions(defaultSelectedIndex, optionCount))
+      ? (chosen?.index ?? clampToOptions(defaultSelectedIndex, optionCount))
       : controlled.value,
     optionCount
+  );
+  // `useControlled` echoes only while controlled; an uncontrolled picker echoes its
+  // last choice here, so native never waits for a count that cannot come.
+  const mostRecentEventCount = Math.max(
+    controlled.mostRecentEventCount,
+    chosen?.eventCount ?? 0
   );
 
   return (
@@ -302,7 +317,7 @@ export function Picker({
           : clampToOptions(controlled.value, optionCount)
       }
       defaultSelectedIndex={clampToOptions(defaultSelectedIndex, optionCount)}
-      mostRecentEventCount={controlled.mostRecentEventCount}
+      mostRecentEventCount={mostRecentEventCount}
       variant={nativeVariant}
       label={label ?? null}
       disabled={disabled}
@@ -310,7 +325,7 @@ export function Picker({
       testID={testID ?? null}
       accessibilityLabel={accessibilityLabel ?? null}
       nuiPerfId={nuiPerfId}
-      onValueChange={controlled.onNativeChange}
+      onValueChange={onNativeValueChange}
       nuiSizingKey={sizingVariantFor(
         safeOptions,
         shownIndex,
