@@ -424,7 +424,6 @@ describe('the debt list', () => {
       'ios:slider',
       'ios:hosted-slider',
       'ios:stepper',
-      'ios:hosted-picker',
       'ios:context-menu',
       'ios:form',
       'ios:icon-button',

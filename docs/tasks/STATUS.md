@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-25 iOS `Picker`: VoiceOver says the control's name once when `label` is set (it read
+  the name twice); the accessibility sweep grades the hosted Picker as a button (FIX35, #134).
 - 11-25 Tooling: the Android press-feedback check reads frames for the whole press and counts
   only frames read before the lift, so a driver slow to put the finger down no longer fails
   the ListItem ink case on hosted runners (X67, #135).

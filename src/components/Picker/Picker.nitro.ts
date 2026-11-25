@@ -28,7 +28,7 @@ export interface NitroUiPickerProps
    * wrapper sends `'menu'` for it on iOS.
    */
   variant: string;
-  /** Android's field label. iOS uses it as the menu's title and draws none. */
+  /** Android's field label. iOS never draws it: there it is only the a11y name. */
   label: string | null;
   disabled: boolean;
   /** A `processColor` ARGB int, or `null` for the platform default. */

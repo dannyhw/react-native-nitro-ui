@@ -18,8 +18,8 @@ final class PickerModel: NitroUiModel {
   /// `'menu'` or `'wheel'`. Never `'radio'`: iOS has no radio-group picker style, so that
   /// name resolves to the menu.
   var variant = "menu"
-  /// The picker's label. Drawn where the platform draws one, and used as the
-  /// accessibility label when the caller did not give a better one.
+  /// The picker's label. Neither iOS picker style draws it; it is the accessibility
+  /// label when the caller did not give a better one.
   var label: String?
   var disabled = false
   var tint: UIColor?
@@ -107,11 +107,10 @@ struct PickerContent: NitroUIContent {
           .tag(index)
       }
     } label: {
-      if let label = model.label {
-        Text(label)
-      } else {
-        EmptyView()
-      }
+      // Not `Text(model.label)`: neither picker style draws a label on iOS, and SwiftUI puts a
+      // menu Picker's label content *into* its element's name, beside any `accessibilityLabel`,
+      // which makes a screen reader say the name twice. The modifier below carries the name.
+      EmptyView()
     }
   }
 
@@ -251,7 +250,8 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
       guard next != model.label else { return }
       model.label = next
       host.markDirty()
-      // A label may change the control's width.
+      // No iOS style draws the label: the sizing key, which carries it, is what
+      // decides the control's box.
       host.noteContentSizeMayHaveChanged()
     }
   }

@@ -371,7 +371,27 @@ describe('the iOS debt rows', () => {
     expect(result.exempt).toBe(true);
   });
 
-  it('reports the hosted Picker’s doubled name as a finding, and keeps it debt', () => {
+  it('passes the hosted Picker named once, as a button, on its own box', () => {
+    const picker = control('hosted-picker');
+    const box = { x: 16, y: 578.67, width: 75.33, height: 34.67 };
+    const tree = [
+      node({
+        id: picker.anchorTestId,
+        label: 'Hosted picker',
+        type: 'other',
+        frame: box,
+        anchor: true,
+        value: '',
+      }),
+      node({ label: 'Hosted picker', type: 'button', frame: box, value: '' }),
+    ];
+    expect(checkIosControlA11y(picker, tree)).toMatchObject({
+      failures: [],
+      known: [],
+    });
+  });
+
+  it('goes red when the hosted Picker announces its name twice', () => {
     const picker = control('hosted-picker');
     const box = { x: 16, y: 578.67, width: 75.33, height: 34.67 };
     const tree = [
@@ -393,8 +413,9 @@ describe('the iOS debt rows', () => {
     const problems = iosA11yProblems(picker, tree);
     expect(problems[0]).toContain("announces the control's name twice");
     const result = checkIosControlA11y(picker, tree);
-    expect(result.known).toHaveLength(1);
-    expect(result.exempt).toBe(true);
+    expect(result.failures).not.toEqual([]);
+    expect(result.known).toEqual([]);
+    expect(result.exempt).toBe(false);
   });
 
   it('goes red when the hosted Picker’s label stops arriving at all', () => {
@@ -575,7 +596,8 @@ describe('reading the pass out of an xcodebuild log', () => {
       control('hosted-picker'),
       trees.get('hosted-picker')
     );
-    expect(picker.known).toHaveLength(1);
+    expect(picker.failures).not.toEqual([]);
+    expect(picker.known).toEqual([]);
   });
 
   it('refuses a line whose box did not parse, rather than reading no elements', () => {
