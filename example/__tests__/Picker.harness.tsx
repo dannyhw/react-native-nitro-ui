@@ -1331,6 +1331,7 @@ describe('Picker · G6', () => {
     );
     await settle(400);
     const afterPicks = delta(before, stats());
+    const boxAfterPicks = sizeOf('twice');
 
     // Read the cache of the key the first pick's render carried back: a fresh picker
     // showing that title must find that title's own width there.
@@ -1353,27 +1354,54 @@ describe('Picker · G6', () => {
     await waitForBox('fresh-long', longSize, 'the fresh long picker');
     await settle(250);
     const cacheAfter = delta(cacheBefore, stats());
+
+    // The title the stale batch would have poisoned, picked again with its key poisoned
+    // once more and no other control mounted under that key to file it: only a size report
+    // that got out of the hold can make the control grow from here.
+    await rerender(
+      <View style={columnStyle}>
+        <TwoQuickPicks />
+      </View>
+    );
+    await settle(250);
+    armTrace();
+    const heldBefore = stats();
+    poisonConfigurations([sizingKey(OPTIONS, 2, null, 'menu')]);
+    handles.get('twice')?.nuiTestSelect(2);
+    await pollUntil(
+      () => (eventLog.length >= 3 ? true : null),
+      () => new Error(`the third pick emitted ${JSON.stringify(eventLog)}.`),
+      8000
+    );
+    await waitForBox('twice', longSize, 'the third pick');
+    await settle(250);
+    const heldDelta = delta(heldBefore, stats());
+
     console.log(
       `quick picks (${controlled ? 'controlled' : 'uncontrolled'}): ` +
         `short=${describeSize(shortSize)} long=${describeSize(longSize)} ` +
         `picksDelta=${JSON.stringify(afterPicks)} ` +
         `freshFirstBox=${describeSize(firstBox)} measured=${describeSize(fresh)} ` +
-        `cacheDelta=${JSON.stringify(cacheAfter)} events=${JSON.stringify(eventLog)}`
+        `cacheDelta=${JSON.stringify(cacheAfter)} ` +
+        `heldDelta=${JSON.stringify(heldDelta)} events=${JSON.stringify(eventLog)}`
     );
-    expect(eventLog).toEqual(['twice:2', 'twice:0']);
+    expect(eventLog).toEqual(['twice:2', 'twice:0', 'twice:2']);
     // The picker itself is sized for the title its second pick shows.
-    expect(sameSize(sizeOf('twice'), shortSize)).toBe(true);
+    expect(sameSize(boxAfterPicks, shortSize)).toBe(true);
     expect(afterPicks.corrections).toBe(0);
     expect(sameSize(fresh, longSize)).toBe(true);
     expect(sameSize(firstBox, longSize)).toBe(true);
     expect(cacheAfter.corrections).toBe(0);
+    // The key the pick lands on is poisoned again, so one correction is the pick's own size
+    // report getting out of the hold: nothing else mounted can supply the long width here.
+    expect(heldDelta.corrections).toBe(1);
     // Otherwise the two keys hold the same width and the case could not fail.
     expect(longSize.width).toBeGreaterThan(shortSize.width + 8);
   }
 
-  // Only Android's host holds a pick's size report until a batch can name what is on screen.
-  // iOS files a measured size as soon as it is measured, so which key it lands under there is
-  // decided by a path this case cannot speak for.
+  // iOS misfiles a pick's size the same way, through another path: it files a measured size as
+  // soon as it is measured, with no hold waiting for a key that names what is on screen. These
+  // cases exercise the hold, which is Android's, so they are Android-only.
   const itHoldsPicks = Platform.OS === 'android' ? it : it.skip;
 
   itHoldsPicks(
