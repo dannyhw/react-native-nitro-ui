@@ -1371,13 +1371,24 @@ describe('Picker · G6', () => {
     expect(longSize.width).toBeGreaterThan(shortSize.width + 8);
   }
 
-  it('files nothing under a key two uncontrolled picks have left', async () => {
-    await filesNothingUnderALeftKey(false);
-  });
+  // Only Android's host holds a pick's size report until a batch can name what is on screen.
+  // iOS files a measured size as soon as it is measured, so which key it lands under there is
+  // decided by a path this case cannot speak for.
+  const itHoldsPicks = Platform.OS === 'android' ? it : it.skip;
 
-  it('files nothing under a key two controlled picks have left', async () => {
-    await filesNothingUnderALeftKey(true);
-  });
+  itHoldsPicks(
+    'files nothing under a key two uncontrolled picks have left',
+    async () => {
+      await filesNothingUnderALeftKey(false);
+    }
+  );
+
+  itHoldsPicks(
+    'files nothing under a key two controlled picks have left',
+    async () => {
+      await filesNothingUnderALeftKey(true);
+    }
+  );
 
   it('grows an unpoisoned pick whose new configuration starts at the fallback', async () => {
     // Nothing is seeded here: a cold key answers with the declared fallback, which can
