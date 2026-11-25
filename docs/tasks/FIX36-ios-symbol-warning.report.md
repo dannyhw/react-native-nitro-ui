@@ -37,12 +37,12 @@ because a file that registers no test on the other platform is a failed suite th
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2267 tests / 106 suites | `27363a768d7b` | 57.8 s | start 9.4 / med 11.0 / max 14.5 |
-| `harness:ios` | **PASS** | 625 tests / 31 suites + isolated 6 tests / 3 suites | `823a640eca8f` (harness:ios digest) | 14 m 32 s | start 5.4 / med 4.7 / max 6.1 |
-| `harness:android` | **PASS** | 681 tests / 31 suites + isolated 6 tests / 3 suites | `823a640eca8f` (harness:android digest) | 18 m 33 s | start 5.4 / med 4.5 / max 6.1 |
+| `check` | **PASS** | 2267 tests / 106 suites | `fed16ae87e99` | 56.2 s | start 7.2 / med 10.0 / max 10.6 |
+| `harness:ios` | **PASS** | 625 tests / 31 suites + isolated 6 tests / 3 suites | `fed16ae87e99` (harness:ios digest) | 14 m 30 s | start 8.9 / med 5.0 / max 8.9 |
+| `harness:android` | **PASS** | 681 tests / 31 suites + isolated 6 tests / 3 suites | `fed16ae87e99` (harness:android digest) | 18 m 18 s | start 8.9 / med 5.0 / max 9.3 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
-| `harness:ios:SystemImage` | **PASS** | 3 tests / 1 suites | `823a640eca8f` (harness:ios digest) | 11.0 s | start 4.2 / med 4.3 / max 4.3 |
+| `harness:ios:SystemImage` | **PASS** | 3 tests / 1 suites | `fed16ae87e99` (harness:ios digest) | 11.3 s | start 5.9 / med 6.5 / max 7.2 |
 
 `need --for review`: review is satisfied on this code tree. The two `real-input` gates are left
 for merge, as the brief says.
@@ -84,3 +84,23 @@ All three tests in `SystemImage.ios.harness.tsx`, each filtered run (`harness:io
   one test".
 - `src/iconName.ts`: an Android name that is well formed but not shipped stays silent by
   design, so the new iOS warning is sharper than the Android one, not symmetrical with it.
+
+## Fix round 1
+
+The review's seven findings, each in the file it named.
+
+1. `docs/components/button.md`: the section now says a name with no symbol on the device draws
+   nothing, and that saying so changes nothing about what is drawn.
+2. `src/NitroUiCore.nitro.ts`: `unresolvedSystemImageNames` is tagged `@internal`, its comment
+   addresses the library, and the API report carries `// @internal` above the member. Nitrogen
+   output is unchanged.
+3. `src/systemImageName.ts`: a throwing or rejecting ask drops its names - each is answered as a
+   name that draws, so nothing is warned about it and no site is left waiting on later renders.
+   No retry.
+4. `cpp/NitroUiSystemImages.hpp`: the comment says the callback runs on the main queue.
+5. The suite describes its subject and its names are `nui.sysimg.*`, so the quotes above print
+   the names those tests ran with at the time.
+6. Its counts cover only lines starting `nitro-ui:`, so an unrelated dev warning cannot fail them.
+7. Red proof for the re-render case: `says it once for a name that outlives its renders` -> the
+   once-per-component-and-name check removed from `warn()` -> `expected 3 to be 1` at
+   `expect(about(MISSING_RERENDER).length).toBe(1)`, the two sibling tests still green.
