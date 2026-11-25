@@ -150,9 +150,12 @@ Native keeps the last value React sent apart from the displayed one, which is wh
 rejected change revert: the app keeps `value={true}`, so the `value` prop does not change, but
 the count does, the commit happens, and native restores `true`. A `value` written while an event
 is in flight is dropped, not queued, so it cannot overwrite what the user just did. With `value`
-undefined the control is uncontrolled: `defaultValue` seeds it once and an interaction costs no
-React render. Values compare exactly, with no epsilon; a control that snaps quantises natively
-before it emits, so JS and native hold the same bits.
+undefined the control is uncontrolled: `defaultValue` seeds it once and an interaction costs the
+app no React render, because the value lives in native. A wrapper that keeps the newest choice in
+its own state to name a size — `Picker`, and `Chip` where a toggle changes its size — renders
+itself per interaction and echoes the event count from there. Values compare exactly, with no
+epsilon; a control that snaps quantises natively before it emits, so JS and native hold the same
+bits.
 
 A continuous control emits at most once per frame. `Slider` coalesces touch samples to the
 newest value on a frame source (`CADisplayLink`, or a `Choreographer` callback) and calls
@@ -198,6 +201,13 @@ measureContent (layout thread)       native host (UI thread)
   into `nuiSizingKey`: `""` for a `Switch`, variant, size and title for a `Button`. The engine
   adds the component name and an environment epoch itself. Two instances with the same key
   share one cached size, so a missing input is a wrong size.
+- When a native interaction changes a control's size — a `Picker`'s pick, a `Chip`'s toggle —
+  Android's host holds the control's size reports until a props batch arrives with
+  `jsEvents >= nativeEvents`. A batch sent before the interaction still carries the key of the
+  configuration it replaces, and filing into it stores one title's width under another's. The
+  uncontrolled wrapper renders and echoes each interaction, so such a batch always follows it.
+  iOS reports a measured size as soon as it has one, so the key it lands under is the one the
+  batch that is in flight carries.
 - `nuiSizingId` identifies one mounted instance. `useSizingId` takes it from one native
   counter, because the engine is process-global and outlives a JS reload.
 - The declared fallback is the control's documented size on the running OS: a `Switch` is 61 by
