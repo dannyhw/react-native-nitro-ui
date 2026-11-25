@@ -313,12 +313,6 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G24 review: `headerPx`/`footerPx` on the Android section are plain fields used as `LaunchedEffect` keys — Compose cannot see the change, so the effect restarts only when something else recomposes the layer. G24 fix round 1 worked around the visible half (each band now publishes all four numbers from inside its own `onSizeChanged`, in the pass that can still act on them), but the fields still want to be `mutableStateOf` (as `gapPx` and `headerTextPx` already are) so the effect and the layout cannot disagree at all.
 - G24 review: Android row discovery depends on the band `View` being flattened out of the hierarchy by React Native — the section finds its rows by walking its own children, which works only while that `View` has no host view of its own. If RN stops flattening it, rows silently stop being found; a shape test for that would be worth having.
 - G24 review: iOS VoiceOver activation on a row relies on UIKit synthesising a tap at the element's centre (`UITapGestureRecognizer` on the cell), not on `accessibilityActivate()`. Override `accessibilityActivate()` on the cell so an activation that is not a point-to-point tap (VoiceOver cursor, Switch Control, an accessibility shortcut) presses the row too.
-- Controlled TextField and SearchField: an app that sets `value` outside the change callback
-  (`startTransition`, a timer, after an `await`) commits the echo (`mostRecentEventCount`) before
-  its new `value`, so `reconcile()` sees equal counts and applies the older value over newer
-  keystrokes; FIX31 saw the field end on "c" with `setValue` delayed. `docs/DESIGN.md` 3.5 does not
-  say so. React Native's `TextInput` echoes its count from its own state in the same callback and
-  probably has the same limit; measure it before deciding to document or handle it.
 - TextField harness: no case forces keystrokes to outrun their echoes on a fast machine (the
   round-trip case now waits per key). Three `imeInput('commit', …)` calls without awaiting, a spin
   on `nuiTestState()` until `nativeEvents === 3`, then a wait for `abc` with equal counts would.

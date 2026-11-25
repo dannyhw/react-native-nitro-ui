@@ -122,6 +122,13 @@ that many of its own events. So:
   `afterUpdate()` counts any edit the state holds before it judges a write, so a
   write that raced a keystroke is stale, not applied over it.
 - **a JS write is not an edit.** It is never reported back to `onChangeText`.
+- **set `value` in the same task as `onChangeText`.** Setting it synchronously, in a
+  microtask, after `setTimeout(…, 0)` or inside `startTransition` all keep every keystroke.
+  A `value` that arrives in a later task (a timer with a delay, a network round trip) commits
+  after the echo, so the field shows the older text over newer keystrokes: typing `abcdef`
+  with a 50 ms delay ends on `bdf`. React Native's `TextInput` behaves the same way. To
+  transform or validate text later, keep the field's own text in synchronous state and
+  derive the rest from it.
 - **typing in an uncontrolled field costs no React render**, and in a controlled
   one exactly one commit per keystroke (the app's `setState` and the echo land
   together): `TextField.perf-test.tsx` pins mount + 3 keystrokes + 2 unrelated

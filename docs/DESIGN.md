@@ -161,6 +161,15 @@ value JS has not seen while the counts look equal, so `NitroUiControlledValue.un
 `reconcile()` refuse a write in that window. JS echoes only the latest count, so native never
 waits for the counts to be equal.
 
+The echo and the app's `value` must land in the same commit. A handler that sets state
+synchronously, in a microtask, after `setTimeout(…, 0)` or inside `startTransition` does; one
+that sets it in a later task (a delayed timer, a network round trip) lets the echo commit alone
+with the old `value`, the counts agree, and `reconcile()` applies that older value over newer
+keystrokes (`abcdef` typed with a 50 ms delay ends on `bdf`). React Native's `TextInput` has the
+same limit, since it echoes `mostRecentEventCount` with `props.value` too. Holding the echo would
+cost the no-latency and throw-safety properties above, so the limit is documented in the
+component docs rather than handled.
+
 The three implementations are tested with the same vectors (`useControlled.test.tsx`,
 `scripts/native-tests/handshake.test.swift`, `NitroUiControlledValueTest.kt`), so a change to
 one changes all three. A component with no user-editable value (`Progress`) uses none of it.

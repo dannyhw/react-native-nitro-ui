@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-25 Docs: a controlled `TextField` or `SearchField` must set `value` in the same task as
+  its change callback; a `value` set from a timer can drop keystrokes, as with React Native's
+  `TextInput` (DESIGN 3.5 and both component pages) (FIX34, #133).
 - 11-25 Android `Form.Section`: its header and footer layer is measured to the section box at
   layout; the E2 case waits for the layer and its row shapes to catch up with the section, and
   the iOS SearchField clear case waits for the clear's native count (FIX33, #131).
