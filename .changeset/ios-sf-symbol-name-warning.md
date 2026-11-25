@@ -9,8 +9,8 @@ symbol newer than the device's iOS - drew nothing without a word about it. In a 
 the name is looked up on the device and one warning per component and name says which control was
 given it and where:
 
-  nitro-ui: Button's systemImage "square.and.arrow.up.up" is not an SF Symbol this iOS can draw.
-  Nothing will be drawn for it. See docs/components/button.md, "SF Symbols".
+nitro-ui: Button's systemImage "square.and.arrow.up.up" is not an SF Symbol this iOS can draw.
+Nothing will be drawn for it. See docs/components/button.md, "SF Symbols".
 
 A release build looks nothing up and warns nothing, and what is drawn for a good name and a bad
 one is unchanged. Android's `androidIcon` warnings are as they were.
