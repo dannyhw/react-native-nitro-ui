@@ -370,6 +370,19 @@ describe('a run is judged from what it uploaded', () => {
     );
   });
 
+  it('a run that exited non-zero is red even when every control passed', () => {
+    // The exit code alone carries the whole-run checks: the deadline, an e2e run
+    // error, an empty a11y sweep.
+    const exited = green();
+    exited.record = { ...exited.record, exitCode: 1 };
+    const { line, full } = imported({ full: exited, head: GREEN_SHA });
+    expect(Object.values(line.units.results).every((s) => s === 'pass')).toBe(
+      true
+    );
+    expect(line.result).toBe('fail');
+    expect(full.why).toEqual(['the run exited 1']);
+  });
+
   it('a skip that is not quarantined is red, by the rule a local run uses', () => {
     const { line } = imported({
       full: green(),
@@ -472,6 +485,17 @@ describe('the re-run inside the job', () => {
     const { line } = imported({ full: red(), rerun: failing, head: RED_SHA });
     expect(line.result).toBe('fail');
     expect(line.completion.why).toContain('form failed again');
+  });
+
+  it('a re-run that exited non-zero is a red completion even when its control passed', () => {
+    const { line } = imported({
+      full: red(),
+      rerun: formRerun({ exitCode: 1 }),
+      head: RED_SHA,
+    });
+    expect(line.units.results.form).toBe('pass');
+    expect(line.result).toBe('fail');
+    expect(line.completion.why).toEqual(['the re-run exited 1']);
   });
 
   it('a re-run of anything but what a completion re-runs is not counted', () => {
