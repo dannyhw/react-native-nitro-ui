@@ -11,6 +11,7 @@ const isolated = process.env.NITRO_UI_HARNESS_ISOLATED === '1';
  */
 export default {
   preset: 'react-native-harness',
+  setupFiles: ['<rootDir>/harness-setup.ts'],
   testMatch: isolated
     ? ['<rootDir>/**/__tests__/isolated/**/*.harness.[jt]s?(x)']
     : [

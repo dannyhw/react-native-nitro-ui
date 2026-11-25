@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-25 Tooling: a failed harness comparison prints its values in full, and CONTRIBUTING says
+  a harness file named for one platform runs only there (X69, #137).
 - 11-25 Tooling: the Android press-feedback check times its frames by the device's clock and
   counts only frames the device took before the lift, so slow captures on hosted runners no
   longer fail the ListItem ink cases (X68, #139).

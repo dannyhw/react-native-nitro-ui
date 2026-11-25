@@ -565,6 +565,11 @@ node scripts/lease.mjs release <ID>                     # devices stay up, on pu
 `react-native-harness` runs `.harness.tsx` files inside the app. It does not build the app and
 it runs debug builds only, so build first, then run.
 
+A file named `<Name>.ios.harness.tsx` or `<Name>.android.harness.tsx` runs on that platform
+only: the harness leaves the other platform's files out of its run. Use the name for a suite
+that belongs to one platform. A `Platform.OS` check that registers no test on the other
+platform fails that platform's run with "Your test suite must contain at least one test".
+
 ```sh
 node scripts/build-app.mjs --platform ios        # or: --platform android
 bun run harness:ios                              # or: harness:android
