@@ -27,9 +27,9 @@ import {
 /** A name every iOS this library runs on has a symbol for. */
 const DRAWABLE = 'square.and.arrow.up';
 /** Names no iOS has: each test owns one, so the once-per-name memory is its own. */
-const MISSING_BUTTON = 'nui.fix36.button.missing';
-const MISSING_ROW = 'nui.fix36.item.missing';
-const MISSING_RERENDER = 'nui.fix36.rerender.missing';
+const MISSING_BUTTON = 'nui.sysimg.button.missing';
+const MISSING_ROW = 'nui.sysimg.item.missing';
+const MISSING_RERENDER = 'nui.sysimg.rerender.missing';
 
 const press = (): void => {};
 
@@ -37,19 +37,27 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Warnings the app printed while the current test held the console. */
-let warnings: string[] = [];
+/** Everything the app warned with while the current test held the console. */
+let printed: string[] = [];
 
 /** Holds the app's console for one test, keeping its warnings. */
 function captureWarnings(): () => void {
-  const printed = warnings;
+  const lines = printed;
   const original = console.warn;
   console.warn = (...args: unknown[]): void => {
-    printed.push(args.map(String).join(' '));
+    lines.push(args.map(String).join(' '));
   };
   return () => {
     console.warn = original;
   };
+}
+
+/**
+ * The warnings this library said. Anything else the app warned with is the
+ * app's business and cannot make these tests depend on it.
+ */
+function libraryWarnings(): string[] {
+  return printed.filter((line) => line.startsWith('nitro-ui:'));
 }
 
 /**
@@ -59,19 +67,19 @@ function captureWarnings(): () => void {
  */
 async function waitForWarning(name: string): Promise<void> {
   for (let attempt = 0; attempt < 160; attempt += 1) {
-    if (warnings.some((line) => line.includes(name))) {
+    if (libraryWarnings().some((line) => line.includes(name))) {
       return;
     }
     await sleep(50);
   }
   throw new Error(
     `no warning named "${name}" within 8s; warnings so far: ` +
-      JSON.stringify(warnings)
+      JSON.stringify(printed)
   );
 }
 
 function about(name: string): string[] {
-  return warnings.filter((line) => line.includes(name));
+  return libraryWarnings().filter((line) => line.includes(name));
 }
 
 const ROWS: ButtonGroupItem[] = [
@@ -79,10 +87,10 @@ const ROWS: ButtonGroupItem[] = [
   { id: 'missing', title: 'Copy', systemImage: MISSING_ROW },
 ];
 
-describe('SF Symbol warnings (FIX36)', () => {
+describe('SF Symbol names this iOS cannot draw', () => {
   afterEach(() => {
     cleanup();
-    warnings = [];
+    printed = [];
   });
 
   it('names the Button prop and name iOS cannot draw, once', async () => {
@@ -114,7 +122,7 @@ describe('SF Symbol warnings (FIX36)', () => {
       ]);
       // The valid name in the same batch was asked about too, and answered.
       expect(about(DRAWABLE)).toEqual([]);
-      expect(warnings.length).toBe(1);
+      expect(libraryWarnings().length).toBe(1);
     } finally {
       restore();
     }
@@ -131,7 +139,7 @@ describe('SF Symbol warnings (FIX36)', () => {
           `See docs/components/button.md, "SF Symbols".`,
       ]);
       expect(about(DRAWABLE)).toEqual([]);
-      expect(warnings.length).toBe(1);
+      expect(libraryWarnings().length).toBe(1);
     } finally {
       restore();
     }
