@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-25 Tooling: the Android press-feedback check reads frames for the whole press and counts
+  only frames read before the lift, so a driver slow to put the finger down no longer fails
+  the ListItem ink case on hosted runners (X67, #135).
 - 11-25 Docs: a controlled `TextField` or `SearchField` must set `value` in the same task as
   its change callback; a `value` set from a timer can drop keystrokes, as with React Native's
   `TextInput` (DESIGN 3.5 and both component pages) (FIX34, #133).
