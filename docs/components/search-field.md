@@ -92,7 +92,8 @@ the same model and code as `TextField`: `TextFieldModel`, the write/apply/revert
 `maxLength` limit are shared (`ios/components/TextField/NitroUiTextEditing.swift` and
 `HybridNitroUiTextField.kt`). So what holds for `TextField`'s text holds here: a refused edit
 reverts, a write in flight cannot overwrite a keystroke, a JS write is not reported back as an
-edit, and typing in an uncontrolled field costs no React render. `maxLength` counts UTF-16 code
+edit, typing in an uncontrolled field costs no React render, and `value` has to be set in the
+same task as `onChangeText`, or later keystrokes are overwritten. `maxLength` counts UTF-16 code
 units and never cuts an emoji in half; see
 [text-field.md](text-field.md#the-text-and-the-handshake).
 
