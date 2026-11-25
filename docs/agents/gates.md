@@ -153,7 +153,7 @@ including this one, that is all of these decides, green or red:
 - for a green, written by this ledger version and not relaxed: the line records which relaxing
   switches the run had set (`RELAXING_SWITCHES` in `scripts/gate-core.mjs`:
   `NITRO_UI_ALLOW_UNSTAMPED`, `NITRO_UI_ALLOW_LOCALE_MISMATCH`, the `*_FORCE` switches, a
-  substituted `lsof`, `adb` or `simctl`, the timeout switches including `CI`, and
+  substituted `lsof`, `adb` or `simctl`, the timeout switches including `CI` and `GITHUB_ACTIONS`, and
   `NITRO_UI_TEST_TZ`, `NITRO_UI_TEST_LOCALE` and `NITRO_UI_TEST_LANGUAGES`, set even when
   empty), and only a line that records none counts;
 - for a green, judged by the same gate code: the line's `judge` digest, over the check-only
@@ -178,12 +178,50 @@ digest, from any branch, is green, or a completion of that red run is. Newer is 
 the line's `ts`. This holds after the red run's worktree is removed. The row names the branch:
 `**PASS** (from \`task/x\`)`. `--rerun-failed` reads only this branch's ledger. Nothing is
 inferred from commits or ancestry: identical files are the whole test. Evidence from another
-clone, another machine or CI is not read.
+clone or another machine is not read. A CI run is read only through `ci-import` ("Runs on CI").
 
 `check` is never taken from another branch. Its digest is the code tree, which leaves out
 `docs/`, `bench/`, `.github/` and every `*.md`, and `check` reads some of those (format, the
 README check, the API report, the bench typecheck). It costs under two minutes, so each branch
 runs its own.
+
+## Runs on CI
+
+The `Real input (Android)` job in `.github/workflows/ci.yml` runs the full `real-input:android`
+suite on a GitHub-hosted emulator, on `workflow_dispatch` only.
+`node scripts/gate.mjs ci-import --run <id>` turns one run of it into a `real-input:android`
+line on this branch, so a merge does not hold a local emulator for the suite.
+
+- The job runs the suite through `scripts/gate-ci.mjs`, which records each run of it (exit
+  code, times, relaxing switches) beside the units file and e2e's report. When the full run is
+  red with units a filter names, the job re-runs those units once, choosing them as
+  `--rerun-failed` does. A failure no filter names, or one before the suite started, is not
+  re-run. The job uploads every run's report as the `real-input-android` artifact, and its
+  logs as `real-input-android-logs`.
+- `ci-import` reads with `gh` only: the run, its jobs, its artifacts, and a download. It
+  refuses, and records nothing, when the run's head SHA is not `HEAD`, when the worktree has
+  uncommitted changes, when the run or the job is not finished, when the run is of another
+  workflow or has no job named `Real input (Android)`, when that attempt is already in the
+  ledger, and when the artifact is missing or holds no record of the full run.
+- The run is judged from its upload, never from the job's conclusion. The e2e report is
+  judged again by the code a local run uses, quarantines included, and a control passes only
+  when the units file and the report both say so. The run must have exited 0, and its record
+  and report must be of `HEAD`. Anything short of that is a red line.
+- A full run the job re-ran is recorded as one completion line, under the rules in
+  "Completing a red run", when the re-run named exactly what a completion would. Otherwise
+  the red full run is recorded and the re-run is not counted.
+- The line carries `source`: run ID, attempt, job ID and URL. `table`, `status` and `need`
+  show it as `**PASS** (CI run <id>)`, or `completed: …; CI run <id>`, or red with the job's
+  URL. It counts on other branches under "Runs from other branches", like a local run.
+- A hosted runner sets `CI` and `GITHUB_ACTIONS`, which lengthen the suite's ceiling for the
+  slower emulator. A CI line does not record them as relaxing; any other relaxing switch the
+  job set is recorded. On a local run both are relaxing switches.
+
+For a merge: push the merge branch, dispatch `ci.yml` on it, wait for the run, then on the
+merge branch's checkout at that commit run `node scripts/gate.mjs ci-import --run <id>`.
+Pushing and dispatching are GitHub writes, so they belong to whoever is allowed those, never
+to an implementer. A red import is completed like any red run: `--rerun-failed` locally, or a
+new dispatch.
 
 ## Reports and the ledger
 

@@ -124,6 +124,12 @@ or provider error. After that, replan around it.
   nothing beside it: its touches are dropped when another device run loads the machine.
   The full real-input gates run once, here; a red one is completed with `--rerun-failed`,
   not rerun whole.
+- `real-input:android` can come from CI instead, so the local emulators stay free: push the
+  merge branch, dispatch `ci.yml` on it (`gh workflow run ci.yml --ref <branch>`), wait for
+  the run, then run `node scripts/gate.mjs ci-import --run <id>` on the merge checkout at
+  that commit. It refuses a run of any other commit or a worktree with changes. A red import
+  is completed with `--rerun-failed` like a local red run. The push and the dispatch are
+  yours, never a worker's.
 - A red gate: follow the `flake` skill. Never merge through red.
 - Before merging, `git log --format='%ae' main..<branch> | sort -u` shows only the
   repository's own email.

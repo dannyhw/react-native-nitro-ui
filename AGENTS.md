@@ -80,7 +80,9 @@ macOS, Xcode 27, bun 1.4, Node 24 (`fnm exec --using 24 --`), Java 17, CocoaPods
   runs on the merge branch. The merge run may start a harness gate beside the other
   platform's gate, the two harness gates included, under one lease for both, after building
   both apps; `real-input:ios` runs with no other gate beside it. A red run is completed with
-  `--rerun-failed`.
+  `--rerun-failed`. `real-input:android` can come from a CI run of the merge commit instead:
+  push, dispatch, wait, then `node scripts/gate.mjs ci-import --run <id>`
+  (`docs/agents/gates.md` "Runs on CI"). An implementer never pushes or dispatches.
 - For a long gate, `node scripts/gate.mjs <gate> --background` starts it detached and
   `node scripts/gate.mjs wait --gate <gate> [--timeout-minutes N]` blocks until it ends, exiting
   with the gate's own code or `13` for "still running". Never a `sleep` or `tail` loop, and do not
