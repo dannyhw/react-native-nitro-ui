@@ -63,8 +63,12 @@ const E2E_OUTPUT = path.join('.e2e', 'android');
  * it moves when the suite grows, never to get a slow run through; e2e ends
  * the run at the deadline and exits non-zero, which is a red gate rather than
  * a wedged one.
+ *
+ * A GitHub-hosted runner's emulator is slower and varies by machine: the same
+ * suite takes 36 to 46 minutes there, so the ceiling there is that plus a third.
  */
-const RUN_MAX_MS = 45 * 60 * 1000;
+const RUN_MAX_MS =
+  (process.env.GITHUB_ACTIONS === 'true' ? 63 : 45) * 60 * 1000;
 
 /** @returns {string} */
 function repoRoot() {
