@@ -14,7 +14,7 @@ namespace margelo::nitro::nitroui {
       std::vector<std::string> unresolved;
       for (const std::string& name: names) {
         NSString* symbolName = [NSString stringWithUTF8String:name.c_str()];
-        if (symbolName == nil || [UIImage imageWithSystemizedName:symbolName] == nil) {
+        if (symbolName == nil || [UIImage systemImageNamed:symbolName] == nil) {
           unresolved.push_back(name);
         }
       }
