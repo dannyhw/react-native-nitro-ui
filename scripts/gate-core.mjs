@@ -26,9 +26,10 @@ export const EVIDENCE_STORE_BASENAME = 'nitro-ui-gate-evidence';
  * platform half, with no `trees` on the full digest, and with no `treeAfter` they
  * are taken at their word. On another branch only a green line of this version
  * counts: an older one lacks `relaxed` and `judge`, and a newer one may carry a
- * field this version does not know to refuse.
+ * field this version does not know to refuse. A line imported from a CI run names
+ * it in `source`.
  */
-export const LEDGER_VERSION = 8;
+export const LEDGER_VERSION = 9;
 
 /**
  * Environment switches that loosen what a run checks: a run with any of them set
@@ -40,7 +41,8 @@ export const LEDGER_VERSION = 8;
  *   port, or a device, another run holds.
  * - `NITRO_UI_LSOF_BIN`, `NITRO_UI_ADB_BIN`, `NITRO_UI_SIMCTL_BIN`: another
  *   program answers for the port check or drives the device.
- * - `HARNESS_TEST_TIMEOUT`, `REAL_INPUT_TIMEOUT`, `CI`: longer timeouts.
+ * - `HARNESS_TEST_TIMEOUT`, `REAL_INPUT_TIMEOUT`, `CI`, `GITHUB_ACTIONS`: longer
+ *   timeouts.
  * - `NITRO_UI_TEST_TZ`, `NITRO_UI_TEST_LOCALE`, `NITRO_UI_TEST_LANGUAGES`: the app
  *   runs in another zone or locale than the pinned one, so the DST and locale
  *   cases it exists for may not run. Empty asks the device, so it counts as set.
@@ -56,6 +58,7 @@ export const RELAXING_SWITCHES = [
   'HARNESS_TEST_TIMEOUT',
   'REAL_INPUT_TIMEOUT',
   'CI',
+  'GITHUB_ACTIONS',
   'NITRO_UI_TEST_TZ',
   'NITRO_UI_TEST_LOCALE',
   'NITRO_UI_TEST_LANGUAGES',
@@ -134,6 +137,8 @@ export const JUDGE_FILES = [
   'scripts/gate.mjs',
   'scripts/gate-core.mjs',
   'scripts/gate-runner.mjs',
+  'scripts/gate-ci.mjs',
+  'scripts/gate-ci-core.mjs',
   'scripts/lease.mjs',
   'scripts/lease-core.mjs',
   'scripts/doctor-core.mjs',
@@ -194,6 +199,10 @@ export const TOOLING_FILES = [
   'scripts/gate-core.mjs',
   // The supervisor `gate.mjs` runs each gate's command under.
   'scripts/gate-runner.mjs',
+  // Runs the Android real-input suite on a CI runner, and judges what that run
+  // uploaded; the suite it starts is the one a local gate starts.
+  'scripts/gate-ci.mjs',
+  'scripts/gate-ci-core.mjs',
   'scripts/nitrogen-check.mjs',
   'scripts/readme-examples-check.mjs',
   'scripts/package-files.mjs',
@@ -598,7 +607,8 @@ export function changedPathsGitArgs(mergeBase) {
  * `check`) and `suiteTimings` (the suites of a harness run) are records only: no
  * decision in this file reads them. `relaxed` is `relaxedSwitches` of the run's
  * environment; `null` means it was not read, and such a line is never evidence on
- * another branch. `judge` is `judgeDigest` before the run.
+ * another branch. `judge` is `judgeDigest` before the run. `source` is `null` for a
+ * run on this machine, and names the CI run a line was imported from.
  *
  * @returns {object} a JSON-ready line
  */
@@ -630,6 +640,7 @@ export function ledgerLineFromRun({
   completion = null,
   relaxed = null,
   judge = null,
+  source = null,
 }) {
   return {
     v: LEDGER_VERSION,
@@ -660,6 +671,7 @@ export function ledgerLineFromRun({
     completion,
     relaxed,
     judge,
+    source,
   };
 }
 
@@ -1385,12 +1397,10 @@ export function renderGateTable({
     // A completed run is never shown as a clean one: the result says how it was
     // reached, and the duration names the full run it finished.
     const completion = formatCompletion(entry);
-    const how = [completion, formatFrom(row), formatRelaxed(entry)].filter(
-      (part) => part != null
-    );
+    const how = formatHow(row);
     const result =
       `${STATE_LABELS[row.state] ?? row.state}` +
-      (how.length === 0 ? '' : ` (${how.join('; ')})`);
+      (how == null ? '' : ` (${how})`);
     const of = entry?.completion?.of;
     const duration =
       entry == null
@@ -2449,6 +2459,59 @@ function harnessFilterFor(file) {
 }
 
 /**
+ * The units of a red run that a re-run names, and the filter arguments that name
+ * them, or why no filter can: no per-unit results (the run stopped before its
+ * report), a failure no filter reaches, or every unit passed.
+ *
+ * @param {object} options
+ * @param {string} options.gate the full gate
+ * @param {object | null | undefined} options.units the red run's units
+ * @param {number | null | undefined} options.exitCode the red run's exit
+ * @returns {{refusal: string} | {refusal: null, rerun: string[], filterArgs: string[]}}
+ */
+export function rerunOfUnits({ gate, units, exitCode }) {
+  if (units == null || typeof units.results !== 'object') {
+    return {
+      refusal:
+        `the red ${gate} run recorded no per-unit results: it failed before ` +
+        'its report (a build failure, or a crash before the first unit), so no ' +
+        'filter names what failed. Run the full gate',
+    };
+  }
+  if ((units.unnamed ?? []).length > 0) {
+    return {
+      refusal:
+        `the red ${gate} run failed in a way no filter can name: ` +
+        `${units.unnamed.join('; ')}. Run the full gate`,
+    };
+  }
+  const rerun = Object.entries(units.results)
+    .filter(([, status]) => status !== 'pass')
+    .map(([id]) => id);
+  if (rerun.length === 0) {
+    const everyRunFailed = Object.entries(units.everyRun ?? {})
+      .filter(([, status]) => status !== 'pass')
+      .map(([id]) => id);
+    return {
+      refusal:
+        `every unit of the red ${gate} run passed, so its failure ` +
+        (everyRunFailed.length > 0
+          ? `(${everyRunFailed.join(', ')}, which no filter selects)`
+          : `(exit ${String(exitCode ?? '?')})`) +
+        ' is not one a filter can name. Run the full gate',
+    };
+  }
+  return {
+    refusal: null,
+    rerun,
+    filterArgs:
+      units.kind === 'harness'
+        ? rerun.map(harnessFilterFor)
+        : realInputFilterArgs(rerun, units.filters),
+  };
+}
+
+/**
  * What `--rerun-failed` would do, or why it refuses.
  *
  * The run it completes is the newest line of the full gate that is red on the
@@ -2500,47 +2563,17 @@ export function planRerunFailed({ gate, entries, tree, trees, gateTrees }) {
         'be completed: run the full gate',
     };
   }
-  const units = base.units;
-  if (units == null || typeof units.results !== 'object') {
-    return {
-      refusal:
-        `the red ${gate} run recorded no per-unit results: it failed before ` +
-        'its report (a build failure, or a crash before the first unit), so no ' +
-        'filter names what failed. Run the full gate',
-    };
-  }
-  if ((units.unnamed ?? []).length > 0) {
-    return {
-      refusal:
-        `the red ${gate} run failed in a way no filter can name: ` +
-        `${units.unnamed.join('; ')}. Run the full gate`,
-    };
-  }
-  const rerun = Object.entries(units.results)
-    .filter(([, status]) => status !== 'pass')
-    .map(([id]) => id);
-  if (rerun.length === 0) {
-    const everyRunFailed = Object.entries(units.everyRun ?? {})
-      .filter(([, status]) => status !== 'pass')
-      .map(([id]) => id);
-    return {
-      refusal:
-        `every unit of the red ${gate} run passed, so its failure ` +
-        (everyRunFailed.length > 0
-          ? `(${everyRunFailed.join(', ')}, which no filter selects)`
-          : `(exit ${String(base.exitCode ?? '?')})`) +
-        ' is not one a filter can name. Run the full gate',
-    };
-  }
-  const filterArgs =
-    units.kind === 'harness'
-      ? rerun.map(harnessFilterFor)
-      : realInputFilterArgs(rerun, units.filters);
+  const named = rerunOfUnits({
+    gate,
+    units: base.units,
+    exitCode: base.exitCode,
+  });
+  if (named.refusal != null) return { refusal: named.refusal };
   return {
     refusal: null,
     base,
-    rerun,
-    filterArgs,
+    rerun: named.rerun,
+    filterArgs: named.filterArgs,
     attempt: Number(base.completion?.attempt ?? 0) + 1,
     of: base.completion?.of ?? {
       ts: base.ts ?? null,
@@ -2690,6 +2723,26 @@ export function formatFrom(row) {
   return row?.from == null ? null : `from \`${row.from}\``;
 }
 
+/** `CI run 123` for a line imported from a CI run, else `null`. */
+export function formatSource(entry) {
+  const runId = entry?.source?.runId;
+  return runId == null ? null : `CI run ${String(runId)}`;
+}
+
+/**
+ * How a row's result was reached, in the order a reader needs it: completed, the CI
+ * run it came from, the branch it came from, relaxed. `null` when none applies.
+ */
+export function formatHow(row) {
+  const parts = [
+    formatCompletion(row?.entry),
+    formatSource(row?.entry),
+    formatFrom(row),
+    formatRelaxed(row?.entry),
+  ].filter((part) => part != null);
+  return parts.length === 0 ? null : parts.join('; ');
+}
+
 /** `completed: 1 of 28 units re-run, attempt 1` - what a completed row says. */
 export function formatCompletion(entry) {
   const completion = entry?.completion;
@@ -2705,12 +2758,8 @@ export function formatCompletion(entry) {
 /** The line `need` prints for one row, with the reason when it is not satisfied. */
 export function explainNeedRow(row, codeTree) {
   if (row.state === 'green') {
-    const parts = [
-      formatCompletion(row.entry),
-      formatFrom(row),
-      formatRelaxed(row.entry),
-    ].filter((part) => part != null);
-    const how = parts.length === 0 ? '' : ` (${parts.join('; ')})`;
+    const parts = formatHow(row);
+    const how = parts == null ? '' : ` (${parts})`;
     if (row.matched != null && DEVICE_GATES.includes(row.matched))
       return `${row.gate} — green on its own digest${how}`;
     return row.matched != null && row.matched !== 'full'
@@ -2719,7 +2768,8 @@ export function explainNeedRow(row, codeTree) {
   }
   if (row.state === 'red') {
     const from = formatFrom(row);
-    return `${row.gate} — red (exit ${String(row.entry?.exitCode ?? '?')} on tree ${String(row.entry?.tree ?? '?').slice(0, 12)}, ${row.entry?.logPath ?? 'no log'}${from == null ? '' : `, ${from}`})`;
+    const evidence = row.entry?.source?.url ?? row.entry?.logPath ?? 'no log';
+    return `${row.gate} — red (exit ${String(row.entry?.exitCode ?? '?')} on tree ${String(row.entry?.tree ?? '?').slice(0, 12)}, ${evidence}${from == null ? '' : `, ${from}`})`;
   }
   if (row.state === 'stale') {
     const ran = String(row.got ?? row.entry?.tree ?? '?').slice(0, 12);

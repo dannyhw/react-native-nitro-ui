@@ -320,3 +320,148 @@ jobs:
           packageManager: bun
           # Absolute: the action checks this path from `projectRoot`, not the checkout root.
           app: ${{ github.workspace }}/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app
+
+  # The full Android real-input suite on an emulator nothing else shares. A merge can
+  # take `real-input:android` from this job's run of the merge commit:
+  # `node scripts/gate.mjs ci-import --run <id>` judges what it uploads.
+  real-input-android:
+    name: Real input (Android)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Build ~10 min, emulator boot, a suite that takes ~45 min here (63 at its
+    # ceiling), a re-run of what failed, and the uploads.
+    timeout-minutes: 180
+    env:
+      # The runner refuses to pick a device itself; this VM has exactly this one.
+      ANDROID_AVD: nitroui
+      EMULATOR_PORT: '5554'
+      ANDROID_SERIAL: emulator-5554
+      METRO_PORT: '8081'
+      # Pinned: newer command-line tools put AVDs under an XDG folder otherwise.
+      ANDROID_AVD_HOME: /home/runner/.android/avd
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Setup JDK
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Accept Android SDK licenses
+        run: /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: basic
+          cache-read-only: false
+
+      - name: Build stamped debug app
+        env:
+          GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx6g'
+          NITRO_UI_CCACHE: '0'
+        run: node scripts/build-app.mjs --platform android --arch x86_64
+
+      # The same device the leased local emulators are: API 35, Google APIs, a Pixel 9
+      # profile with no hardware keyboard, so the soft keyboard the suite reads comes up.
+      - name: Create the emulator
+        run: |
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin"
+          image='system-images;android-35;google_apis;x86_64'
+          yes | "$sdk/sdkmanager" "$image" emulator platform-tools > /dev/null
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          echo no | "$sdk/avdmanager" create avd -n "$ANDROID_AVD" -k "$image" -d pixel_9 --force
+          cfg="$ANDROID_AVD_HOME/$ANDROID_AVD.avd/config.ini"
+          printf 'hw.ramSize=4096\nhw.cpu.ncore=4\ndisk.dataPartition.size=6G\nhw.keyboard=no\nhw.initialOrientation=portrait\n' >> "$cfg"
+
+      - name: Boot the emulator
+        run: |
+          echo "nproc: $(nproc)  mem: $(free -g | awk '/^Mem:/{print $2}')GiB  load: $(cut -d' ' -f1-3 /proc/loadavg)"
+          launch=$(node -e "import('./scripts/emulator-launch.mjs').then((m) => console.log(m.emulatorLaunchCommand({ avd: process.env.ANDROID_AVD, port: Number(process.env.EMULATOR_PORT), snapshot: 'cold', host: { env: process.env, platform: process.platform } }, process.env.ANDROID_HOME + '/emulator/emulator')))")
+          echo "launch: $launch"
+          # Outside the checkout: a new file there changes the tree the app stamp was built from.
+          nohup $launch > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          adb -s "$ANDROID_SERIAL" wait-for-device
+          booted=''
+          for _ in $(seq 1 300); do
+            booted=$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            [ "$booted" = 1 ] && break
+            sleep 2
+          done
+          echo "boot_completed=$booted at $(date -u +%H:%M:%S) load: $(cut -d' ' -f1-3 /proc/loadavg)"
+          [ "$booted" = 1 ]
+          # The device's own ring buffers roll over within minutes, so a failure early in
+          # the run is gone by the time the capture step reads them.
+          mkdir -p "$RUNNER_TEMP/device-log"
+          nohup adb -s "$ANDROID_SERIAL" logcat -b events,system -v threadtime > "$RUNNER_TEMP/device-log/events-system.txt" 2>&1 &
+
+      # Red here does not fail the job yet: the re-run below may complete it.
+      - name: Run real input
+        id: full
+        continue-on-error: true
+        run: node scripts/gate-ci.mjs run --dir "$RUNNER_TEMP/real-input-ci"
+
+      - name: Capture the screen a failed run left
+        if: steps.full.outcome == 'failure'
+        run: |
+          out="$RUNNER_TEMP/after-failure"
+          mkdir -p "$out"
+          adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' > "$out/focus.txt" || true
+          adb shell wm size > "$out/wm-size.txt" || true
+          adb shell wm density >> "$out/wm-size.txt" || true
+          adb exec-out screencap -p > "$out/screen.png" || true
+          adb shell uiautomator dump /sdcard/after-failure.xml && adb pull /sdcard/after-failure.xml "$out/tree.xml" || true
+          adb logcat -d -t 2000 > "$out/logcat.txt" || true
+          # The whole run's app starts, stops, focus changes and ANRs, with times.
+          adb logcat -d -b events -v threadtime > "$out/events.txt" || true
+          adb shell dumpsys window lastanr > "$out/lastanr.txt" || true
+
+      # Once, and only the units a completion of the red run would re-run
+      # (`gate.mjs real-input:android --rerun-failed`). A failure no filter names, or
+      # one before the suite started, is not re-run.
+      - name: Re-run the failed controls once
+        if: steps.full.outcome == 'failure'
+        continue-on-error: true
+        run: node scripts/gate-ci.mjs rerun --dir "$RUNNER_TEMP/real-input-ci"
+
+      # What `ci-import` reads: each run's record, units file and e2e output.
+      - name: Upload the real-input report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: real-input-android
+          path: ${{ runner.temp }}/real-input-ci
+          if-no-files-found: warn
+
+      - name: Upload real-input logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: real-input-android-logs
+          include-hidden-files: true
+          path: |
+            .real-input/android
+            ${{ runner.temp }}/emulator.log
+            ${{ runner.temp }}/after-failure
+            ${{ runner.temp }}/device-log
+          if-no-files-found: warn
+
+      # The job's own conclusion, judged the way `ci-import` judges the upload.
+      - name: Verdict
+        if: always()
+        run: node scripts/gate-ci.mjs verdict --dir "$RUNNER_TEMP/real-input-ci"

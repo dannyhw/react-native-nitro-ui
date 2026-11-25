@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "sha": "75f84096bafb36f69f6508851b722dfad17833ad",
+  "args": [],
+  "startedAt": "2026-11-25T16:20:50Z",
+  "finishedAt": "2026-11-25T17:17:27Z",
+  "exitCode": 0,
+  "signal": null,
+  "device": "emulator-5554",
+  "relaxed": {}
+}
