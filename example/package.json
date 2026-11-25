@@ -51,6 +51,7 @@
     "@storybook/addon-ondevice-controls": "^10.7.0",
     "@storybook/react-native": "^10.7.0",
     "@types/react": "^19.2.0",
+    "chai": "6.3.0",
     "e2e": "0.23.1",
     "react-native-builder-bob": "^0.44.1",
     "react-native-harness": "1.6.0",
