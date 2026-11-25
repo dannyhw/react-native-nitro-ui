@@ -74,6 +74,7 @@ cpp/NitroUiScrollOffset.hpp
 cpp/NitroUiScrollShadow.hpp
 cpp/NitroUiSizingEngine.cpp
 cpp/NitroUiSizingEngine.hpp
+cpp/NitroUiSystemImages.hpp
 cpp/core/NitroUiClock.hpp
 cpp/core/NitroUiPerf.hpp
 cpp/core/NitroUiSizing.hpp
@@ -118,6 +119,7 @@ ios/core/NitroUiModel.swift
 ios/core/NitroUiPresentation.swift
 ios/core/NitroUiPresenterChain.swift
 ios/core/NitroUiPressTravel.swift
+ios/core/NitroUiSystemImages.mm
 ios/core/UIColor+NitroUiColor.swift
 lib/module/MaterialTheme.js
 lib/module/MaterialTheme.js.map
@@ -342,6 +344,8 @@ lib/module/iconSource.js.map
 lib/module/index.js
 lib/module/index.js.map
 lib/module/package.json
+lib/module/systemImageName.js
+lib/module/systemImageName.js.map
 lib/typescript/package.json
 lib/typescript/src/MaterialTheme.d.ts
 lib/typescript/src/MaterialTheme.d.ts.map
@@ -565,6 +569,8 @@ lib/typescript/src/iconSource.d.ts
 lib/typescript/src/iconSource.d.ts.map
 lib/typescript/src/index.d.ts
 lib/typescript/src/index.d.ts.map
+lib/typescript/src/systemImageName.d.ts
+lib/typescript/src/systemImageName.d.ts.map
 licenses/material-symbols/LICENSE
 nitro-ui.sizing.json
 nitro.json
@@ -1245,3 +1251,4 @@ src/core/useStableCallback.ts
 src/iconName.ts
 src/iconSource.ts
 src/index.ts
+src/systemImageName.ts
