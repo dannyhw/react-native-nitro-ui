@@ -202,11 +202,20 @@ line on this branch, so a merge does not hold a local emulator for the suite.
   refuses, and records nothing, when the run's head SHA is not `HEAD`, when the worktree has
   uncommitted changes, when the run or the job is not finished, when the run is of another
   workflow or has no job named `Real input (Android)`, when that attempt is already in the
-  ledger, and when the artifact is missing or holds no record of the full run.
+  ledger, and when the artifact is missing or holds no record of the full run. It also refuses
+  a run that started before a `real-input:android` line that already decides this branch's
+  row on this code, since the last line appended decides and the import would replace newer
+  evidence.
+- The artifact imported is the one `real-input-android` artifact created while the imported
+  job ran, downloaded by its ID. A run re-run on GitHub keeps every attempt's artifacts, so
+  none, or more than one, in that window is refused.
 - The run is judged from its upload, never from the job's conclusion. The e2e report is
   judged again by the code a local run uses, quarantines included, and a control passes only
-  when the units file and the report both say so. The run must have exited 0, and its record
-  and report must be of `HEAD`. Anything short of that is a red line.
+  when the units file and the report both say so. The run must have exited 0, its record
+  and report must be of `HEAD`, and it must be the full suite: given no arguments, with every
+  control selected. Anything short of that is a red line. The re-run never completes a full
+  run whose upload is in doubt: not the full suite, not of `HEAD`, or not agreeing with its
+  report.
 - A full run the job re-ran is recorded as one completion line, under the rules in
   "Completing a red run", when the re-run named exactly what a completion would. Otherwise
   the red full run is recorded and the re-run is not counted.
@@ -220,8 +229,8 @@ line on this branch, so a merge does not hold a local emulator for the suite.
 For a merge: push the merge branch, dispatch `ci.yml` on it, wait for the run, then on the
 merge branch's checkout at that commit run `node scripts/gate.mjs ci-import --run <id>`.
 Pushing and dispatching are GitHub writes, so they belong to whoever is allowed those, never
-to an implementer. A red import is completed like any red run: `--rerun-failed` locally, or a
-new dispatch.
+to an implementer. A red import is completed with `--rerun-failed` locally, or replaced by a newer
+full run from a new dispatch.
 
 ## Reports and the ledger
 
