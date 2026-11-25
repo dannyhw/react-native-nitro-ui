@@ -14,11 +14,17 @@ export interface FrontDevice {
   processIds(): string;
   /** `dumpsys window displays` followed by `dumpsys window windows`. */
   windowDump(): string;
+  /** `dumpsys activity activities`. */
+  activityDump(): string;
 }
 
+/** The app's activity records `dumpsys activity activities` still lists. */
+export function appActivityRecords(dump: string, appId: string): string[];
+
 /**
- * Stop the app, then wait until it has no process and the focused window belongs to
- * something else; throws at the deadline, naming the focused window.
+ * Stop the app, then wait until it has no process, the focused window belongs to
+ * something else and no activity record of it is left; throws at the deadline, naming
+ * what is left.
  */
 export function stopAndAwaitLeavingFront(
   device: FrontDevice,
