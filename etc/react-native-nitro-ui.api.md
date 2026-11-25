@@ -633,6 +633,7 @@ export interface NitroUiCore extends HybridObject<{
     setPerfEnabled(enabled: boolean): void;
     setSizingTraceEnabled(enabled: boolean): void;
     sizingStats(): NitroUiSizingStats;
+    unresolvedSystemImageNames(names: string[]): Promise<string[]>;
 }
 
 // @public
