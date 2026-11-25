@@ -40,10 +40,13 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   `MenuWitness`, which also counts through the fade.
 - `Menu.harness.tsx` (iOS) "Split trigger (E3) › is two halves, and each one does only its own
   job": "the split trigger tap" 0 of 1 events in 8000 ms, GitHub-hosted CI only, six trial
-  rounds 2026-11-24 and again 2026-11-25. Likely the synthesised `pressAt` held past SwiftUI `Menu(primaryAction:)`'s
+  rounds 2026-11-24 and twice more 2026-11-25. Likely the synthesised `pressAt` held past SwiftUI `Menu(primaryAction:)`'s
   long-press threshold on a slow runner (driver timing). Blocks nothing: manual CI harness only.
-- `ListItem.harness.tsx` (Android, G30) "draws no insets… inside a Form.Row", two events where only
-  `form-item:press` was expected, GitHub-hosted CI 2026-11-24, seen once.
+- `Popover.harness.tsx` (iOS) "follows the content when it resizes while the popover is up":
+  `expected 116 to be less than or equal to 2` at the drawn-height check (the popover did not
+  follow its grown content), GitHub-hosted CI 2026-11-25, seen once.
+- `Conformance.harness.tsx` (iOS) suite failed to run: the app exited while it was being prepared,
+  2026-11-25, `harness:ios` with `harness:android` beside it on a task branch; green alone.
 - `ButtonGroup.harness.tsx` (iOS, G20) "moves the items a 220-point well cannot hold…": "bg-narrow"
   never handed back a `hybridRef` handle, GitHub-hosted CI 2026-11-24, seen once. Again on
   "presses once per item…" (`bg-press`), CI 2026-11-25, inside an app session that lost its
