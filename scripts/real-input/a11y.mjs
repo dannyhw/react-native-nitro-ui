@@ -115,12 +115,6 @@ import { findByTestId, findAllByDescription } from './uiautomator.mjs';
  *   so a row that said `'other'` would go red on the day somebody fixes it, and the fix
  *   would come with a test to weaken. The measured deviation belongs in
  *   {@link A11Y_EXEMPTIONS}, which is deleted by a red test when the control is repaired.
- *
- *   Absent for a case whose announcement cannot be graded at all, which is itself a
- *   finding: `hosted-picker` has no element carrying its name (it announces the name
- *   twice), so there is nothing to compare a type with. Its debt row is what keeps that
- *   visible, and clearing it is what prompts whoever fixes it to say what the control
- *   should be announced as.
  */
 
 /** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'|'stepper'|'listitem'} ScreenId */
@@ -386,11 +380,7 @@ export const A11Y_CONTROLS = Object.freeze([
     role: 'interactive',
     hosted: true,
     anchorTestId: 'host-picker',
-    // No `iosTrait`, and it is not laziness: measured, a hosted Picker's inner element
-    // announces itself as "Hosted picker, Hosted picker" — the label twice — so no
-    // element in its subtree carries the label alone and the iOS half cannot name the
-    // control's element at all. That is a finding in its own right, in
-    // `docs/tasks/FOLLOWUPS.md`; the static anchor check still runs.
+    iosTrait: 'button',
   },
   {
     id: 'hosted-date-picker',
@@ -656,11 +646,7 @@ const CONTEXT_MENU_TEXT_STOPS_ROW = new RegExp(
  *   (`NitroUiSliderAccessibilityElement`, `.adjustable`), and XCUITest reports that
  *   element's type as Other — so VoiceOver says the name and the number but never says
  *   what kind of control it is.
- * - `hosted-picker`: no element under the `testID` is announced as "Hosted picker" at
- *   all. The one the label reaches announces **"Hosted picker, Hosted picker"** — the
- *   name twice, because the hosted Picker's own label and its `accessibilityLabel`
- *   arrive at the same element. A person hears the name stutter.
- * - `form`: nothing under the row's `testID` is announced as "Row with onPress" either.
+ * - `form`: nothing under the row's `testID` is announced as "Row with onPress".
  *   The only element with the name is the React Native wrapper for the row's own `Text`,
  *   announced as `other`, and the list's cell does not answer for the row's name — so the
  *   row is a group of stops with a named one in it, not the one button the Android half
@@ -751,17 +737,6 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     // losing the label is not this debt. The kind is therefore excused and the name, the
     // box and the value are not, which is also what the harness case grades.
     matches: /announced as an other and not as an adjustable/,
-  },
-  {
-    control: 'hosted-picker',
-    platform: 'ios',
-    followups: 'X4 a11y: a hosted Picker announces its label twice',
-    // Only the stutter (X4 re-review M3). `/announced as/` matched the *lost-label*
-    // sentence as well — "no element other than the React Native wrapper is announced as
-    // …" — which is what every other way of losing a name produces. So the case would
-    // stay green if `accessibilityLabel` stopped reaching the hosted Picker entirely, and
-    // `staleExemptions` could never retire the row for that either.
-    matches: /announces the control's name twice/,
   },
   {
     control: 'context-menu',
