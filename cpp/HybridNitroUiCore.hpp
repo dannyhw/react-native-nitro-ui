@@ -40,6 +40,12 @@ namespace margelo::nitro::nitroui {
       double prewarmSizing(const std::vector<std::string>& componentNames) override;
       void setSizingTraceEnabled(bool enabled) override;
       std::vector<NitroUiSizingTraceEvent> drainSizingTrace() override;
+
+      /**
+       * iOS asks UIKit on the main thread and settles later. A platform without
+       * SF Symbols settles at once with nothing unresolved, so it looks nothing up.
+       */
+      std::shared_ptr<Promise<std::vector<std::string>>> unresolvedSystemImageNames(const std::vector<std::string>& names) override;
   };
 
 } // namespace margelo::nitro::nitroui

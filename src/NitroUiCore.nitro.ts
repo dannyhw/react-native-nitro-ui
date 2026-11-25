@@ -154,4 +154,16 @@ export interface NitroUiCore extends HybridObject<{
 
   /** Every traced size change since arming (oldest first). */
   drainSizingTrace(): NitroUiSizingTraceEvent[];
+
+  /**
+   * Of the SF Symbol names given, the ones this device cannot draw.
+   *
+   * A development-time question the app cannot answer for itself: whether a name
+   * draws depends on the iOS version of the running device, so a symbol that
+   * exists on the simulator can be missing on an older phone. iOS only - other
+   * platforms have no SF Symbols to look up and answer with an empty list. The
+   * lookup happens off the calling thread; the returned promise settles when it
+   * is done. An empty input resolves without any lookup.
+   */
+  unresolvedSystemImageNames(names: string[]): Promise<string[]>;
 }
