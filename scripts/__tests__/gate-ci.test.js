@@ -215,6 +215,52 @@ describe('which run may be imported', () => {
       refusals({ entries: [line], run: { ...RUN, run_attempt: 2 } })
     ).toEqual([]);
   });
+
+  it('refuses a run that started before a line already deciding on this code, and says why', () => {
+    // A local red run of 18:08:46, then a green CI run that started at 16:20.
+    const newerRed = {
+      ...imported({ full: red(), head: GREEN_SHA }).line,
+      source: null,
+    };
+    const older = { ...RUN, run_started_at: '2026-11-25T16:20:00Z' };
+    const reasons = refusals({
+      run: older,
+      entries: [newerRed],
+      digests: NOW,
+    });
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toContain(
+      'started at 2026-11-25T16:20:00.000Z, before the red real-input:android run of 2026-11-25T18:08:46.000Z'
+    );
+    expect(reasons[0]).toContain('importing it would replace newer evidence');
+    // Importing it anyway would turn the newer red green on this branch.
+    const { line: olderGreen } = imported({ full: green(), head: GREEN_SHA });
+    expect(
+      gateRowFor({ gate: CI_GATE, list: [newerRed, olderGreen], ...NOW }).state
+    ).toBe('green');
+
+    // A run that started after it, or a line on other code, does not stand in the way.
+    expect(
+      refusals({
+        run: { ...RUN, run_started_at: '2026-11-25T18:30:00Z' },
+        entries: [newerRed],
+        digests: NOW,
+      })
+    ).toEqual([]);
+    expect(
+      refusals({
+        run: older,
+        entries: [newerRed],
+        digests: {
+          ...NOW,
+          gateTrees: { ...GATE_TREES, 'real-input:android': '5'.repeat(64) },
+        },
+      })
+    ).toEqual([]);
+    expect(
+      refusals({ run: RUN, entries: [newerRed], digests: NOW })[0]
+    ).toContain('does not say when it started');
+  });
 });
 
 /* ------------------------------ the verdict ------------------------------ */

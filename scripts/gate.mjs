@@ -2340,6 +2340,7 @@ function commandCiImport({ runId }) {
     head,
     dirty,
     entries: readLedger(branch).entries,
+    digests: before,
   });
   if (reasons.length > 0) return refuse(reasons);
   const job = ciJobOf(jobs.value.jobs);
