@@ -76,9 +76,10 @@ export function popupWindowCount(): number {
 }
 
 /**
- * Stop the app and wait until the window manager has moved the focus off it, so the
- * driver's fresh launch finds nothing to close: the driver gives a closing app 2 s to
- * leave the front, which a slow emulator overruns.
+ * Stop the app and wait until the window manager has moved the focus off it and the
+ * activity manager has let its activities go, so the driver's fresh launch finds nothing
+ * to close: the driver gives a closing app 2 s to leave the front, which a slow emulator
+ * overruns.
  */
 export async function stopAppUntilOutOfFront(): Promise<void> {
   await stopAndAwaitLeavingFront(
@@ -92,6 +93,7 @@ export async function stopAppUntilOutOfFront(): Promise<void> {
         adbShell(['dumpsys', 'window', 'displays']) +
         '\n' +
         adbShell(['dumpsys', 'window', 'windows']),
+      activityDump: () => adbShell(['dumpsys', 'activity', 'activities']),
     },
     APP_ID
   );
