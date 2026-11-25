@@ -107,6 +107,16 @@ Each screenshot is the example screen (`example/src/ButtonScreen.tsx`) as it ope
 
 Material's `outlined` and `text` containers are transparent, so the tint goes to the label there.
 
+## SF Symbols
+
+`systemImage` names an SF Symbol, and the list of symbols belongs to the OS: iOS adds symbols
+with each version, so a name that draws on one device can be a name an older device has never
+heard of. A name with no symbol on the device draws nothing, and what is drawn for a good name
+and a bad one is the same. In a development build the name is looked up on the device, and a
+name that resolves to nothing is said out loud once per component and name - `nitro-ui:
+Button's systemImage "square.and.arrow.up.up" is not an SF Symbol this iOS can draw. ...` -
+in the voice `androidIcon` uses below. A release build looks nothing up and warns nothing.
+
 ## Android icons
 
 iOS draws `systemImage` from SF Symbols. Android has no system icon set, so the app owns the

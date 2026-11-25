@@ -45,7 +45,9 @@ import { ListItem } from 'react-native-nitro-ui';
 neither platform can draw the other's artwork; the same row names both and each
 platform reads its own. An `androidIcon` that cannot be resolved draws nothing and
 warns in development, exactly as `Button`'s does — the slot is still held at its
-24 dp, so the row does not move when a glyph fails to load.
+24 dp, so the row does not move when a glyph fails to load. A `systemImage` iOS has no symbol
+for is the same story on the other platform: nothing drawn, one warning in development
+([button.md](button.md), "SF Symbols").
 
 ## Platform mapping
 

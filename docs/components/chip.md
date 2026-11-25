@@ -51,6 +51,9 @@ icons". What is Chip's own:
 - **iOS never draws it.** `systemImage` is iOS's leading glyph; `androidIcon` is accepted,
   stored (so a handle reads back what React sent) and never painted. Name both and one chip
   looks right on both platforms, with no `Platform.select`.
+- **A `systemImage` is checked on the device** in a development build, because SF Symbols
+  belong to the OS version: one with no symbol draws nothing and warns once
+  ([button.md](button.md), "SF Symbols").
 - **The slot is Material's, at 18 dp** — `FilterChipDefaults.IconSize`, which is the same
   18 dp on both kinds (`AssistChipTokens.IconSize` and `FilterChipTokens.IconSize` agree),
   so an assist chip's glyph and a filter chip's are one size.

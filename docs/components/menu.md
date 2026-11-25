@@ -231,6 +231,11 @@ from, the `@expo/material-symbols` option, the drawable-name form and the failur
 
 - iOS never draws it. `systemImage` is the iOS glyph; `androidIcon` is accepted, stored and never
   painted, so a Menu with an `androidIcon` and one without are the same box on iOS.
+- Whether a `systemImage` has a symbol on the device is the device's answer, so a development
+  build asks it: a name with no symbol draws nothing and warns once, named by where the app
+  wrote it - `systemImage` on the trigger, `actions[].systemImage`, `actions[].items[].systemImage`
+  or `sections[].items[].systemImage` on a row ([button.md](button.md), "SF Symbols"). The same
+  holds for `ContextMenu`.
 - The plain trigger puts it in the slot Material's `Button` uses, with the same sizes, painter
   and `hasStartIcon` padding, because `Menu`'s trigger and `Button` are one composition
   (`NitroUiM3Button`). A glyph that cannot be resolved reserves nothing.
