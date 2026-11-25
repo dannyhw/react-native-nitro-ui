@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  appActivityRecords,
   LEAVE_FRONT_DEADLINE_MS,
   stopAndAwaitLeavingFront,
 } from '../real-input/app-leaves-front.mjs';
@@ -55,8 +56,30 @@ function slowWindowManager(focusHoldMs) {
     },
     processIds: () => (stoppedAt == null ? '4321' : ''),
     windowDump: () => windowDump(device.focused()),
+    activityDump: () =>
+      stoppedAt == null ? activityDump(true) : activityDump(false),
   };
   return device;
+}
+
+/** The app's record as `dumpsys activity activities` prints it while it closes. */
+const RECORD = `ActivityRecord{23bfeb8 u0 ${APP}/.MainActivity t8 f}`;
+
+/** `dumpsys activity activities`, with the app's record or with the launcher's alone. */
+function activityDump(withApp) {
+  return [
+    'ACTIVITY MANAGER ACTIVITIES (dumpsys activity activities)',
+    'Display #0 (activities from top to bottom):',
+    ...(withApp
+      ? [
+          '  * Task{577b491 #8 type=standard A=10209:nitroui.example}',
+          `    * Hist #0: ${RECORD}} isExiting`,
+        ]
+      : []),
+    '  * Task{1a2b3c #7 type=home}',
+    '    * Hist #0: ActivityRecord{8f8f8f u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t7}',
+    '  ResumedActivity: ActivityRecord{8f8f8f u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t7}',
+  ].join('\n');
 }
 
 describe('stopAndAwaitLeavingFront', () => {
@@ -113,5 +136,40 @@ describe('stopAndAwaitLeavingFront', () => {
     ).rejects.toThrow(
       /focused window was ".*NexusLauncherActivity" \(other\), and process 4321 was still running/
     );
+  });
+
+  it('waits while the activity manager still lists the app after the focus has moved', async () => {
+    // On a busy hosted emulator the focus reached the launcher and the process was gone,
+    // and the app's activity record stayed for another 3 s, until the close transition
+    // ended; the driver's close read the foreground app from it.
+    const device = slowWindowManager(0);
+    let polls = 0;
+    device.activityDump = () => activityDump(++polls < 5);
+
+    await stopAndAwaitLeavingFront(device, APP, { pollMs: 10 });
+
+    expect(polls).toBe(5);
+  });
+
+  it('names a record that outlived the stop', async () => {
+    const device = slowWindowManager(0);
+    device.activityDump = () => activityDump(true);
+
+    await expect(
+      stopAndAwaitLeavingFront(device, APP, { deadlineMs: 200, pollMs: 20 })
+    ).rejects.toThrow(`, and the activity manager still listed ${RECORD}.`);
+  });
+});
+
+describe('appActivityRecords', () => {
+  it("lists the app's records once each and no other app's", () => {
+    expect(appActivityRecords(activityDump(true), APP)).toEqual([RECORD]);
+    expect(appActivityRecords(activityDump(false), APP)).toEqual([]);
+  });
+
+  it('does not take another package that starts with the same name', () => {
+    expect(
+      appActivityRecords(`ActivityRecord{1 u0 ${APP}.helper/.Main t3}`, APP)
+    ).toEqual([]);
   });
 });

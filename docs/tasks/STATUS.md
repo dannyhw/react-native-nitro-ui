@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-25 Tooling: a fresh launch in the Android real-input suite waits until the activity manager
+  has let the closed app go, so a slow window manager no longer fails the first test with
+  "remained foreground after close" (X71, #141).
 - 11-25 Tooling: a merge can take `real-input:android` from a GitHub Actions run of the merge
   commit: a dispatch-only CI job runs the suite and re-runs what failed once, and
   `gate.mjs ci-import` judges its upload the way a local run is judged (X70, #140).
