@@ -137,8 +137,12 @@ export function ciImportRefusals({
     );
   }
   // The last line appended decides this branch's row, so a run that started before a
-  // line that already decides on this digest would override newer evidence.
-  const started = Date.parse(String(run?.run_started_at ?? ''));
+  // line that already decides on this digest would override newer evidence. The job's
+  // own start, not the run's: re-running failed jobs moves `run_started_at` to the new
+  // attempt and carries the jobs it did not re-run over with their old times.
+  const started = Date.parse(
+    String(matching.length === 1 ? (matching[0]?.started_at ?? '') : '')
+  );
   const deciding = entries.filter((entry) => {
     if (entry?.gate !== CI_GATE) return false;
     const { state } = gateStateFor({
@@ -152,7 +156,8 @@ export function ciImportRefusals({
   });
   if (deciding.length > 0 && !Number.isFinite(started)) {
     reasons.push(
-      `run ${id} does not say when it started, and this branch already has a ` +
+      `run ${id}'s "${CI_JOB_NAME}" job does not say when it started, and this ` +
+        `branch already has a ` +
         `${CI_GATE} line on this code: an import must not replace a newer run`
     );
   } else {
@@ -160,7 +165,8 @@ export function ciImportRefusals({
     if (newer.length > 0) {
       const last = newer[newer.length - 1];
       reasons.push(
-        `run ${id} started at ${new Date(started).toISOString()}, before the ` +
+        `run ${id}'s "${CI_JOB_NAME}" job started at ` +
+          `${new Date(started).toISOString()}, before the ` +
           `${last.result === 'pass' ? 'green' : 'red'} ${CI_GATE} ` +
           `${last.completion == null ? 'run' : 'completion'} of ${String(last.ts)} ` +
           'already on this branch for this code: importing it would replace newer ' +

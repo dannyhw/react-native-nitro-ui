@@ -263,21 +263,24 @@ describe('which run may be imported', () => {
     ).toEqual([]);
   });
 
-  it('refuses a run that started before a line already deciding on this code, and says why', () => {
-    // A local red run of 18:08:46, then a green CI run that started at 16:20.
+  it('refuses a job that started before a line already deciding on this code, and says why', () => {
+    // A local red run of 18:08:46, then a CI job that started at 16:20 and went green.
     const newerRed = {
       ...imported({ full: red(), head: GREEN_SHA }).line,
       source: null,
     };
-    const older = { ...RUN, run_started_at: '2026-11-25T16:20:00Z' };
+    const jobAt = (started_at) => [
+      { name: 'Checks', status: 'completed' },
+      { name: CI_JOB_NAME, status: 'completed', id: 456, started_at },
+    ];
     const reasons = refusals({
-      run: older,
+      jobs: jobAt('2026-11-25T16:20:00Z'),
       entries: [newerRed],
       digests: NOW,
     });
     expect(reasons).toHaveLength(1);
     expect(reasons[0]).toContain(
-      'started at 2026-11-25T16:20:00.000Z, before the red real-input:android run of 2026-11-25T18:08:46.000Z'
+      'job started at 2026-11-25T16:20:00.000Z, before the red real-input:android run of 2026-11-25T18:08:46.000Z'
     );
     expect(reasons[0]).toContain('importing it would replace newer evidence');
     // Importing it anyway would turn the newer red green on this branch.
@@ -286,17 +289,28 @@ describe('which run may be imported', () => {
       gateRowFor({ gate: CI_GATE, list: [newerRed, olderGreen], ...NOW }).state
     ).toBe('green');
 
-    // A run that started after it, or a line on other code, does not stand in the way.
+    // Re-running only the failed jobs moves the run's start to the new attempt and
+    // carries this job over with its old times: the job's start still decides.
     expect(
       refusals({
-        run: { ...RUN, run_started_at: '2026-11-25T18:30:00Z' },
+        run: { ...RUN, run_attempt: 2, run_started_at: '2026-11-25T19:00:00Z' },
+        jobs: jobAt('2026-11-25T16:20:00Z'),
+        entries: [newerRed],
+        digests: NOW,
+      })[0]
+    ).toContain('importing it would replace newer evidence');
+
+    // A job that started after it, or a line on other code, does not stand in the way.
+    expect(
+      refusals({
+        jobs: jobAt('2026-11-25T18:30:00Z'),
         entries: [newerRed],
         digests: NOW,
       })
     ).toEqual([]);
     expect(
       refusals({
-        run: older,
+        jobs: jobAt('2026-11-25T16:20:00Z'),
         entries: [newerRed],
         digests: {
           ...NOW,
@@ -304,9 +318,9 @@ describe('which run may be imported', () => {
         },
       })
     ).toEqual([]);
-    expect(
-      refusals({ run: RUN, entries: [newerRed], digests: NOW })[0]
-    ).toContain('does not say when it started');
+    expect(refusals({ entries: [newerRed], digests: NOW })[0]).toContain(
+      'does not say when it started'
+    );
   });
 });
 
