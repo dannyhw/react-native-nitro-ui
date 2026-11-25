@@ -118,8 +118,8 @@ internal class PickerModel : NitroUiModel() {
   var accessibilityLabel by mutableStateOf<String?>(null)
 
   /**
-   * What the last pick painted, or `null`. Set by [applyUserSelection] and read once by the
-   * next `afterUpdate`, which clears it. Not observed.
+   * What the last pick painted, or `null`. Set by [applyUserSelection] and cleared by the
+   * first `afterUpdate` whose batch has seen that pick; earlier batches leave it. Not observed.
    */
   var pickStamp: PickerPickStamp? = null
 
@@ -613,8 +613,8 @@ private class PickerHost(
   /**
    * The one entry point for a pick: a row press, the wheel coming to rest, or the test hook.
    * A pick that emitted holds the size report its repaint causes, because the sizing key
-   * that names the new title only arrives with the next props batch. A refused pick puts
-   * the wheel back on the row the model holds.
+   * that names the new title only arrives with a props batch that has seen the pick. A refused
+   * pick puts the wheel back on the row the model holds.
    */
   fun choose(index: Int) {
     if (model.applyUserSelection(index)) {
@@ -1322,11 +1322,9 @@ class HybridNitroUiPicker(
     if (model.displayed != shownBefore) {
       host.syncWheelRow(model.displayed)
     }
-    // The batch a held size report was waiting for has landed. A batch React sent before
-    // it saw the pick names the title the pick replaced, so the hold waits for a batch
-    // whose event count has caught up with native's: only that batch can name what is on
-    // screen. The report is filed only if the index, choices, variant and label are
-    // still the ones the pick painted.
+    // Release the hold only to a batch that has seen the pick: an earlier batch's key predates
+    // it and would file one title's size under another's. The held size is filed only if what
+    // the pick painted is still what is shown.
     val stamped = model.pickStamp
     val caughtUp = model.state.jsEvents >= model.state.nativeEvents
     if (stamped == null || caughtUp) {
