@@ -15,6 +15,7 @@ import {
   hostedRunRelaxed,
 } from '../gate-ci-core.mjs';
 import { readUploadedRun } from '../gate-ci.mjs';
+import { REAL_INPUT_CONTROLS } from '../real-input/controls.mjs';
 import {
   decideNeed,
   gateRowFor,
@@ -38,6 +39,50 @@ const green = () => readUploadedRun(path.join(FIXTURES, 'green/full'));
 const red = () => readUploadedRun(path.join(FIXTURES, 'red/full'));
 
 const GREEN_SHA = green().record.sha;
+
+/** The controls the fixtures ran, which a full run of their day selected. */
+const FIXTURE_CONTROLS = REAL_INPUT_CONTROLS.filter((control) =>
+  green().results.selected.includes(control.id)
+);
+
+/**
+ * An upload as a full run of today's controls: a control added since the fixtures
+ * were cut gets a passing test, and one removed since is dropped.
+ */
+function ofTodaysControls(upload) {
+  const today = REAL_INPUT_CONTROLS.map((control) => control.id);
+  const added = today.filter((id) => !upload.results.selected.includes(id));
+  return {
+    ...upload,
+    results: {
+      ...upload.results,
+      selected: today,
+      controls: [
+        ...upload.results.controls.filter((control) =>
+          today.includes(control.id)
+        ),
+        ...added.map((id) => ({ id, status: 'pass' })),
+      ],
+    },
+    report: {
+      ...upload.report,
+      run: {
+        ...upload.report.run,
+        results: [
+          ...upload.report.run.results.filter((result) =>
+            today.some((id) => result.file === `real-input/${id}.e2e.ts`)
+          ),
+          ...added.map((id) => ({
+            kind: 'test',
+            file: `real-input/${id}.e2e.ts`,
+            titlePath: [`${id} passes`],
+            status: 'passed',
+          })),
+        ],
+      },
+    },
+  };
+}
 const RED_SHA = red().record.sha;
 
 /** A run of the suite moved to another commit, record and report alike. */
@@ -144,6 +189,7 @@ function imported({
     full,
     rerun,
     sources,
+    controls: FIXTURE_CONTROLS,
   });
 }
 
@@ -406,6 +452,63 @@ describe('a run is judged from what it uploaded', () => {
     record.record = { ...record.record, sha: RED_SHA };
     expect(imported({ full: record, head: GREEN_SHA }).line.result).toBe(
       'fail'
+    );
+  });
+
+  it('an upload of a filtered run is not the full gate, even when everything it ran passed', () => {
+    const filtered = formRerun();
+    const { line, full } = imported({ full: filtered, head: RED_SHA });
+    expect(line.units.results.form).toBe('pass');
+    expect(line.result).toBe('fail');
+    expect(full.why).toContain(
+      'the run was given --control form, so it is not the full suite'
+    );
+    expect(full.why).toContainEqual(
+      expect.stringMatching(
+        new RegExp(
+          `^the run selected 1 of the ${String(FIXTURE_CONTROLS.length)} controls ` +
+            '\\(not switch, slider, .*\\), so it is not the full suite$'
+        )
+      )
+    );
+
+    // Given no arguments, and nothing but the a11y cases selected.
+    const bare = green();
+    bare.record = { ...bare.record, args: [] };
+    bare.results = { ...bare.results, selected: [], controls: [] };
+    const second = imported({ full: bare, head: GREEN_SHA });
+    expect(second.line.result).toBe('fail');
+    expect(second.full.why).toEqual([
+      expect.stringMatching(
+        new RegExp(
+          `^the run selected 0 of the ${String(FIXTURE_CONTROLS.length)} controls ` +
+            '\\(not switch, .*\\), so it is not the full suite$'
+        )
+      ),
+    ]);
+    const unsaid = green();
+    delete unsaid.record.args;
+    expect(imported({ full: unsaid, head: GREEN_SHA }).full.why).toEqual([
+      'the run record does not say what the suite was given, so it is not known to be the full suite',
+    ]);
+  });
+
+  it('a filtered run in place of the full one is not completed by the re-run', () => {
+    const failing = formRerun({ exitCode: 1 });
+    failing.results = {
+      ...failing.results,
+      controls: [{ id: 'form', status: 'fail' }],
+    };
+    failing.report = red().report;
+    const { line, notes } = imported({
+      full: failing,
+      rerun: formRerun(),
+      head: RED_SHA,
+    });
+    expect(line.completion).toBeNull();
+    expect(line.result).toBe('fail');
+    expect(notes[0]).toContain(
+      "the full run's upload does not stand for a full run"
     );
   });
 
@@ -675,8 +778,8 @@ function makeClone() {
     if (zipped.status !== 0) throw new Error(`zip: ${zipped.stderr}`);
   };
   // Attempt 1 uploaded a red report; attempt 2, the one imported, a green one.
-  zipOf(900, ofCommit(red(), head));
-  zipOf(901, ofCommit(green(), head));
+  zipOf(900, ofCommit(ofTodaysControls(red()), head));
+  zipOf(901, ofCommit(ofTodaysControls(green()), head));
   const runJson = {
     id: 777,
     head_sha: head,

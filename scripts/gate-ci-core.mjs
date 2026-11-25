@@ -287,6 +287,8 @@ function recordedRelaxed(record) {
  * @param {{followups: string | null, readTestFile: (file: string) => string | null}} options.sources
  *   what quarantines are read from, at that commit
  * @param {ReadonlyArray<{id: string, title: string}>} [options.controls]
+ * @param {boolean} [options.whole] the run must be the full suite: no arguments, and
+ *   every control selected
  * @returns {{passed: boolean, units: object | null, why: string[], evidence: string[],
  *   quarantined: string[], failures: string[]}} `why` every reason it did not pass;
  *   `evidence` the ones about the upload itself rather than a unit or the exit code
@@ -298,6 +300,7 @@ export function judgeUploadedRun({
   sha,
   sources,
   controls = REAL_INPUT_CONTROLS,
+  whole = false,
 }) {
   const evidence = [];
   const why = [];
@@ -318,6 +321,16 @@ export function judgeUploadedRun({
         : `the run exited ${String(exitCode)}`
     );
   }
+  if (whole) {
+    const args = Array.isArray(record?.args) ? record.args.map(String) : null;
+    if (args == null || args.length > 0) {
+      evidence.push(
+        args == null
+          ? 'the run record does not say what the suite was given, so it is not known to be the full suite'
+          : `the run was given ${args.join(' ')}, so it is not the full suite`
+      );
+    }
+  }
   if (results == null || !Array.isArray(results.selected)) {
     why.push(
       'the run wrote no per-control results: it stopped before its report'
@@ -332,6 +345,17 @@ export function judgeUploadedRun({
     };
   }
   const selected = results.selected.map(String);
+  if (whole) {
+    const left = controls
+      .map((control) => control.id)
+      .filter((id) => !selected.includes(id));
+    if (left.length > 0 || selected.length !== controls.length) {
+      evidence.push(
+        `the run selected ${String(selected.length)} of the ${String(controls.length)} ` +
+          `controls${left.length > 0 ? ` (not ${left.join(', ')})` : ''}, so it is not the full suite`
+      );
+    }
+  }
   const known = selected.map(
     (id) => controls.find((control) => control.id === id) ?? null
   );
@@ -462,6 +486,7 @@ export function ciLedgerLine({
     sha: head,
     sources,
     controls,
+    whole: true,
   });
   const common = {
     gate: CI_GATE,
@@ -508,6 +533,13 @@ export function ciLedgerLine({
   });
   if (rerun == null)
     return { line: base, notes, full: fullVerdict, rerun: null };
+  if (fullVerdict.evidence.length > 0) {
+    notes.push(
+      `the full run's upload does not stand for a full run (${fullVerdict.evidence.join('; ')}), ` +
+        'so nothing completes it. The re-run is not counted'
+    );
+    return { line: base, notes, full: fullVerdict, rerun: null };
+  }
 
   const rerunArgs = Array.isArray(rerun.record?.args)
     ? rerun.record.args.map(String)
