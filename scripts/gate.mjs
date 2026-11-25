@@ -191,15 +191,15 @@ const USAGE =
   '        code either way, so a backgrounded gate is evidence exactly as a\n' +
   '        foreground one is)\n' +
   '\n' +
-  "       (`logs` lists this clone's stored gate logs - they live in the git common\n" +
-  '        directory, so removing a worktree cannot lose them; --failed limits the\n' +
-  "        list to runs the store's own record says failed (a log it cannot judge is\n" +
-  '        reported as unknown, not silently skipped), --all shows every branch)\n' +
-  '\n' +
   '       (`ci-import` reads a GitHub Actions run of the "Real input (Android)" job\n' +
   '        with gh and records it as real-input:android, judged from the report it\n' +
   '        uploaded. It refuses unless the run is finished and of HEAD, and the\n' +
-  '        worktree is clean. It never dispatches or writes to GitHub)\n';
+  '        worktree is clean. It never dispatches or writes to GitHub)\n' +
+  '\n' +
+  "       (`logs` lists this clone's stored gate logs - they live in the git common\n" +
+  '        directory, so removing a worktree cannot lose them; --failed limits the\n' +
+  "        list to runs the store's own record says failed (a log it cannot judge is\n" +
+  '        reported as unknown, not silently skipped), --all shows every branch)\n';
 
 /** Sampled across the whole run, so the ledger's load is not one moment's. */
 const LOAD_SAMPLE_INTERVAL_MS = 15_000;
