@@ -2,6 +2,7 @@ import { type ColorValue, type ViewProps } from 'react-native';
 
 import type { ButtonSize, ButtonVariant } from '../Button/Button';
 import { warnAndroidIconName } from '../../iconName';
+import { warnIosSystemImageName } from '../../systemImageName';
 import {
   androidIconUrl,
   androidIconResourceName,
@@ -244,6 +245,9 @@ export function Menu({
     // Neither a URL nor a valid resource name is most likely a typo, and native
     // would draw nothing without saying why.
     warnAndroidIconName('Menu', 'androidIcon', resolvedAndroidIcon);
+  }
+  if (systemImage != null) {
+    warnIosSystemImageName('Menu', 'systemImage', systemImage);
   }
   const processedTint = useProcessedColor(tintColor);
   const rows = useMenuRows(group);

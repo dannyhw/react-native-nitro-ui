@@ -1,6 +1,7 @@
 import { type ColorValue, type ViewProps } from 'react-native';
 
 import { warnAndroidIconName } from '../../iconName';
+import { warnIosSystemImageName } from '../../systemImageName';
 import {
   androidIconResourceName,
   androidIconUrl,
@@ -325,6 +326,9 @@ export function IconButton({
     androidIconResourceName(resolvedAndroidIcon) == null
   ) {
     warnAndroidIconName('IconButton', 'androidIcon', resolvedAndroidIcon);
+  }
+  if (systemImage != null) {
+    warnIosSystemImageName('IconButton', 'systemImage', systemImage);
   }
 
   const resolvedVariant = resolveVariant(variant);
