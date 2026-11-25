@@ -24,6 +24,16 @@ function getCore(): NitroUiCore {
 }
 
 /**
+ * The core native object for the library's own development checks: the same
+ * object `nitroUiCore` wraps, without the app-facing surface.
+ *
+ * @internal Not app API — exported for this repo's own modules and tests.
+ */
+export function nitroUiNativeCore(): NitroUiCore {
+  return getCore();
+}
+
+/**
  * The shared native core: a clock, performance marks and sizing diagnostics.
  *
  * `now()` is a monotonic clock in milliseconds on the same time base as the

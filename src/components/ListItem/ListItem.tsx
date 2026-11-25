@@ -7,6 +7,7 @@ import {
   type NitroCallbackProp,
 } from '../../core/useStableCallback';
 import { warnAndroidIconName } from '../../iconName';
+import { warnIosSystemImageName } from '../../systemImageName';
 import {
   androidIconResourceName,
   androidIconUrl,
@@ -197,6 +198,9 @@ export function ListItem({
     androidIconResourceName(resolvedAndroidIcon) == null
   ) {
     warnAndroidIconName('ListItem', 'androidIcon', resolvedAndroidIcon);
+  }
+  if (systemImage != null) {
+    warnIosSystemImageName('ListItem', 'systemImage', systemImage);
   }
   // An empty string is not a slot: it would draw an empty line and give the row
   // a different sizing key from the same row with `undefined`.

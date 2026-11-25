@@ -72,6 +72,9 @@ Each item is controlled or uncontrolled on its own, so a group can hold a contro
 uncontrolled one and plain actions at the same time. Only an item with `checked` follows a write
 from React.
 
+An item's `systemImage` is the device's own question: on iOS a name with no symbol draws nothing,
+and a development build says which item named it ([button.md](button.md), "SF Symbols").
+
 ```tsx
 export function Toolbar() {
   const [spellcheck, setSpellcheck] = useState(true);

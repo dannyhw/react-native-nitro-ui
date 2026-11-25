@@ -25,6 +25,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSizingTraceEvent; }
 #include "NitroUiSizingStats.hpp"
 #include <string>
 #include "NitroUiSizingTraceEvent.hpp"
+#include <NitroModules/Promise.hpp>
 
 namespace margelo::nitro::nitroui {
 
@@ -67,6 +68,7 @@ namespace margelo::nitro::nitroui {
       virtual double prewarmSizing(const std::vector<std::string>& componentNames) = 0;
       virtual void setSizingTraceEnabled(bool enabled) = 0;
       virtual std::vector<NitroUiSizingTraceEvent> drainSizingTrace() = 0;
+      virtual std::shared_ptr<Promise<std::vector<std::string>>> unresolvedSystemImageNames(const std::vector<std::string>& names) = 0;
 
     protected:
       // Hybrid Setup

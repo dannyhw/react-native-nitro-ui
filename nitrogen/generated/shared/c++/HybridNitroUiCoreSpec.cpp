@@ -24,6 +24,7 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridMethod("prewarmSizing", &HybridNitroUiCoreSpec::prewarmSizing);
       prototype.registerHybridMethod("setSizingTraceEnabled", &HybridNitroUiCoreSpec::setSizingTraceEnabled);
       prototype.registerHybridMethod("drainSizingTrace", &HybridNitroUiCoreSpec::drainSizingTrace);
+      prototype.registerHybridMethod("unresolvedSystemImageNames", &HybridNitroUiCoreSpec::unresolvedSystemImageNames);
     });
   }
 

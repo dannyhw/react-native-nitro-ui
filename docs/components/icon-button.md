@@ -60,7 +60,9 @@ and a press button when none is. The two forms are different native controls.
 - iOS has no icon-button control. It draws a `Button(action:)` with
   `Label(accessibilityLabel, systemImage:)` under `.labelStyle(.iconOnly)`, and the four variants
   are the four button styles above. `outlined`'s ring is a hairline `RoundedRectangle` stroke
-  drawn over `.bordered`, because iOS has no outlined button style.
+  drawn over `.bordered`, because iOS has no outlined button style. A `systemImage` with no
+  symbol on the device draws nothing, and a development build says so once
+  ([button.md](button.md), "SF Symbols").
 - `shape="square"`: `IconButtonDefaults`' square tokens on Android (which morph to the pressed
   shape while pressed), `.buttonBorderShape(.roundedRectangle(radius: 8))` on iOS, whose button
   styles have no cornerless option. `round` is `.circle` on iOS 17 and later, `.capsule` before

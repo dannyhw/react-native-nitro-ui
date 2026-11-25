@@ -183,7 +183,8 @@ actions a screen reader is handed, not what a screen reader does with them.
 - **Android: no mouse or stylus right-click** (`performContextClick`); iOS gets a
   pointer's secondary click from UIKit.
 - **`systemImage` is iOS-only** and **`androidIcon` is Android-only**, on the rows as on
-  Menu; a row that wants a glyph on both platforms names both. A submenu is inline on
+  Menu; a row that wants a glyph on both platforms names both. A row's `systemImage` with no
+  symbol on the device draws nothing and warns in development, as on Menu. A submenu is inline on
   Android, as on Menu.
 - **Android `removeClippedSubviews`** on the ContextMenu itself is ignored, with a dev
   warning.

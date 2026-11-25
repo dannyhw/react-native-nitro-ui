@@ -9,6 +9,7 @@ import {
   type NitroCallbackProp,
 } from '../../core/useStableCallback';
 import { warnAndroidIconName } from '../../iconName';
+import { warnIosSystemImageName } from '../../systemImageName';
 import {
   androidIconResourceName,
   androidIconUrl,
@@ -196,6 +197,9 @@ export function Chip({
     androidIconResourceName(resolvedAndroidIcon) == null
   ) {
     warnAndroidIconName('Chip', 'androidIcon', resolvedAndroidIcon);
+  }
+  if (systemImage != null) {
+    warnIosSystemImageName('Chip', 'systemImage', systemImage);
   }
   const sizingId = useSizingId();
   // Native applies `defaultSelected` once per mount, so a later change to the

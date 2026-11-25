@@ -1,6 +1,7 @@
 #include "HybridNitroUiCore.hpp"
 
 #include "NitroUiSizingEngine.hpp"
+#include "NitroUiSystemImages.hpp"
 #include "core/NitroUiClock.hpp"
 #include "core/NitroUiPerf.hpp"
 
@@ -108,6 +109,23 @@ namespace margelo::nitro::nitroui {
                           static_cast<double>(entry.height), static_cast<double>(entry.timeNs) / 1000000.0);
     }
     return events;
+  }
+
+  std::shared_ptr<Promise<std::vector<std::string>>> HybridNitroUiCore::unresolvedSystemImageNames(const std::vector<std::string>& names) {
+    std::shared_ptr<Promise<std::vector<std::string>>> promise = Promise<std::vector<std::string>>::create();
+    if (names.empty()) {
+      promise->resolve(std::vector<std::string>{});
+      return promise;
+    }
+#if defined(__APPLE__)
+    // UIKit resolves a symbol name on the main thread, so the answer arrives later.
+    NitroUiUnresolvedSystemImages(
+        names, [promise](std::vector<std::string>&& unresolved) { promise->resolve(std::move(unresolved)); });
+#else
+    // No SF Symbols here, so nothing is unresolved and nothing is looked up.
+    promise->resolve(std::vector<std::string>{});
+#endif
+    return promise;
   }
 
 } // namespace margelo::nitro::nitroui

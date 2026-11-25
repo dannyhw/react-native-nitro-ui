@@ -2,6 +2,7 @@ import { useInsertionEffect, useMemo, useRef, useState } from 'react';
 import { type ColorValue, type ViewProps } from 'react-native';
 
 import { warnAndroidIconName } from '../../iconName';
+import { warnIosSystemImageName } from '../../systemImageName';
 import {
   androidIconResourceName,
   androidIconUrl,
@@ -291,6 +292,10 @@ function useNativeItems(
       androidIconResourceName(resolved) == null
     ) {
       warnAndroidIconName('ButtonGroup', 'items[].androidIcon', resolved);
+    }
+    const systemImage = items[index]!.systemImage;
+    if (systemImage != null) {
+      warnIosSystemImageName('ButtonGroup', 'items[].systemImage', systemImage);
     }
   }
 

@@ -42,13 +42,23 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   job": "the split trigger tap" 0 of 1 events in 8000 ms, GitHub-hosted CI only, six trial
   rounds 2026-11-24 and twice more 2026-11-25. Likely the synthesised `pressAt` held past SwiftUI `Menu(primaryAction:)`'s
   long-press threshold on a slow runner (driver timing). Blocks nothing: manual CI harness only.
+- `Popover.harness.tsx` (Android) "the first frame is the final size" › presents "capped" at its
+  box, with one drawn size: `expected 588 to be less than or equal to 1`, GitHub-hosted CI
+  2026-11-25, seen once. With the two Popover lines around it, three different Popover cases
+  have gone red on CI in four rounds; a fourth gets one investigation across all of them.
+- `Popover.harness.tsx` (Android) "closes like a tap outside does: onIsPresentedChange(false), then
+  onDismiss": the close handle's `mostRecentEventCount` read 0 where 1 was expected, after the
+  dismissal count read 1; GitHub-hosted CI 2026-11-25, red in both passes, seen once. A second
+  sighting gets a task: it is the controlled-value echo, not a driver read.
+- `Sizing.harness.tsx` (iOS) "lays a cold Switch out at the size the control measures": the box
+  did not match the measured size; GitHub-hosted CI 2026-11-25, red in both passes, seen once.
 - `Popover.harness.tsx` (iOS) "follows the content when it resizes while the popover is up":
   `expected 116 to be less than or equal to 2` at the drawn-height check (the popover did not
   follow its grown content), GitHub-hosted CI 2026-11-25, seen once.
 - `Conformance.harness.tsx` (iOS) suite failed to run: the app exited while it was being prepared,
   2026-11-25, `harness:ios` with `harness:android` beside it on a task branch; green alone.
 - `ButtonGroup.harness.tsx` (iOS, G20) "moves the items a 220-point well cannot hold…": "bg-narrow"
-  never handed back a `hybridRef` handle, GitHub-hosted CI 2026-11-24, seen once. Again on
+  never handed back a `hybridRef` handle, GitHub-hosted CI 2026-11-24 and 2026-11-25. Again on
   "presses once per item…" (`bg-press`), CI 2026-11-25, inside an app session that lost its
   bridge (below), so not counted toward a quarantine.
 - iOS harness on GitHub-hosted CI, two trial rounds 2026-11-25, a different set each time and
@@ -299,7 +309,9 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - IconButton (iOS): the `outlined` ring is `UIColor.separator` at 1 pt with no state branch, so it neither dims while disabled nor disappears on a toggle that is on (`HybridNitroUiIconButton.swift` about line 276).
 - G23: the iOS glyph ignores Dynamic Type — `symbolPointSize` is Material's token in points and nothing scales it with the text-size class. Consider `accessibilityShowsLargeContentViewer()` as well, which is what iOS offers for a control whose artwork stays small at a large content size.
 - G23: the iOS XCUITest identifier for an IconButton is the SF Symbol name (`id="paperplane"`), not the `testID`, because RN's `accessibilityIdentifier` and the symbol's own identifier arrive at the same element. Real input matches on the label for now.
-- G23: iOS has no development warning when `systemImage` is absent — the control draws an empty label, while Android warns about an unresolvable `androidIcon`. One warning per missing glyph would be the symmetric behaviour.
+- Android: an `androidIcon` name that is well formed but not shipped in the app draws nothing and
+  warns nothing (`src/iconName.ts` checks the name's shape only), so iOS's development warning for
+  an SF Symbol name is now the sharper of the two.
 - G23: the bench plan says `mount.iconbutton` and `bench/` says `mount.icon-button`, so the plan's row never matches the counter the code emits.
 - G23 (and Button): `Button`'s icon-only form has the same hit area as its label, so it would want the same 44 pt floor on iOS and the same check on Android.
 - Tooling (G23): an `adb reverse tcp:8080` nobody claims was found on `emulator-5570`. `lease.mjs acquire` could list and clear reverses on the pair it hands out.

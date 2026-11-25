@@ -7,6 +7,7 @@ import {
   type AndroidIconProp,
 } from '../../iconSource';
 import { warnAndroidIconName } from '../../iconName';
+import { warnIosSystemImageName } from '../../systemImageName';
 import type { NitroUiMenuRow } from './Menu.nitro';
 
 // The rows of a menu, shared by `Menu` and `ContextMenu`: the public `group`
@@ -30,6 +31,21 @@ function resolveRowAndroidIcon(
     warnAndroidIconName(componentName, 'androidIcon', resolved);
   }
   return resolved;
+}
+
+/**
+ * The row's SF Symbol name as native is sent it, warning in development about a
+ * name this iOS cannot draw. `propName` is where the app wrote the name.
+ */
+function resolveRowSystemImage(
+  componentName: string,
+  propName: string,
+  name: string | undefined
+): string | null {
+  if (name != null) {
+    warnIosSystemImageName(componentName, propName, name);
+  }
+  return name ?? null;
 }
 
 /** A pickable row. Its `id` must be stable and unique across the whole menu. */
@@ -133,7 +149,11 @@ export function flattenGroup(
   componentName = 'Menu'
 ): NitroUiMenuRow[] {
   const rows: NitroUiMenuRow[] = [];
-  const pushAction = (action: MenuAction, parentId: string | null): void => {
+  const pushAction = (
+    action: MenuAction,
+    parentId: string | null,
+    systemImageProp: string
+  ): void => {
     rows.push({
       id: action.id,
       kind: 'action',
@@ -141,7 +161,11 @@ export function flattenGroup(
       parentId,
       disabled: action.disabled === true,
       destructive: action.destructive === true,
-      systemImage: action.systemImage ?? null,
+      systemImage: resolveRowSystemImage(
+        componentName,
+        systemImageProp,
+        action.systemImage
+      ),
       androidIcon: resolveRowAndroidIcon(
         componentName,
         action.androidIcon ?? null
@@ -153,7 +177,7 @@ export function flattenGroup(
       checked: action.checked ?? null,
     });
   };
-  const pushSubmenu = (row: MenuSubmenu): void => {
+  const pushSubmenu = (row: MenuSubmenu, systemImageProp: string): void => {
     rows.push({
       id: row.id,
       kind: 'submenu',
@@ -161,18 +185,24 @@ export function flattenGroup(
       parentId: null,
       disabled: false,
       destructive: false,
-      systemImage: row.systemImage ?? null,
+      systemImage: resolveRowSystemImage(
+        componentName,
+        systemImageProp,
+        row.systemImage
+      ),
       // A submenu's row has no icon on either platform. The field must still be
       // present (nitro#1184).
       androidIcon: null,
       subtitle: null,
       checked: null,
     });
-    for (const item of row.items) pushAction(item, row.id);
+    for (const item of row.items) {
+      pushAction(item, row.id, 'actions[].items[].systemImage');
+    }
   };
   for (const row of group?.actions ?? []) {
-    if (isSubmenu(row)) pushSubmenu(row);
-    else pushAction(row, null);
+    if (isSubmenu(row)) pushSubmenu(row, 'actions[].systemImage');
+    else pushAction(row, null, 'actions[].systemImage');
   }
   for (const section of group?.sections ?? []) {
     rows.push({
@@ -188,7 +218,9 @@ export function flattenGroup(
       subtitle: null,
       checked: null,
     });
-    for (const item of section.items) pushAction(item, section.id);
+    for (const item of section.items) {
+      pushAction(item, section.id, 'sections[].items[].systemImage');
+    }
   }
   return rows;
 }
