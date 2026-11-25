@@ -1,1 +1,150 @@
-{"platform":"android","selected":["switch","slider","button","segmented-control","date-picker","picker","menu","dialog","text-field","bottom-sheet","chip","checkbox","context-menu","search-field","tooltip","icon-button","popover","form","button-group","stepper","list-item","hosted-switch","hosted-button","hosted-slider","hosted-mixed","hosted-segmented","hosted-picker","hosted-date-picker"],"controls":[{"id":"switch","status":"pass"},{"id":"slider","status":"pass"},{"id":"button","status":"pass"},{"id":"segmented-control","status":"pass"},{"id":"date-picker","status":"pass"},{"id":"picker","status":"pass"},{"id":"menu","status":"pass"},{"id":"dialog","status":"pass"},{"id":"text-field","status":"pass"},{"id":"bottom-sheet","status":"pass"},{"id":"chip","status":"pass"},{"id":"checkbox","status":"pass"},{"id":"context-menu","status":"pass"},{"id":"search-field","status":"pass"},{"id":"tooltip","status":"pass"},{"id":"icon-button","status":"pass"},{"id":"popover","status":"pass"},{"id":"form","status":"fail"},{"id":"button-group","status":"pass"},{"id":"stepper","status":"pass"},{"id":"list-item","status":"pass"},{"id":"hosted-switch","status":"pass"},{"id":"hosted-button","status":"pass"},{"id":"hosted-slider","status":"pass"},{"id":"hosted-mixed","status":"pass"},{"id":"hosted-segmented","status":"pass"},{"id":"hosted-picker","status":"pass"},{"id":"hosted-date-picker","status":"pass"}],"auxiliary":[{"id":"a11y:switch","passed":true,"rerun":["--a11y","switch"]},{"id":"a11y:slider","passed":true,"rerun":["--a11y","slider"]},{"id":"a11y:button","passed":true,"rerun":["--a11y","button"]},{"id":"a11y:segmented-control","passed":true,"rerun":["--a11y","segmented-control"]},{"id":"a11y:date-picker","passed":true,"rerun":["--a11y","date-picker"]},{"id":"a11y:picker","passed":true,"rerun":["--a11y","picker"]},{"id":"a11y:menu","passed":true,"rerun":["--a11y","menu"]},{"id":"a11y:chip","passed":true,"rerun":["--a11y","chip"]},{"id":"a11y:checkbox","passed":true,"rerun":["--a11y","checkbox"]},{"id":"a11y:icon-button","passed":true,"rerun":["--a11y","icon-button"]},{"id":"a11y:button-group","passed":true,"rerun":["--a11y","button-group"]},{"id":"a11y:stepper","passed":true,"rerun":["--a11y","stepper"]},{"id":"a11y:hosted-switch","passed":true,"rerun":["--a11y","hosted-switch"]},{"id":"a11y:hosted-slider","passed":true,"rerun":["--a11y","hosted-slider"]},{"id":"a11y:hosted-button","passed":true,"rerun":["--a11y","hosted-button"]},{"id":"a11y:hosted-segmented","passed":true,"rerun":["--a11y","hosted-segmented"]},{"id":"a11y:hosted-picker","passed":true,"rerun":["--a11y","hosted-picker"]},{"id":"a11y:hosted-date-picker","passed":true,"rerun":["--a11y","hosted-date-picker"]},{"id":"a11y:hosted-progress","passed":true,"rerun":["--a11y","hosted-progress"]},{"id":"a11y:text-field","passed":true,"rerun":["--a11y","text-field"]},{"id":"a11y:search-field","passed":true,"rerun":["--a11y","search-field"]},{"id":"a11y:context-menu","passed":true,"rerun":["--a11y","context-menu"]},{"id":"a11y:form","passed":true,"rerun":["--a11y","form"]},{"id":"a11y:list-item","passed":true,"rerun":["--a11y","list-item"]},{"id":"context-menu (tree)","passed":true}]}
+{
+  "platform": "android",
+  "selected": [
+    "switch",
+    "slider",
+    "button",
+    "segmented-control",
+    "date-picker",
+    "picker",
+    "menu",
+    "dialog",
+    "text-field",
+    "bottom-sheet",
+    "chip",
+    "checkbox",
+    "context-menu",
+    "search-field",
+    "tooltip",
+    "icon-button",
+    "popover",
+    "form",
+    "button-group",
+    "stepper",
+    "list-item",
+    "hosted-switch",
+    "hosted-button",
+    "hosted-slider",
+    "hosted-mixed",
+    "hosted-segmented",
+    "hosted-picker",
+    "hosted-date-picker"
+  ],
+  "controls": [
+    { "id": "switch", "status": "pass" },
+    { "id": "slider", "status": "pass" },
+    { "id": "button", "status": "pass" },
+    { "id": "segmented-control", "status": "pass" },
+    { "id": "date-picker", "status": "pass" },
+    { "id": "picker", "status": "pass" },
+    { "id": "menu", "status": "pass" },
+    { "id": "dialog", "status": "pass" },
+    { "id": "text-field", "status": "pass" },
+    { "id": "bottom-sheet", "status": "pass" },
+    { "id": "chip", "status": "pass" },
+    { "id": "checkbox", "status": "pass" },
+    { "id": "context-menu", "status": "pass" },
+    { "id": "search-field", "status": "pass" },
+    { "id": "tooltip", "status": "pass" },
+    { "id": "icon-button", "status": "pass" },
+    { "id": "popover", "status": "pass" },
+    { "id": "form", "status": "fail" },
+    { "id": "button-group", "status": "pass" },
+    { "id": "stepper", "status": "pass" },
+    { "id": "list-item", "status": "pass" },
+    { "id": "hosted-switch", "status": "pass" },
+    { "id": "hosted-button", "status": "pass" },
+    { "id": "hosted-slider", "status": "pass" },
+    { "id": "hosted-mixed", "status": "pass" },
+    { "id": "hosted-segmented", "status": "pass" },
+    { "id": "hosted-picker", "status": "pass" },
+    { "id": "hosted-date-picker", "status": "pass" }
+  ],
+  "auxiliary": [
+    { "id": "a11y:switch", "passed": true, "rerun": ["--a11y", "switch"] },
+    { "id": "a11y:slider", "passed": true, "rerun": ["--a11y", "slider"] },
+    { "id": "a11y:button", "passed": true, "rerun": ["--a11y", "button"] },
+    {
+      "id": "a11y:segmented-control",
+      "passed": true,
+      "rerun": ["--a11y", "segmented-control"]
+    },
+    {
+      "id": "a11y:date-picker",
+      "passed": true,
+      "rerun": ["--a11y", "date-picker"]
+    },
+    { "id": "a11y:picker", "passed": true, "rerun": ["--a11y", "picker"] },
+    { "id": "a11y:menu", "passed": true, "rerun": ["--a11y", "menu"] },
+    { "id": "a11y:chip", "passed": true, "rerun": ["--a11y", "chip"] },
+    { "id": "a11y:checkbox", "passed": true, "rerun": ["--a11y", "checkbox"] },
+    {
+      "id": "a11y:icon-button",
+      "passed": true,
+      "rerun": ["--a11y", "icon-button"]
+    },
+    {
+      "id": "a11y:button-group",
+      "passed": true,
+      "rerun": ["--a11y", "button-group"]
+    },
+    { "id": "a11y:stepper", "passed": true, "rerun": ["--a11y", "stepper"] },
+    {
+      "id": "a11y:hosted-switch",
+      "passed": true,
+      "rerun": ["--a11y", "hosted-switch"]
+    },
+    {
+      "id": "a11y:hosted-slider",
+      "passed": true,
+      "rerun": ["--a11y", "hosted-slider"]
+    },
+    {
+      "id": "a11y:hosted-button",
+      "passed": true,
+      "rerun": ["--a11y", "hosted-button"]
+    },
+    {
+      "id": "a11y:hosted-segmented",
+      "passed": true,
+      "rerun": ["--a11y", "hosted-segmented"]
+    },
+    {
+      "id": "a11y:hosted-picker",
+      "passed": true,
+      "rerun": ["--a11y", "hosted-picker"]
+    },
+    {
+      "id": "a11y:hosted-date-picker",
+      "passed": true,
+      "rerun": ["--a11y", "hosted-date-picker"]
+    },
+    {
+      "id": "a11y:hosted-progress",
+      "passed": true,
+      "rerun": ["--a11y", "hosted-progress"]
+    },
+    {
+      "id": "a11y:text-field",
+      "passed": true,
+      "rerun": ["--a11y", "text-field"]
+    },
+    {
+      "id": "a11y:search-field",
+      "passed": true,
+      "rerun": ["--a11y", "search-field"]
+    },
+    {
+      "id": "a11y:context-menu",
+      "passed": true,
+      "rerun": ["--a11y", "context-menu"]
+    },
+    { "id": "a11y:form", "passed": true, "rerun": ["--a11y", "form"] },
+    {
+      "id": "a11y:list-item",
+      "passed": true,
+      "rerun": ["--a11y", "list-item"]
+    },
+    { "id": "context-menu (tree)", "passed": true }
+  ]
+}

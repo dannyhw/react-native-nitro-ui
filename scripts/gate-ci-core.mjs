@@ -173,7 +173,9 @@ function collectingSuite() {
  */
 function recordedRelaxed(record) {
   const relaxed = record?.relaxed;
-  return relaxed != null && typeof relaxed === 'object' && !Array.isArray(relaxed)
+  return relaxed != null &&
+    typeof relaxed === 'object' &&
+    !Array.isArray(relaxed)
     ? relaxed
     : null;
 }
@@ -216,7 +218,8 @@ export function judgeUploadedRun({
         `not ${String(sha).slice(0, 12)}`
     );
   }
-  const exitCode = typeof record?.exitCode === 'number' ? record.exitCode : null;
+  const exitCode =
+    typeof record?.exitCode === 'number' ? record.exitCode : null;
   if (exitCode !== 0) {
     why.push(
       exitCode == null
@@ -243,7 +246,9 @@ export function judgeUploadedRun({
   );
   const unknown = selected.filter((_, index) => known[index] == null);
   if (unknown.length > 0) {
-    evidence.push(`the results name controls this commit has not: ${unknown.join(', ')}`);
+    evidence.push(
+      `the results name controls this commit has not: ${unknown.join(', ')}`
+    );
   }
   const fromUnits = new Map(
     (results.controls ?? []).map((control) => [
@@ -266,7 +271,9 @@ export function judgeUploadedRun({
         );
       }
       if (run?.vcs?.dirty === true) {
-        evidence.push('the e2e report says its checkout had uncommitted changes');
+        evidence.push(
+          'the e2e report says its checkout had uncommitted changes'
+        );
       }
     }
     recordResults(suite, wanted, run, sources);
@@ -302,7 +309,8 @@ export function judgeUploadedRun({
     auxiliary: results.auxiliary ?? [],
   });
   for (const [id, status] of Object.entries(units?.results ?? {})) {
-    if (status !== 'pass') why.push(`${id} ${status === 'not-run' ? 'did not run' : 'failed'}`);
+    if (status !== 'pass')
+      why.push(`${id} ${status === 'not-run' ? 'did not run' : 'failed'}`);
   }
   for (const [id, status] of Object.entries(units?.everyRun ?? {})) {
     if (status !== 'pass') why.push(`${id} failed`);
@@ -407,7 +415,8 @@ export function ciLedgerLine({
     relaxed: recordedRelaxed(full.record),
     judge: before.judge,
   });
-  if (rerun == null) return { line: base, notes, full: fullVerdict, rerun: null };
+  if (rerun == null)
+    return { line: base, notes, full: fullVerdict, rerun: null };
 
   const rerunArgs = Array.isArray(rerun.record?.args)
     ? rerun.record.args.map(String)
@@ -426,7 +435,10 @@ export function ciLedgerLine({
     );
     return { line: base, notes, full: fullVerdict, rerun: null };
   }
-  if (rerunArgs == null || rerunArgs.join('\0') !== plan.filterArgs.join('\0')) {
+  if (
+    rerunArgs == null ||
+    rerunArgs.join('\0') !== plan.filterArgs.join('\0')
+  ) {
     notes.push(
       `the job re-ran ${rerunArgs?.join(' ') ?? '(no arguments recorded)'}, and a ` +
         `completion re-runs ${plan.filterArgs.join(' ')}. The re-run is not counted`
@@ -443,7 +455,8 @@ export function ciLedgerLine({
   const verdict = completeRerun({
     plan,
     childUnits: rerunVerdict.units,
-    exitCode: typeof rerun.record?.exitCode === 'number' ? rerun.record.exitCode : null,
+    exitCode:
+      typeof rerun.record?.exitCode === 'number' ? rerun.record.exitCode : null,
     digestBefore: digest,
     digestAfter: after.gateTrees?.[CI_GATE] ?? null,
     gate: CI_GATE,

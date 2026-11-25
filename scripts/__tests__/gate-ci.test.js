@@ -29,7 +29,10 @@ import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
  * one whose `form` keyboard case failed. Each keeps the e2e report's verdict fields,
  * the units the job log printed, and the "Run real input" step's times and exit.
  */
-const FIXTURES = path.join(process.cwd(), 'scripts/__tests__/fixtures/ci-android');
+const FIXTURES = path.join(
+  process.cwd(),
+  'scripts/__tests__/fixtures/ci-android'
+);
 const green = () => readUploadedRun(path.join(FIXTURES, 'green/full'));
 const red = () => readUploadedRun(path.join(FIXTURES, 'red/full'));
 
@@ -44,7 +47,10 @@ function ofCommit(run, sha) {
     report:
       run.report == null
         ? null
-        : { ...run.report, run: { ...run.report.run, vcs: { commit: sha, dirty: false } } },
+        : {
+            ...run.report,
+            run: { ...run.report.run, vcs: { commit: sha, dirty: false } },
+          },
   };
 }
 
@@ -68,7 +74,9 @@ function formRerun(overrides = {}) {
       platform: 'android',
       selected: ['form'],
       controls: [{ id: 'form', status: 'pass' }],
-      auxiliary: results.auxiliary.filter((check) => check.id.startsWith('a11y:')),
+      auxiliary: results.auxiliary.filter((check) =>
+        check.id.startsWith('a11y:')
+      ),
     },
     report: {
       ...passed.report,
@@ -119,7 +127,13 @@ const SOURCE = {
   url: 'https://github.com/o/r/actions/runs/123/job/456',
 };
 
-function imported({ full, rerun = null, head, sources = SOURCES, digests = NOW }) {
+function imported({
+  full,
+  rerun = null,
+  head,
+  sources = SOURCES,
+  digests = NOW,
+}) {
   return ciLedgerLine({
     source: SOURCE,
     head,
@@ -212,7 +226,9 @@ describe('a run is judged from what it uploaded', () => {
     expect(line.exitCode).toBe(0);
     expect(line.completion).toBeNull();
     expect(Object.keys(line.units.results)).toHaveLength(52);
-    expect(Object.values(line.units.results).every((s) => s === 'pass')).toBe(true);
+    expect(Object.values(line.units.results).every((s) => s === 'pass')).toBe(
+      true
+    );
     expect(line.units.everyRun).toEqual({});
     expect(full.quarantined).toEqual([
       expect.stringMatching(/^bottom-sheet: a drag up .* skipped, listed in/),
@@ -276,7 +292,9 @@ describe('a run is judged from what it uploaded', () => {
     );
     const record = green();
     record.record = { ...record.record, sha: RED_SHA };
-    expect(imported({ full: record, head: GREEN_SHA }).line.result).toBe('fail');
+    expect(imported({ full: record, head: GREEN_SHA }).line.result).toBe(
+      'fail'
+    );
   });
 
   it('a run that stopped before its report is red with no units, and no filter names its failure', () => {
@@ -284,9 +302,9 @@ describe('a run is judged from what it uploaded', () => {
     const { line } = imported({ full: early, head: RED_SHA });
     expect(line.result).toBe('fail');
     expect(line.units).toBeNull();
-    expect(rerunOfUnits({ gate: CI_GATE, units: line.units }).refusal).toContain(
-      'recorded no per-unit results'
-    );
+    expect(
+      rerunOfUnits({ gate: CI_GATE, units: line.units }).refusal
+    ).toContain('recorded no per-unit results');
   });
 
   it('records the relaxing switches the job set, less the hosted runner’s own', () => {
@@ -323,7 +341,9 @@ describe('the re-run inside the job', () => {
     });
     expect(notes).toEqual([]);
     expect(line.result).toBe('pass');
-    expect(line.command).toBe('node scripts/real-input/android.mjs --control form');
+    expect(line.command).toBe(
+      'node scripts/real-input/android.mjs --control form'
+    );
     expect(line.completion).toMatchObject({
       attempt: 1,
       rerun: ['form'],
@@ -356,8 +376,14 @@ describe('the re-run inside the job', () => {
   });
 
   it('a re-run of anything but what a completion re-runs is not counted', () => {
-    const wide = formRerun({ args: ['--control', 'form', '--control', 'switch'] });
-    const { line, notes } = imported({ full: red(), rerun: wide, head: RED_SHA });
+    const wide = formRerun({
+      args: ['--control', 'form', '--control', 'switch'],
+    });
+    const { line, notes } = imported({
+      full: red(),
+      rerun: wide,
+      head: RED_SHA,
+    });
     expect(line.completion).toBeNull();
     expect(line.result).toBe('fail');
     expect(notes[0]).toContain('a completion re-runs --control form');
@@ -380,7 +406,11 @@ describe('the re-run inside the job', () => {
 
     const unsaid = red();
     delete unsaid.record.relaxed;
-    const second = imported({ full: unsaid, rerun: formRerun(), head: RED_SHA });
+    const second = imported({
+      full: unsaid,
+      rerun: formRerun(),
+      head: RED_SHA,
+    });
     expect(second.line.relaxed).toBeNull();
     expect(rowElsewhere(second.line).state).toBe('missing');
   });
@@ -400,7 +430,9 @@ describe('where an imported line counts', () => {
       stage: 'merge',
       touchedPlatforms: ['android'],
     });
-    expect(need.required.find((row) => row.gate === CI_GATE).state).toBe('green');
+    expect(need.required.find((row) => row.gate === CI_GATE).state).toBe(
+      'green'
+    );
   });
 
   it('counts on another branch with the same digest, and names that branch', () => {
@@ -462,7 +494,8 @@ function git(dir, args, home) {
     encoding: 'utf8',
     env: gitEnv(home),
   });
-  if (result.status !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+  if (result.status !== 0)
+    throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
   return result.stdout.trim();
 }
 
@@ -471,7 +504,9 @@ function git(dir, args, home) {
  * for run 777 of its HEAD from the green fixture, logging every call it gets.
  */
 function makeClone() {
-  const parent = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gate-ci-')));
+  const parent = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'gate-ci-'))
+  );
   cleanup.push(parent);
   const repo = path.join(parent, 'repo');
   const write = (file, content) => {
@@ -497,8 +532,14 @@ function makeClone() {
   fs.mkdirSync(path.join(artifact, 'e2e'), { recursive: true });
   const run = ofCommit(green(), head);
   fs.writeFileSync(path.join(artifact, 'run.json'), JSON.stringify(run.record));
-  fs.writeFileSync(path.join(artifact, 'units.json'), JSON.stringify(run.results));
-  fs.writeFileSync(path.join(artifact, 'e2e/report.json'), JSON.stringify(run.report));
+  fs.writeFileSync(
+    path.join(artifact, 'units.json'),
+    JSON.stringify(run.results)
+  );
+  fs.writeFileSync(
+    path.join(artifact, 'e2e/report.json'),
+    JSON.stringify(run.report)
+  );
   const runJson = {
     id: 777,
     head_sha: head,
@@ -525,7 +566,9 @@ function makeClone() {
   );
   fs.writeFileSync(
     path.join(gh, 'artifacts.json'),
-    JSON.stringify({ artifacts: [{ name: 'real-input-android', expired: false }] })
+    JSON.stringify({
+      artifacts: [{ name: 'real-input-android', expired: false }],
+    })
   );
   const bin = path.join(parent, 'bin');
   fs.mkdirSync(bin);
@@ -561,7 +604,11 @@ function cli(clone, args) {
 const ledgerOf = (clone) => {
   const file = path.join(clone.repo, '.gates/task/ci.jsonl');
   return fs.existsSync(file)
-    ? fs.readFileSync(file, 'utf8').trim().split('\n').map((text) => JSON.parse(text))
+    ? fs
+        .readFileSync(file, 'utf8')
+        .trim()
+        .split('\n')
+        .map((text) => JSON.parse(text))
     : [];
 };
 
@@ -569,7 +616,9 @@ describe('gate.mjs ci-import', () => {
   it('records a green run of HEAD once, shows it as a CI run, and only ever reads from GitHub', () => {
     const clone = makeClone();
     const first = cli(clone, ['ci-import', '--run', '777']);
-    expect(first.stderr).toContain('ci-import: real-input:android PASS (CI run 777)');
+    expect(first.stderr).toContain(
+      'ci-import: real-input:android PASS (CI run 777)'
+    );
     expect(first.stdout).toContain('QUARANTINED bottom-sheet: a drag up');
     expect(first.status).toBe(0);
     const [line] = ledgerOf(clone);
@@ -586,7 +635,9 @@ describe('gate.mjs ci-import', () => {
       },
     });
     const table = cli(clone, ['table', '--for', 'merge']);
-    expect(table.stdout).toContain('| `real-input:android` | **PASS** (CI run 777) |');
+    expect(table.stdout).toContain(
+      '| `real-input:android` | **PASS** (CI run 777) |'
+    );
     const need = cli(clone, ['need', '--for', 'merge']);
     expect(need.stdout).toContain(
       '✓ real-input:android — green on its own digest (CI run 777)'
@@ -597,9 +648,14 @@ describe('gate.mjs ci-import', () => {
     expect(again.stderr).toContain('attempt 1 of run 777 is already in');
     expect(ledgerOf(clone)).toHaveLength(1);
 
-    const calls = fs.readFileSync(path.join(clone.gh, 'calls.log'), 'utf8').trim().split('\n');
+    const calls = fs
+      .readFileSync(path.join(clone.gh, 'calls.log'), 'utf8')
+      .trim()
+      .split('\n');
     for (const call of calls) {
-      expect(call).toMatch(/^(api repos\/\{owner\}\/\{repo\}\/actions\/runs\/777\S* *$|run download 777 )/);
+      expect(call).toMatch(
+        /^(api repos\/\{owner\}\/\{repo\}\/actions\/runs\/777\S* *$|run download 777 )/
+      );
     }
   }, 60_000);
 
@@ -614,7 +670,10 @@ describe('gate.mjs ci-import', () => {
     expect(other.stderr).toContain(`ran commit ${'b'.repeat(12)}, and HEAD is`);
     expect(other.stderr).toContain('ci-import: nothing recorded');
 
-    fs.writeFileSync(path.join(clone.gh, 'run.json'), JSON.stringify(clone.runJson));
+    fs.writeFileSync(
+      path.join(clone.gh, 'run.json'),
+      JSON.stringify(clone.runJson)
+    );
     fs.writeFileSync(path.join(clone.repo, 'android/build.gradle'), 'v2\n');
     const dirty = cli(clone, ['ci-import', '--run', '777']);
     expect(dirty.status).toBe(1);

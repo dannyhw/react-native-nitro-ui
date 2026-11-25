@@ -128,8 +128,7 @@ function runSuite(out, args) {
         finishedAt,
         exitCode,
         signal: result.signal ?? null,
-        device:
-          process.env.ANDROID_SERIAL ?? process.env.ANDROID_AVD ?? null,
+        device: process.env.ANDROID_SERIAL ?? process.env.ANDROID_AVD ?? null,
         relaxed: hostedRunRelaxed(process.env),
       },
       null,
@@ -166,7 +165,9 @@ function main(argv) {
     const dir = option(rest, '--dir');
     const out = path.join(dir, CI_RERUN_DIR);
     if (fs.existsSync(path.join(out, CI_RUN_RECORD))) {
-      console.log(`gate-ci: ${out} already holds a re-run; a red run is re-run once`);
+      console.log(
+        `gate-ci: ${out} already holds a re-run; a red run is re-run once`
+      );
       return 1;
     }
     const judged = judgeFolder(dir);
@@ -199,15 +200,22 @@ function main(argv) {
   if (command === 'verdict') {
     const judged = judgeFolder(option(rest, '--dir'));
     if (judged == null) {
-      console.log('gate-ci: red - the suite never started, so there is no run record');
+      console.log(
+        'gate-ci: red - the suite never started, so there is no run record'
+      );
       return 1;
     }
-    for (const line of [...judged.full.quarantined, ...(judged.rerun?.quarantined ?? [])]) {
+    for (const line of [
+      ...judged.full.quarantined,
+      ...(judged.rerun?.quarantined ?? []),
+    ]) {
       console.log(`QUARANTINED ${line}`);
     }
     for (const note of judged.notes) console.log(`gate-ci: ${note}`);
     const why =
-      judged.line.completion != null ? judged.line.completion.why : judged.full.why;
+      judged.line.completion != null
+        ? judged.line.completion.why
+        : judged.full.why;
     for (const reason of why) console.log(`gate-ci: ${reason}`);
     const how =
       judged.line.completion == null

@@ -1399,7 +1399,8 @@ export function renderGateTable({
     const completion = formatCompletion(entry);
     const how = formatHow(row);
     const result =
-      `${STATE_LABELS[row.state] ?? row.state}` + (how == null ? '' : ` (${how})`);
+      `${STATE_LABELS[row.state] ?? row.state}` +
+      (how == null ? '' : ` (${how})`);
     const of = entry?.completion?.of;
     const duration =
       entry == null
@@ -2562,7 +2563,11 @@ export function planRerunFailed({ gate, entries, tree, trees, gateTrees }) {
         'be completed: run the full gate',
     };
   }
-  const named = rerunOfUnits({ gate, units: base.units, exitCode: base.exitCode });
+  const named = rerunOfUnits({
+    gate,
+    units: base.units,
+    exitCode: base.exitCode,
+  });
   if (named.refusal != null) return { refusal: named.refusal };
   return {
     refusal: null,
@@ -2763,8 +2768,7 @@ export function explainNeedRow(row, codeTree) {
   }
   if (row.state === 'red') {
     const from = formatFrom(row);
-    const evidence =
-      row.entry?.source?.url ?? row.entry?.logPath ?? 'no log';
+    const evidence = row.entry?.source?.url ?? row.entry?.logPath ?? 'no log';
     return `${row.gate} — red (exit ${String(row.entry?.exitCode ?? '?')} on tree ${String(row.entry?.tree ?? '?').slice(0, 12)}, ${evidence}${from == null ? '' : `, ${from}`})`;
   }
   if (row.state === 'stale') {

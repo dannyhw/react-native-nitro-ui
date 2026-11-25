@@ -2325,7 +2325,8 @@ function commandCiImport({ runId }) {
     .filter((line) => line.trim() !== '');
   const api = `repos/{owner}/{repo}/actions/runs/${runId}`;
   const run = ghJson(['api', api]);
-  if (run.error != null) return refuse([`could not read run ${runId}: ${run.error}`]);
+  if (run.error != null)
+    return refuse([`could not read run ${runId}: ${run.error}`]);
   const attempt = Number(run.value?.run_attempt ?? 1);
   const jobs = ghJson([
     'api',
@@ -2345,7 +2346,9 @@ function commandCiImport({ runId }) {
 
   const listed = ghJson(['api', `${api}/artifacts?per_page=100`]);
   if (listed.error != null)
-    return refuse([`could not list the artifacts of run ${runId}: ${listed.error}`]);
+    return refuse([
+      `could not list the artifacts of run ${runId}: ${listed.error}`,
+    ]);
   const artifact = (listed.value?.artifacts ?? []).find(
     (entry) => entry?.name === CI_ARTIFACT && entry?.expired !== true
   );
@@ -2406,8 +2409,7 @@ function commandCiImport({ runId }) {
       process.stdout.write(`re-run: ✗ ${failure}\n`);
     }
     for (const note of notes) process.stderr.write(`ci-import: ${note}\n`);
-    const why =
-      line.completion != null ? line.completion.why : judged.full.why;
+    const why = line.completion != null ? line.completion.why : judged.full.why;
     for (const reason of why) process.stderr.write(`ci-import: ${reason}\n`);
     const how = formatHow({ entry: line });
     process.stderr.write(
@@ -2673,11 +2675,7 @@ async function main(argv) {
   if (command === 'ci-import') {
     const at = rest.indexOf('--run');
     const runId = at === -1 ? null : (rest[at + 1] ?? null);
-    if (
-      runId == null ||
-      !/^\d+$/.test(runId) ||
-      rest.length !== 2
-    ) {
+    if (runId == null || !/^\d+$/.test(runId) || rest.length !== 2) {
       process.stderr.write(`ci-import: --run <numeric run id>\n${USAGE}`);
       return 2;
     }
