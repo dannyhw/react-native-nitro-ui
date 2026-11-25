@@ -1010,6 +1010,7 @@ describe('ListItem · G30', () => {
     expect(pressable).toBe('1');
 
     // The standalone row paints; the row inside the cell never does, press or no press.
+    const bareFrom = events.length;
     pressItem('bare-item');
     const painted = await pollUntil(
       () => (layoutOf('bare-item')?.shape === 1 ? '1' : null),
@@ -1021,6 +1022,14 @@ describe('ListItem · G30', () => {
         )
     );
     expect(painted).toBe('1');
+    // The highlight is native state; the press event is still on its way to JS. A row click
+    // counted before it lands reads as a second press from that one activation.
+    const barePresses = await waitForEvents(bareFrom, ['bare-item:press']);
+    expect(
+      barePresses,
+      `pressing "bare-item" should tell the app once, saw ` +
+        JSON.stringify(barePresses)
+    ).toEqual(['bare-item:press']);
     const afterPress = await waitForLayout('form-item', 'inside Form.Row');
     console.log(`  · in row after both presses: ${afterPress.raw}`);
     expect(afterPress.shape).toBe(0);
