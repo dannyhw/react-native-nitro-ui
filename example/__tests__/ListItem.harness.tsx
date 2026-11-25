@@ -1032,9 +1032,12 @@ describe('ListItem · G30', () => {
     if (Platform.OS === 'android') {
       const from = events.length;
       clickRow('form-row');
-      expect(await waitForEvents(from, ['form-item:press'])).toEqual([
-        'form-item:press',
-      ]);
+      const presses = await waitForEvents(from, ['form-item:press']);
+      expect(
+        presses,
+        `one activation of "form-row" should press the item once, saw ` +
+          JSON.stringify(presses)
+      ).toEqual(['form-item:press']);
     }
   });
 
