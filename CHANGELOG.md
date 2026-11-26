@@ -8,6 +8,109 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.9.3
+
+### Patch Changes
+
+- b019b33: `androidIcon`: an asset `require`d from a folder whose name holds a space, a `#`, or a `%` that is
+  not the start of an escape draws in development as it does in a release build. The URL Metro serves
+  it at is quoted per path segment on the way to the network: a `#` is quoted, so it stays part of the
+  file's name, and a `%` is quoted only when two hex digits do not follow it. A URL that is already
+  quoted goes over as it is, which is why two development names still draw nothing: one with a `?` in a
+  folder or file name, read as the start of the query, and one whose own name looks like an escape
+  (`icons/a%41b/`), which Metro reads as the decoded `aAb` and answers with nothing. A `#` in a URL the
+  app writes itself starts a fragment, which is not asked for. A file that really is missing is still
+  reported once and left undrawn.
+- 3ecec9d: `ButtonGroup`: on iOS a disabled group keeps the row it had enabled. The overflow control was left
+  out of a disabled row, which measured that row narrower, so disabling a group could pull another
+  item out of the menu and re-enabling it put the item back — the items moved under the person's
+  eyes. The control now keeps its room while disabled and is drawn dimmed in the same place with
+  nothing to present: a disabled group opens no menu, takes no tap and fires no event, and
+  `disabled` arriving while the menu is open still closes it. Android is unchanged.
+- 103cfa7: `ButtonGroup`: on Android an `outlined` toggle item now draws the outline Material draws for its
+  state. An untinted one drew no outline at all; a tinted one drew the full tint in every state, so it
+  stayed at full strength while disabled and wore a ring while switched on where Material draws none. A
+  tinted `text` item wore that ring too, though `text` has no outline. A tint now changes only the
+  colour: Material's width and its strength per state are kept, and where Material draws no outline none
+  is drawn. Other variants, sizes and layout are unchanged.
+- 2a065ba: `ButtonGroup`: an item that moves into the overflow menu keeps its `androidIcon` in its menu row,
+  and an iOS toggle item is drawn in the group's `variant` like the action item beside it — in the
+  group's colour in both states, one style step apart, so an unchecked toggle is not drawn the way a
+  disabled item is. A `text` group that holds a toggle on iOS is the height of a capsule in either
+  state, so checking one cannot draw it outside the box the row was measured into.
+- fdbf0e7: `ButtonGroup`: on iOS, every item of a `text` group that holds a toggle is measured at the size of
+  the capsule a checked toggle takes, so an action item is no longer drawn in less room than a toggle
+  beside it: whatever mix of them the group holds, two neighbouring items leave the same room. A
+  checked capsule fills the room it was measured at while a label leaves a padding either side, so the
+  space you see beside a checked item is narrower than between two unchecked ones. Such a row is
+  measured wider than the labels it draws, so it moves items into the overflow menu at a wider box.
+  The row still does not change size when a toggle is checked or unchecked, and a `text` group with no
+  toggle keeps the size it had.
+- 4f479ac: `Form.Row` with `onPress` no longer presses when a tap lands on what nitro-ui draws itself inside it — the control answers, and the row answers the taps that land beside it, the ones that land on a component that only holds its children, and the ones that land on a `ListItem` inside the row, whose press the cell owns already — and `keyboardAvoidance={false}` now leaves the Form's content size alone while the keyboard is up
+- 0c9c8f5: Android `IconButton`/`IconToggleButton`: an `outlined` control with a `tintColor` draws its border
+  the way Material draws one — the tint at full strength while enabled, the same colour dimmed while
+  disabled, and no border at all on a toggle that is on. Until now a tinted border kept Material's
+  width but was always painted in the full tint, so a disabled button still looked enabled and a
+  toggle that was on wore a ring of its own.
+
+  An `outlined` control with no `tintColor` shows its ring at the strength Material gives that state
+  too. The two looked the other way round before: an enabled button drew its ring as faintly as a
+  disabled one, and a disabled button drew it at full strength. The toggle form was wrong in the same
+  way — a full ring while switched on and a faint one while off, where Material draws a ring only
+  while off, and no ring at all while disabled, where Material draws a faint one.
+
+- 02dad8a: iOS now says out loud an SF Symbol name it cannot draw. `Button`, `Chip`, `IconButton`,
+  `ListItem`, a `Menu` trigger, and the items and rows of `ButtonGroup`, `Menu` and `ContextMenu`
+  take an SF Symbol name in `systemImage`, and a name with no symbol on the device - a typo, or a
+  symbol newer than the device's iOS - drew nothing without a word about it. In a development build
+  the name is looked up on the device and one warning per component and name says which control was
+  given it and where:
+
+  nitro-ui: Button's systemImage "square.and.arrow.up.up" is not an SF Symbol this iOS can draw.
+  Nothing will be drawn for it. See docs/components/button.md, "SF Symbols".
+
+  A release build looks nothing up and warns nothing, and what is drawn for a good name and a bad
+  one is unchanged. Android's `androidIcon` warnings are as they were.
+
+- d64a452: iOS: a `BottomSheet` that UIKit silently refused to present, because another presentation was
+  starting or ending at that moment, no longer stays closed for the rest of that mount. It reports
+  `onIsPresentedChange(false)` with no `onDismiss`, and the next `isPresented={true}` presents it.
+- 77a883e: fix(search-field): `autoCorrect={false}` asks the Android keyboard for no suggestions
+
+  An Android `SearchField` with `autoCorrect={false}` asked for no autocorrection and still drew the
+  keyboard's suggestion strip: Compose reads `autoCorrectEnabled = false` as "send no autocorrect
+  flag" and stops there. The field now sends `TYPE_TEXT_FLAG_NO_SUGGESTIONS` as well, which asks the
+  keyboard to offer no suggestions (most keyboards honour it). It is what `TextField` and React
+  Native's `TextInput` send, and it goes through the same interceptor `TextField` uses. Text keyboards only: a number or phone
+  keyboard is sent what it was sent before. iOS is unchanged.
+
+- 69b1885: fix(search-field): its default prompt and clear label follow the app's language
+
+  An Android `SearchField` with no `placeholder` said "Search…" and named its clear button in the
+  device's language, not the app's: the framework's `search_hint` and `searchview_description_clear`
+  strings were read from `Resources.getSystem()` once per process, which is the device's
+  configuration. An app shown in another language than the device's, including a per-app language on
+  Android 13 and later, got the device's words — the clear button's screen-reader label among them.
+  Both are now resolved for the configuration the field draws in, so an app's own language is what it
+  says, and after a language change they follow once the activity restarts. A `placeholder` the app passes
+  is unchanged, and the English fallbacks stay for a framework without the strings. iOS is unchanged.
+
+- d497461: fix(text-field): the caret stays where a `maxLength` cut was made, and `autoCorrect={false}` asks for no suggestions
+
+  Typing into the middle of a full `TextField` on iOS cut the edit in the right
+  place and then moved the caret to the end of the field, because writing the cut
+  text back into a UIKit control puts the caret there. The caret now ends just
+  after the part of the edit that was kept - after a paste, after a composition's
+  commit (UIKit ends one by writing its own insertion point one past the part that
+  was kept, and the caret goes in again after that), and after a cut as long as the text
+  that follows it.
+
+  On Android `autoCorrect={false}` now sends the keyboard `TYPE_TEXT_FLAG_NO_SUGGESTIONS`
+  as well as no autocorrect flag, which asks it not to draw a suggestion
+  strip over the word at the caret, and what React Native's `TextInput` sends. Text
+  keyboards only: a number or phone keyboard, and a secure field that keeps
+  `autoCorrect` on, are sent what they were sent before.
+
 ## 0.9.2
 
 ### Patch Changes
