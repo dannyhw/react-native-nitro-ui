@@ -15,6 +15,9 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-26 Android `Picker`: a pick's width is filed only under its own title, so a quick second
+  pick or a re-render already in flight no longer leaves another title with a wrong cached
+  width (FIX38, #142).
 - 11-25 Tooling: a fresh launch in the Android real-input suite waits until the activity manager
   has let the closed app go, so a slow window manager no longer fails the first test with
   "remained foreground after close" (X71, #141).

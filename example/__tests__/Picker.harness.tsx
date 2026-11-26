@@ -1,5 +1,6 @@
 // The harness dispatches input into the app's own window, and a picker's options
 // live in a popup outside it: a tap here can reach the anchor but never a row.
+import { useCallback, useState, useRef } from 'react';
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
@@ -1241,6 +1242,182 @@ describe('Picker · G6', () => {
     unmount();
   });
 
+  // MARK: - A batch that names a key the pick has left
+
+  // Two quick picks: the render the first one causes reaches native after the second
+  // pick, so that batch names the title the first pick painted while native shows the
+  // second one's. Its size report must not be filed under a key the pick has left.
+  async function filesNothingUnderALeftKey(controlled: boolean): Promise<void> {
+    const OPTIONS = ['One', 'Two', LONG_TITLE];
+    poisonConfigurations([
+      sizingKey(OPTIONS, 0, null, 'menu'),
+      sizingKey(OPTIONS, 2, null, 'menu'),
+    ]);
+    const spin = (ms: number) => {
+      const until = nitroUiCore.now() + ms;
+      while (nitroUiCore.now() < until) {
+        // Deliberately busy: JS cannot render between the two picks.
+      }
+    };
+
+    function TwoQuickPicks() {
+      const [picks, setPicks] = useState(0);
+      const [index, setIndex] = useState(0);
+      const pickedAgain = useRef(false);
+      const onChange = useCallback((event: { index: number }) => {
+        eventLog.push(`twice:${String(event.index)}`);
+        if (controlled) {
+          setIndex(event.index);
+        }
+        spin(150);
+        setPicks((count) => count + 1);
+      }, []);
+      if (picks === 1 && !pickedAgain.current) {
+        // Posted from the render the first pick caused: the second pick is on screen
+        // before that render's props are.
+        pickedAgain.current = true;
+        handles.get('twice')?.nuiTestSelect(0);
+        spin(150);
+      }
+      return (
+        <Picker
+          options={OPTIONS}
+          selectedIndex={controlled ? index : undefined}
+          onChange={onChange}
+          testID="twice"
+          hybridRef={captureHybrid('twice')}
+        />
+      );
+    }
+
+    // The long configuration, measured by a picker that never picks - then gone, so
+    // nothing mounted under that key can re-report its size after the picks.
+    const { rerender } = await render(
+      <View style={columnStyle}>
+        <Picker
+          options={OPTIONS}
+          selectedIndex={2}
+          testID="reference"
+          hybridRef={captureHybrid('reference')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('reference');
+    const longSize = await waitForMeasured('reference', 'the long title');
+    await waitForBox('reference', longSize, 'the long title');
+    await rerender(
+      <View style={columnStyle}>
+        <TwoQuickPicks />
+      </View>
+    );
+    await waitForTestId('twice');
+    const shortSize = await waitForMeasured('twice', 'before the picks');
+    await waitForBox('twice', shortSize, 'before the picks');
+    await settle(250);
+    armTrace();
+    const before = stats();
+
+    handles.get('twice')?.nuiTestSelect(2);
+    await pollUntil(
+      () => (eventLog.length >= 2 ? true : null),
+      () => new Error(`two quick picks emitted ${JSON.stringify(eventLog)}.`),
+      8000
+    );
+    await waitForBox(
+      'twice',
+      shortSize,
+      "the picker, on its second pick's title"
+    );
+    await settle(400);
+    const afterPicks = delta(before, stats());
+    const boxAfterPicks = sizeOf('twice');
+
+    // Read the cache of the key the first pick's render carried back: a fresh picker
+    // showing that title must find that title's own width there.
+    armTrace();
+    const cacheBefore = stats();
+    await rerender(
+      <View style={columnStyle}>
+        <TwoQuickPicks />
+        <Picker
+          options={OPTIONS}
+          selectedIndex={2}
+          testID="fresh-long"
+          hybridRef={captureHybrid('fresh-long')}
+        />
+      </View>
+    );
+    await waitForTestId('fresh-long');
+    const firstBox = sizeOf('fresh-long');
+    const fresh = await waitForMeasured('fresh-long', 'the long title again');
+    await waitForBox('fresh-long', longSize, 'the fresh long picker');
+    await settle(250);
+    const cacheAfter = delta(cacheBefore, stats());
+
+    // The title the stale batch would have poisoned, picked again with its key poisoned
+    // once more and no other control mounted under that key to file it: only a size report
+    // that got out of the hold can make the control grow from here.
+    await rerender(
+      <View style={columnStyle}>
+        <TwoQuickPicks />
+      </View>
+    );
+    await settle(250);
+    armTrace();
+    const heldBefore = stats();
+    poisonConfigurations([sizingKey(OPTIONS, 2, null, 'menu')]);
+    handles.get('twice')?.nuiTestSelect(2);
+    await pollUntil(
+      () => (eventLog.length >= 3 ? true : null),
+      () => new Error(`the third pick emitted ${JSON.stringify(eventLog)}.`),
+      8000
+    );
+    await waitForBox('twice', longSize, 'the third pick');
+    await settle(250);
+    const heldDelta = delta(heldBefore, stats());
+
+    console.log(
+      `quick picks (${controlled ? 'controlled' : 'uncontrolled'}): ` +
+        `short=${describeSize(shortSize)} long=${describeSize(longSize)} ` +
+        `picksDelta=${JSON.stringify(afterPicks)} ` +
+        `freshFirstBox=${describeSize(firstBox)} measured=${describeSize(fresh)} ` +
+        `cacheDelta=${JSON.stringify(cacheAfter)} ` +
+        `heldDelta=${JSON.stringify(heldDelta)} events=${JSON.stringify(eventLog)}`
+    );
+    expect(eventLog).toEqual(['twice:2', 'twice:0', 'twice:2']);
+    // The picker itself is sized for the title its second pick shows.
+    expect(sameSize(boxAfterPicks, shortSize)).toBe(true);
+    expect(afterPicks.corrections).toBe(0);
+    expect(sameSize(fresh, longSize)).toBe(true);
+    expect(sameSize(firstBox, longSize)).toBe(true);
+    expect(cacheAfter.corrections).toBe(0);
+    // The key the pick lands on is poisoned again, so one correction is the pick's own size
+    // report getting out of the hold: nothing else mounted can supply the long width here.
+    expect(heldDelta.corrections).toBe(1);
+    // Otherwise the two keys hold the same width and the case could not fail.
+    expect(longSize.width).toBeGreaterThan(shortSize.width + 8);
+  }
+
+  // iOS misfiles a pick's size the same way, through another path: it files a measured size as
+  // soon as it is measured, with no hold waiting for a key that names what is on screen. These
+  // cases exercise the hold, which is Android's, so they are Android-only.
+  const itHoldsPicks = Platform.OS === 'android' ? it : it.skip;
+
+  itHoldsPicks(
+    'files nothing under a key two uncontrolled picks have left',
+    async () => {
+      await filesNothingUnderALeftKey(false);
+    }
+  );
+
+  itHoldsPicks(
+    'files nothing under a key two controlled picks have left',
+    async () => {
+      await filesNothingUnderALeftKey(true);
+    }
+  );
+
   it('grows an unpoisoned pick whose new configuration starts at the fallback', async () => {
     // Nothing is seeded here: a cold key answers with the declared fallback, which can
     // equal the box the control is already in, so no box change prompts the next
@@ -1627,9 +1804,9 @@ describe('Picker · radio variant (G26)', () => {
       )} pick=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
     );
     expect(eventLog).toEqual(['radio-warm:2']);
-    // `mostRecentEventCount` is what JS sent, and an uncontrolled pick sends nothing
-    // back.
-    expect(handles.get('radio-warm')?.mostRecentEventCount).toBe(0);
+    // `mostRecentEventCount` is what JS sent. A pick is echoed whatever the variant,
+    // because native holds a pick's size report until every pick is confirmed.
+    expect(handles.get('radio-warm')?.mostRecentEventCount).toBe(1);
     expect(after.corrections).toBe(0);
     expect(after.cachedSizes).toBe(0);
     expect(sameSize(sizeOf('radio-warm'), first)).toBe(true);
