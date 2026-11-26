@@ -231,12 +231,12 @@ rules keep the key and the pixels together:
 - The wrapper knows which title is shown. `shownIndex` is the controlled value where there is
   one, and otherwise the last index native reported, held in wrapper state. An uncontrolled pick
   therefore costs one React render.
-- A pick's size report waits for the key that names it. Android arms `holdSizingReports()` in
-  the row's `onClick`: the host keeps the measured size until `afterUpdate()` of the batch that
-  carries the new key and files it there
-  (`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt`). iOS needs no
-  hold: the key change is what re-measures. A refused pick re-measures at once, under the
-  unchanged key.
+- A pick's size report waits for the key that names it. Either host arms
+  `holdSizingReports()` as a pick paints a new title: the host keeps what it measures until
+  `afterUpdate()` of a props batch whose event count has seen the pick, and files it there only
+  while that title is still what is shown
+  (`android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt`,
+  `ios/core/NitroSwiftUIHost.swift`). A pick that changes nothing arms no hold.
 
 Content wider than its box fits the box: a menu wider than the caller's box is measured a second
 time at the box's width and placed at that width, so the field, its label and its chevron stay

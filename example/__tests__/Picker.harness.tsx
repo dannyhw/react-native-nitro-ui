@@ -1399,24 +1399,13 @@ describe('Picker · G6', () => {
     expect(longSize.width).toBeGreaterThan(shortSize.width + 8);
   }
 
-  // iOS misfiles a pick's size the same way, through another path: it files a measured size as
-  // soon as it is measured, with no hold waiting for a key that names what is on screen. These
-  // cases exercise the hold, which is Android's, so they are Android-only.
-  const itHoldsPicks = Platform.OS === 'android' ? it : it.skip;
+  it('files nothing under a key two uncontrolled picks have left', async () => {
+    await filesNothingUnderALeftKey(false);
+  });
 
-  itHoldsPicks(
-    'files nothing under a key two uncontrolled picks have left',
-    async () => {
-      await filesNothingUnderALeftKey(false);
-    }
-  );
-
-  itHoldsPicks(
-    'files nothing under a key two controlled picks have left',
-    async () => {
-      await filesNothingUnderALeftKey(true);
-    }
-  );
+  it('files nothing under a key two controlled picks have left', async () => {
+    await filesNothingUnderALeftKey(true);
+  });
 
   it('grows an unpoisoned pick whose new configuration starts at the fallback', async () => {
     // Nothing is seeded here: a cold key answers with the declared fallback, which can

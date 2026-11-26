@@ -29,6 +29,12 @@ final class PickerModel: NitroUiModel {
   /// changed.
   var sizingKey = ""
   var onChange: ((_ index: Double, _ eventCount: Double) -> Void)?
+  /// The host's "hold size reports", wired by the Hybrid View at init: a pick is applied in the
+  /// hosted SwiftUI binding, which is given the model and not the host.
+  var holdSizeReports: (() -> Void)?
+  /// What the last pick painted, or `nil`. Set by ``applyUserSelection(_:)`` and cleared by the
+  /// first `afterUpdate()` whose batch has seen that pick; earlier batches leave it.
+  var pickStamp: PickerPickStamp?
   override init() {
     super.init()
   }
@@ -69,12 +75,32 @@ final class PickerModel: NitroUiModel {
     let index = Self.clamp(requested, to: options.count)
     guard index != state.displayed else { return }
     let eventCount = state.user(index)
+    pickStamp = PickerPickStamp(index: index, options: options, variant: variant, label: label)
+    // Held before the repaint, whose width follows the title: the sizing key naming it only
+    // arrives with a batch that has seen the pick, and until then the engine would file what is
+    // measured under the key of the title this one replaced.
+    holdSizeReports?()
     objectWillChange.send()
     onChange?(index, Double(eventCount))
-    // No size report here, although the width follows the title: the engine would file it
-    // under the key of the last shadow measure, which still names the previous title. The
-    // props batch that re-keys the instance measures instead.
   }
+
+  /// Whether `stamp` is still what this model shows. A pick, new `options` and a new label can
+  /// arrive in one batch, and a size measured for the pick must not be filed under them.
+  func pickIsStillShown(_ stamp: PickerPickStamp?) -> Bool {
+    guard let stamp else { return false }
+    return state.displayed == stamp.index
+      && variant == stamp.variant
+      && label == stamp.label
+      && options == stamp.options
+  }
+}
+
+/// What a pick painted, in the terms that decide the control's size.
+struct PickerPickStamp {
+  let index: Double
+  let options: [String]
+  let variant: String
+  let label: String?
 }
 
 struct PickerContent: NitroUIContent {
@@ -182,6 +208,7 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
     // A `.menu` Picker shows a popup, and a hosting controller that is nobody's child has no
     // view controller to present it from.
     host.needsContainment = true
+    model.holdSizeReports = { [weak host] in host?.holdSizingReports() }
     Self.declareFallback()
   }
 
@@ -362,6 +389,15 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
       model.state.displayed = shown
       host.markDirty()
     }
+
+    // The hold a pick arms releases only to a batch that has seen it: an earlier batch's key
+    // predates the pick and would file one title's width under another's. The stamp clears with
+    // the hold, so a batch that has not caught up leaves both for the next.
+    let stamped = model.pickStamp
+    if stamped == nil || model.state.jsEvents >= model.state.nativeEvents {
+      model.pickStamp = nil
+      host.releaseSizingReports(heldSizeBelongsToBatch: model.pickIsStillShown(stamped))
+    }
     // A menu shows one title, so any move of the shown index can change the width. Flagged
     // before `commit()`, the only place the measure may run: measuring here would answer for
     // content that has not been drawn yet.
@@ -384,6 +420,7 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
     model.accessibilityLabel = nil
     model.sizingKey = ""
     model.onChange = nil
+    model.pickStamp = nil
     // The policy is per-host state, not model state: a recycled host that stayed
     // `fillWidth` would answer a menu's next measure with the box's width.
     host.sizingPolicy = .intrinsic
