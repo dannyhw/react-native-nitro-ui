@@ -210,9 +210,7 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - iOS `Chip` and `Menu` arm no size hold for a change their own interaction paints; neither was
   measured for the misfile the Picker had (Android's Chip holds). The Picker's two-pick harness
   cases are the template.
-- Size hold, both platforms: a hold that drops a size (the batch did not key it) asks for no new
-  measure, so if a cold key's fallback equals the current box the control can stay at the
-  fallback. No iOS case refuses a title-changing menu pick and then picks onto a poisoned key.
+- Size hold: no iOS case refuses a title-changing menu pick and then picks onto a poisoned key.
 - `escapeField` (the sizing-key field escape) has four copies: Chip, Menu, Picker and SegmentedControl. Move it to `src/core/`.
 - G12 Chip (iOS): a disabled selected chip draws as unselected (SwiftUI's disabled bordered style drops the fill).
 - G12 Host sizing (Android): content that animates its intrinsic width settles short, because over-wide placement stops reporting; Chip passes M3 a fixed leading slot to avoid it.
