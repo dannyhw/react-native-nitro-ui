@@ -1407,6 +1407,135 @@ describe('Picker · G6', () => {
     await filesNothingUnderALeftKey(true);
   });
 
+  // MARK: - A batch that replaces what a pick painted
+
+  // The app replaces `options` in the same turn as a pick, so the batch that catches up no
+  // longer shows what the pick painted and the held size is dropped with it. What is left must
+  // be the size of the title the control now shows, not a size kept for the one it lost.
+  async function remeasuresAfterADroppedHeldSize(
+    controlled: boolean
+  ): Promise<void> {
+    const OLD_OPTIONS = ['One', 'Two', LONG_TITLE];
+    const NEW_OPTIONS = ['One', 'Two', 'A colour name of middling length'];
+    const NEW_KEY = sizingKey(NEW_OPTIONS, 2, null, 'menu');
+    poisonConfigurations([sizingKey(OLD_OPTIONS, 0, null, 'menu'), NEW_KEY]);
+
+    function Replaced() {
+      const [options, setOptions] = useState<string[]>(OLD_OPTIONS);
+      const [index, setIndex] = useState(0);
+      const onChange = useCallback((event: { index: number }): void => {
+        // The pick paints and measures while JS is busy, so the hold has a size in it.
+        recordChangeThenBlock('replaced', 220)(event);
+        if (controlled) {
+          setIndex(event.index);
+        }
+        setOptions(NEW_OPTIONS);
+      }, []);
+      return (
+        <Picker
+          options={options}
+          selectedIndex={controlled ? index : undefined}
+          onChange={onChange}
+          testID="replaced"
+          hybridRef={captureHybrid('replaced')}
+        />
+      );
+    }
+
+    // The width the new title has, measured by a picker that never picks - then unmounted, so
+    // nothing else mounted under that key can file the width afterwards.
+    const { rerender, unmount } = await render(
+      <View style={columnStyle}>
+        <Picker
+          options={NEW_OPTIONS}
+          selectedIndex={2}
+          testID="reference"
+          hybridRef={captureHybrid('reference')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('reference');
+    const droppedSize = await waitForMeasured(
+      'reference',
+      'the new list title'
+    );
+    await waitForBox('reference', droppedSize, 'the new list title');
+    await rerender(
+      <View style={columnStyle}>
+        <Replaced />
+      </View>
+    );
+    await waitForTestId('replaced');
+    const shortSize = await waitForMeasured(
+      'replaced',
+      'the title before the pick'
+    );
+    await waitForBox('replaced', shortSize, 'the title before the pick');
+    await settle(250);
+    // Seed the key the pick lands on once more: the control starts this batch at a size no
+    // picker has, and only a report of its own new title can move it off that.
+    poisonConfigurations([NEW_KEY]);
+    await settle(300);
+    armTrace();
+    const before = stats();
+
+    handles.get('replaced')?.nuiTestSelect(2);
+    const reached = await pollUntil(
+      () =>
+        sameSize(sizeOf('replaced'), droppedSize) ? sizeOf('replaced') : null,
+      () =>
+        new Error(
+          `"replaced" never reached ${describeSize(droppedSize)} - last box ` +
+            `${describeSize(sizeOf('replaced'))}, control measured ` +
+            `${describeSize(measured('replaced'))}.`
+        ),
+      6000
+    ).catch(() => null);
+    await settle(500);
+    const after = delta(before, stats());
+    const box = sizeOf('replaced');
+    const sizeNow = measured('replaced');
+    const laidOut = laidOutSizes();
+    console.log(
+      `dropped hold (${controlled ? 'controlled' : 'uncontrolled'}): ` +
+        `short=${describeSize(shortSize)} ` +
+        `newTitle=${describeSize(droppedSize)} box=${describeSize(box)} ` +
+        `measured=${describeSize(sizeNow)} reached=${reached != null ? 'yes' : 'no'} ` +
+        `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
+        `delta=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
+    );
+    // A pick whose list was replaced emits once.
+    expect(eventLog).toEqual(['replaced:2']);
+    // The list changed, so this batch's key had to be seeded and the box started there.
+    expect(sameSize(laidOut[0] ?? null, WRONG_SIZE)).toBe(true);
+    expect(
+      sameSize(box, droppedSize),
+      `"replaced" shows a title that measures ${describeSize(droppedSize)} but its box ended ` +
+        `at ${describeSize(box)} (measureContent ${describeSize(sizeNow)}, laidOut ` +
+        `${laidOut.map((s) => describeSize(s)).join(',')}): the dropped held size was never ` +
+        `measured again.`
+    ).toBe(true);
+    expect(sameSize(sizeNow, droppedSize)).toBe(true);
+    // The control is corrected, and never laid out at the size the platform declares.
+    expect(after.corrections).toBeGreaterThanOrEqual(1);
+    expect(laidOut.some((s) => sameSize(s, DECLARED_FALLBACK))).toBe(false);
+    // The fixture must be able to fail: the new title's width is neither the seeded size, the
+    // declared fallback, nor the width the control was already in.
+    expect(sameSize(droppedSize, WRONG_SIZE)).toBe(false);
+    expect(sameSize(droppedSize, DECLARED_FALLBACK)).toBe(false);
+    expect(Math.abs(droppedSize.width - shortSize.width)).toBeGreaterThan(8);
+    unmount();
+  }
+
+  it('measures again when a batch drops the size a pick held', async () => {
+    await remeasuresAfterADroppedHeldSize(false);
+  });
+
+  it('measures a controlled pick again when its batch drops the held size', async () => {
+    await remeasuresAfterADroppedHeldSize(true);
+  });
+
   it('grows an unpoisoned pick whose new configuration starts at the fallback', async () => {
     // Nothing is seeded here: a cold key answers with the declared fallback, which can
     // equal the box the control is already in, so no box change prompts the next
