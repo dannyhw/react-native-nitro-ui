@@ -201,8 +201,8 @@ measureContent (layout thread)       native host (UI thread)
   into `nuiSizingKey`: `""` for a `Switch`, variant, size and title for a `Button`. The engine
   adds the component name and an environment epoch itself. Two instances with the same key
   share one cached size, so a missing input is a wrong size.
-- When a native interaction changes a control's size — a `Picker`'s pick, a `Chip`'s toggle —
-  either platform's host holds the control's size reports until a props batch arrives with
+- When a native interaction changes a control's size — a `Picker`'s pick on either platform,
+  a `Chip`'s toggle on Android — the host holds the control's size reports until a props batch arrives with
   `jsEvents >= nativeEvents`, and files what it measured during the hold only while the control
   still shows what the interaction painted. A batch sent before the interaction still carries the
   key of the configuration it replaces, and filing into it stores one title's width under

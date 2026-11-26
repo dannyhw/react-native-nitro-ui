@@ -234,6 +234,10 @@ iOS (`ios/core/NitroSwiftUIHost.swift`):
   for `nuiSizingKey` calls `host.noteSizingKeyChanged()`, which clears that memory at the next
   layout carrying a new box, so a new configuration that measures the same size is still
   reported.
+- `holdSizingReports()` and `releaseSizingReports(heldSizeBelongsToBatch:)` bracket the time
+  between a pick the `Picker` paints itself and the props batch that re-keys it. A size measured
+  meanwhile is kept, not reported, and filed at the release only when the batch keys what it
+  measured; recycle and drop clear it.
 
 Android (`NitroUiMeasuredRoot` in `NitroComposeHost.kt`):
 

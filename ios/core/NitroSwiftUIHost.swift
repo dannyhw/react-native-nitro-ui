@@ -249,14 +249,9 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     sizingKeyChangePending = true
   }
 
-  /// Stop filing size reports, for a change to the content that React has not keyed yet. Call it
-  /// where native changes the content itself — a Picker's pick — whose width then follows before
-  /// React has sent the sizing key naming it: the engine files a report under the key of its last
-  /// layout, which is the one this change just left.
-  ///
-  /// Nothing measures here, because a control's content changes inside its own layout pass and
-  /// `sizeThatFits` in one re-enters it. The measure that follows applies this content update
-  /// first, as it does after a ``commit()``.
+  /// Stop filing size reports while native has changed the content but React's sizing key
+  /// still names what it replaced. Nothing measures here: the next measure applies the content
+  /// update first, as it does after a ``commit()``.
   func holdSizingReports() {
     nitroUiAssertMainThread()
     sizingReportsHeld = true
@@ -265,12 +260,9 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     contentUpdatePending = true
   }
 
-  /// End the hold, from `afterUpdate()` once the batch's setters have run. Files the size measured
-  /// during the hold only when `heldSizeBelongsToBatch` says that batch keys the content the hold
-  /// was armed for; a batch that has not seen the change keys what the change replaced, and its
-  /// size is dropped rather than waited for. The size is filed as measured, not taken again: the
-  /// batch's own ``commit()`` has not applied its props yet, so a measure here answers for the
-  /// content before them.
+  /// End the hold from `afterUpdate()`, filing the size measured meanwhile only when the batch
+  /// keys that content. It is filed as measured: this batch's own ``commit()`` has not applied
+  /// its props yet, so a measure here would answer for the content before them.
   func releaseSizingReports(heldSizeBelongsToBatch: Bool) {
     nitroUiAssertMainThread()
     guard sizingReportsHeld else { return }
