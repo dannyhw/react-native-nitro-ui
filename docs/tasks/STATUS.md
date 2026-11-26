@@ -15,6 +15,8 @@ Nothing.
 Newest first: what changed for people using the library, then the task and its pull request. A
 pull request number is left out where the records do not carry one.
 
+- 11-26 iOS `Picker`: a pick's width is filed only under its own title, as on Android, so a
+  quick second pick no longer leaves another title with a wrong cached width (FIX39, #143).
 - 11-26 Android `Picker`: a pick's width is filed only under its own title, so a quick second
   pick or a re-render already in flight no longer leaves another title with a wrong cached
   width (FIX38, #142).

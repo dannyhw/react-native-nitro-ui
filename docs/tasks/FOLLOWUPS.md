@@ -40,7 +40,7 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   `MenuWitness`, which also counts through the fade.
 - `Menu.harness.tsx` (iOS) "Split trigger (E3) › is two halves, and each one does only its own
   job": "the split trigger tap" 0 of 1 events in 8000 ms, GitHub-hosted CI only, six trial
-  rounds 2026-11-24 and three more by 2026-11-26. Likely the synthesised `pressAt` held past SwiftUI `Menu(primaryAction:)`'s
+  rounds 2026-11-24 and four more by 2026-11-26. Likely the synthesised `pressAt` held past SwiftUI `Menu(primaryAction:)`'s
   long-press threshold on a slow runner (driver timing). Blocks nothing: manual CI harness only.
 - `Popover.harness.tsx` (Android) "the first frame is the final size" › presents "capped" at its
   box, with one drawn size: `expected 588 to be less than or equal to 1`, GitHub-hosted CI
@@ -58,6 +58,8 @@ run time of the failed run, times seen. Copied from task reports at merge. The r
   waits for `corrected` in its trace before reading the box.
 - `SearchField.harness.tsx` (Android) "tells the keyboard what autoCorrect asked for", GitHub-hosted
   CI 2026-11-25, red in both passes, seen once.
+- `BottomSheet.harness.tsx` (iOS) "Test suite failed to run", GitHub-hosted CI 2026-11-26 in both
+  passes, seen once; green locally on the same commit.
 - `Popover.harness.tsx` (iOS) "follows the content when it resizes while the popover is up":
   `expected 116 to be less than or equal to 2` at the drawn-height check (the popover did not
   follow its grown content), GitHub-hosted CI 2026-11-25, seen once.
@@ -205,10 +207,12 @@ deleted. A `FOLLOWUPS.md:NN` cited in code is a line number from before that pru
 - G11 fix 2: the iOS `nuiTestPerformAction` has the alert dismiss itself, as a tap does, and then runs the handler in the same turn. Whether UIKit runs a real tap's handler at the start or the end of the exit was not measured, so the seam's event-before-count order may be the seam's own; `real-input:ios` drives the real tap.
 - G12 (iOS): Chip's conformance fallback test makes `hybridRef` delivery slow enough for later Host suites to lose the `hybridRef` race M2 and G12 fixed (3 of 3 full iOS runs before the waits); why is not established.
 - G12 Chip: bench arms (mount, toggle); hosting inside `<Host>` (`hostable: false`, refused by name; a later task covers Chip and TextField); `tintColor`; input/suggestion chips.
-- iOS Picker sizing: a pick's size is filed under the key of the props batch in flight, so two quick
-  picks (or a re-render already in flight) file one title's width under another's and a later
-  Picker showing that title corrects once. Android holds its reports until JS has caught up; iOS
-  needs its own mechanism. The Android two-pick cases in `Picker.harness.tsx` are the template.
+- iOS `Chip` and `Menu` arm no size hold for a change their own interaction paints; neither was
+  measured for the misfile the Picker had (Android's Chip holds). The Picker's two-pick harness
+  cases are the template.
+- Size hold, both platforms: a hold that drops a size (the batch did not key it) asks for no new
+  measure, so if a cold key's fallback equals the current box the control can stay at the
+  fallback. No iOS case refuses a title-changing menu pick and then picks onto a poisoned key.
 - `escapeField` (the sizing-key field escape) has four copies: Chip, Menu, Picker and SegmentedControl. Move it to `src/core/`.
 - G12 Chip (iOS): a disabled selected chip draws as unselected (SwiftUI's disabled bordered style drops the fill).
 - G12 Host sizing (Android): content that animates its intrinsic width settles short, because over-wide placement stops reporting; Chip passes M3 a fixed leading slot to avoid it.

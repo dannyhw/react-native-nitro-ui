@@ -201,13 +201,13 @@ measureContent (layout thread)       native host (UI thread)
   into `nuiSizingKey`: `""` for a `Switch`, variant, size and title for a `Button`. The engine
   adds the component name and an environment epoch itself. Two instances with the same key
   share one cached size, so a missing input is a wrong size.
-- When a native interaction changes a control's size — a `Picker`'s pick, a `Chip`'s toggle —
-  Android's host holds the control's size reports until a props batch arrives with
-  `jsEvents >= nativeEvents`. A batch sent before the interaction still carries the key of the
-  configuration it replaces, and filing into it stores one title's width under another's. The
-  uncontrolled wrapper renders and echoes each interaction, so such a batch always follows it.
-  iOS reports a measured size as soon as it has one, so the key it lands under is the one the
-  batch that is in flight carries.
+- When a native interaction changes a control's size — a `Picker`'s pick on either platform,
+  a `Chip`'s toggle on Android — the host holds the control's size reports until a props batch arrives with
+  `jsEvents >= nativeEvents`, and files what it measured during the hold only while the control
+  still shows what the interaction painted. A batch sent before the interaction still carries the
+  key of the configuration it replaces, and filing into it stores one title's width under
+  another's. The uncontrolled wrapper renders and echoes each interaction, so such a batch always
+  follows it.
 - `nuiSizingId` identifies one mounted instance. `useSizingId` takes it from one native
   counter, because the engine is process-global and outlives a JS reload.
 - The declared fallback is the control's documented size on the running OS: a `Switch` is 61 by

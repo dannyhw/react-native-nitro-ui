@@ -110,6 +110,12 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
   /// Whether a sizing key has arrived whose box the engine has not answered yet.
   /// Set by ``noteSizingKeyChanged()``, consumed by ``layoutSubviews()``.
   private var sizingKeyChangePending = false
+  /// Set by ``holdSizingReports()``: what is measured until ``releaseSizingReports`` belongs to a
+  /// configuration React has not keyed yet.
+  private var sizingReportsHeld = false
+  /// The size measured during a hold, which ``releaseSizingReports(heldSizeBelongsToBatch:)``
+  /// either files or drops.
+  private var heldContentSize: CGSize?
   private weak var containerViewController: UIViewController?
 
   init(model: Content.Model) {
@@ -243,6 +249,33 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     sizingKeyChangePending = true
   }
 
+  /// Stop filing size reports while native has changed the content but React's sizing key
+  /// still names what it replaced. Nothing measures here: the next measure applies the content
+  /// update first, as it does after a ``commit()``.
+  func holdSizingReports() {
+    nitroUiAssertMainThread()
+    sizingReportsHeld = true
+    heldContentSize = nil
+    contentSizeNeedsMeasure = true
+    contentUpdatePending = true
+  }
+
+  /// End the hold from `afterUpdate()`, filing the size measured meanwhile only when the batch
+  /// keys that content. It is filed as measured: this batch's own ``commit()`` has not applied
+  /// its props yet, so a measure here would answer for the content before them.
+  func releaseSizingReports(heldSizeBelongsToBatch: Bool) {
+    nitroUiAssertMainThread()
+    guard sizingReportsHeld else { return }
+    sizingReportsHeld = false
+    let held = heldContentSize
+    heldContentSize = nil
+    guard heldSizeBelongsToBatch, let held else { return }
+    // The dedupe below holds the size filed for the previous configuration; an equal size filed
+    // for a new one must still reach the engine.
+    lastReportedSize = nil
+    reportToSizingEngine(held)
+  }
+
   /// Reset for reuse. Keeps the hosting controller and its SwiftUI state.
   func prepareForRecycle() {
     nitroUiAssertMainThread()
@@ -252,6 +285,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     suppressesNextAnimation = true
     contentSizeNeedsMeasure = true
     contentUpdatePending = false
+    sizingReportsHeld = false
+    heldContentSize = nil
     // Until this host is measured again, `measureContent()` must answer "never measured" rather
     // than the previous mount's size.
     sizeLock.lock()
@@ -283,6 +318,8 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     contentSizeNeedsMeasure = true
     contentUpdatePending = false
     sizingKeyChangePending = false
+    sizingReportsHeld = false
+    heldContentSize = nil
   }
 
   /// Tell the sizing engine this instance is finished, then forget its id. Without it the engine
@@ -328,7 +365,11 @@ final class NitroSwiftUIHost<Content: NitroUIContent>: UIView {
     sizeLock.lock()
     _contentSize = size
     sizeLock.unlock()
-    reportToSizingEngine(size)
+    if sizingReportsHeld {
+      heldContentSize = size
+    } else {
+      reportToSizingEngine(size)
+    }
     return size
   }
 
