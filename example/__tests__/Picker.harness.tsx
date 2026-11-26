@@ -1442,10 +1442,16 @@ describe('Picker · G6', () => {
       );
     }
 
-    // The width the new title has, measured by a picker that never picks - then unmounted, so
-    // nothing else mounted under that key can file the width afterwards.
+    // Both widths at stake, each measured by a picker that never picks - then unmounted, so
+    // nothing else mounted under either key can file a width afterwards.
     const { rerender, unmount } = await render(
       <View style={columnStyle}>
+        <Picker
+          options={OLD_OPTIONS}
+          selectedIndex={2}
+          testID="painted"
+          hybridRef={captureHybrid('painted')}
+        />
         <Picker
           options={NEW_OPTIONS}
           selectedIndex={2}
@@ -1455,6 +1461,12 @@ describe('Picker · G6', () => {
       </View>,
       { timeout: 20000 }
     );
+    await waitForTestId('painted');
+    const paintedSize = await waitForMeasured(
+      'painted',
+      'the title the pick paints'
+    );
+    await waitForBox('painted', paintedSize, 'the title the pick paints');
     await waitForTestId('reference');
     const droppedSize = await waitForMeasured(
       'reference',
@@ -1499,7 +1511,7 @@ describe('Picker · G6', () => {
     const laidOut = laidOutSizes();
     console.log(
       `dropped hold (${controlled ? 'controlled' : 'uncontrolled'}): ` +
-        `short=${describeSize(shortSize)} ` +
+        `short=${describeSize(shortSize)} painted=${describeSize(paintedSize)} ` +
         `newTitle=${describeSize(droppedSize)} box=${describeSize(box)} ` +
         `measured=${describeSize(sizeNow)} reached=${reached != null ? 'yes' : 'no'} ` +
         `laidOut=${laidOut.map((s) => describeSize(s)).join(',')} ` +
@@ -1525,6 +1537,9 @@ describe('Picker · G6', () => {
     expect(sameSize(droppedSize, WRONG_SIZE)).toBe(false);
     expect(sameSize(droppedSize, DECLARED_FALLBACK)).toBe(false);
     expect(Math.abs(droppedSize.width - shortSize.width)).toBeGreaterThan(8);
+    // The width the pick painted differs from the width that replaces it, so a held size filed
+    // under the wrong key could not be mistaken for the right answer here.
+    expect(Math.abs(paintedSize.width - droppedSize.width)).toBeGreaterThan(8);
     unmount();
   }
 
