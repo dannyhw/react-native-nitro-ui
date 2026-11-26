@@ -35,13 +35,13 @@ mechanism, so they now run only where a report is held, and iOS's own reading is
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2274 tests / 106 suites | `111d2cd95315` | 1 m 01 s | start 2.3 / med 7.6 / max 11.7 |
-| `harness:ios` | **PASS** | 628 tests / 32 suites + isolated 6 tests / 3 suites | `111d2cd95315` (harness:ios digest) | 16 m 36 s | start 4.7 / med 4.0 / max 23.8 |
-| `harness:android` | **PASS** | 684 tests / 32 suites + isolated 6 tests / 3 suites | `111d2cd95315` (harness:android digest) | 18 m 43 s | start 6.4 / med 4.0 / max 24.5 |
+| `check` | **PASS** | 2274 tests / 106 suites | `23671ef0a44c` | 54.1 s | start 2.6 / med 4.9 / max 5.4 |
+| `harness:ios` | **PASS** | 628 tests / 32 suites + isolated 6 tests / 3 suites | `23671ef0a44c` (harness:ios digest) | 14 m 50 s | start 12.1 / med 4.1 / max 13.1 |
+| `harness:android` | **PASS** | 684 tests / 32 suites + isolated 6 tests / 3 suites | `23671ef0a44c` (harness:android digest) | 18 m 51 s | start 5.3 / med 3.6 / max 13.1 |
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 | `harness:android:%2FPicker.harness` | stale | — | 5492448d9e8b (not this tree) | 0.9 s | start 5.4 / med 5.4 / max 5.4 |
-| `harness:android:Picker.harness` | stale | 59 tests / 2 suites | e5a4c6efc7f6 (not this tree) | 58.7 s | start 3.8 / med 5.6 / max 5.8 |
+| `harness:android:Picker.harness` | **PASS** | 59 tests / 2 suites | `23671ef0a44c` (harness:android digest) | 1 m 02 s | start 3.5 / med 3.8 / max 4.2 |
 
 `need --for review`: `need: review is satisfied on this code tree.`
 
@@ -71,8 +71,26 @@ mechanism, so they now run only where a report is held, and iOS's own reading is
 
 ## Follow-ups
 
-- `docs/DESIGN.md` 3.5 lists which components echo an event count; the uncontrolled Picker's echo
-  is worth a line there. The handshake itself did not change.
-- iOS Picker sizing: the same two-pick sequence costs one correction there too, and iOS files a
-  measured size as soon as it is measured rather than holding it, so its key is decided by a path
-  this task neither fixes nor claims to understand. Out of scope here; the cases skip on iOS.
+- iOS Picker sizing bug: a pick's size is filed under the key of the batch in flight, so the same
+  two-pick sequence misfiles there and costs one correction. It needs its own mechanism, not this
+  one; the Android cases are Android-only until it exists.
+
+## Fix round 1
+
+Both cases now end on a third pick of the long title, its key poisoned again with no other control
+mounted under it: only a report leaving the hold grows the box, so a stuck hold is red on both
+control modes — the cache used to hide it.
+
+`pickStamp`, `choose` and `afterUpdate` no longer say the next batch clears the hold — it is the
+first whose count has seen the pick — in three lines. DESIGN 3.5 says an uncontrolled interaction
+costs the app no render, naming those wrappers; 3.6 carries the hold (`jsEvents >= nativeEvents`),
+the echo, and iOS's path instead. The skip says iOS misfiles the same way, and the follow-up is
+filed as an iOS sizing bug.
+
+Red proofs, from `gate harness:android -- Picker.harness`:
+
+- echo removed -> `Picker.harness.tsx:1376`: `testID "twice" (the third pick) never reached
+  384.76x56.00 - last box 13.33x66.67`, beside `:1144`, `:1225` and the radio case (`:1809`); the
+  controlled twin stays green, so the echo releases the hold.
+- caught-up check always false -> both new cases red at `Picker.harness.tsx:1376`, and every
+  ordinary pick case with them (`:1021`, `:1073`, `:1144`, `:1225`, `:1449`).
